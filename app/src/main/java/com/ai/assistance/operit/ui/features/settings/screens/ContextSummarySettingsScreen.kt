@@ -157,7 +157,7 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
     // 模型切换时自动更新上下文容量。未知模型采用保守回退值，避免继续沿用旧模型的大窗口。
     LaunchedEffect(currentConfig?.id, currentConfig?.modelName) {
         val config = currentConfig ?: return@LaunchedEffect
-        val detectedContextK = resolveKnownModelContextLengthK(config.modelName) ?: 16f
+        val detectedContextK = resolveKnownModelContextLengthK(config.modelName) ?: 8f
         if (config.contextLength != detectedContextK ||
             config.maxContextLength != detectedContextK ||
             !config.enableMaxContextMode
@@ -745,7 +745,7 @@ private fun RenderContextSummaryConfigSections(
         text = if (detectedContextK != null) {
             "当前模型上下文容量：约 ${detectedContextK.toInt()}K tokens（按模型名称识别）"
         } else {
-            "当前模型上下文容量：未能识别，暂按 16K tokens 保守处理"
+            "当前模型上下文容量：未能识别，暂按 8K tokens 保守处理"
         },
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
