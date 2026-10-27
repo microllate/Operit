@@ -13,51 +13,146 @@ concurrency:
   group: task-summary-debug-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  JAVA_VERSION: '21'
+  NODE_VERSION: '22'
+  ANDROID_NDK_VERSION: '25.1.8937393'
+  ANDROID_CMAKE_VERSION: '3.22.1'
+  ANDROID_API_LEVEL: '26'
+  RUST_VERSION: '1.88.0'
+  MANUAL_DEPS_DIR: manual-deps
+
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 1
+          submodules: false
 
-      - name: Set up JDK 21
+      - name: Initialize terminal submodule
+        run: |
+          git submodule sync -- terminal
+          git submodule update --init --recursive --depth 1 terminal
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
 
-      - name: Set up Android SDK and NDK
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses
+      - name: Install Android SDK, NDK and CMake
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "platforms;android-36" \
+            "build-tools;34.0.0" \
+            "build-tools;35.0.0" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
 
-      - name: Install Android NDK
-        run: sdkmanager "ndk;27.2.12479018"
+      - name: Restore Android dependency cache
+        id: cache-manual-deps
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MANUAL_DEPS_DIR }}
+          key: android-full-deps-${{ runner.os }}-${{ hashFiles('ci/script/download_android_dependencies.sh', 'ci/script/prepare_android_dependencies.py') }}
+
+      - name: Download Android dependencies
+        if: steps.cache-manual-deps.outputs.cache-hit != 'true'
+        run: bash ci/script/download_android_dependencies.sh full "$MANUAL_DEPS_DIR"
+
+      - name: Prepare Android dependencies
+        run: |
+          python3 ci/script/prepare_android_dependencies.py \
+            --profile full \
+            --archives "$MANUAL_DEPS_DIR" \
+            --repository "$GITHUB_WORKSPACE"
 
       - name: Set up Rust for Android
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android
 
-      - name: Build native ripgrep JNI library
+      - name: Build native ripgrep
         run: |
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang"
-          test -x "$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
-          cargo build --manifest-path tools/native_ripgrep/Cargo.toml --release --target aarch64-linux-android
-          install -D tools/native_ripgrep/target/aarch64-linux-android/release/liboperit_ripgrep.so app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${ANDROID_API_LEVEL}-clang"
+          rustup target add --toolchain "$RUST_VERSION" aarch64-linux-android
+          cargo "+$RUST_VERSION" build \
+            --manifest-path tools/native_ripgrep/Cargo.toml \
+            --release \
+            --target aarch64-linux-android \
+            --locked
+          install -Dm755 \
+            tools/native_ripgrep/target/aarch64-linux-android/release/liboperit_ripgrep.so \
+            app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
           test -s app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
 
-      - name: Check required local FFmpegKit AAR
+      - name: Install JavaScript dependencies
         run: |
-          if [ ! -s app/libs/ffmpeg-kit-local.aar ]; then
-            echo "::error::Missing app/libs/ffmpeg-kit-local.aar. This project requires its locally built FFmpegKit AAR; it is not stored in Git. Build it using tools/ffmpeg/build_ffmpeg_kit_wsl.sh and provide the resulting AAR to CI before APK packaging."
-            exit 1
-          fi
+          npm install -g pnpm@10.34.5
+          npm ci --no-audit --no-fund
+          npm --prefix web-chat ci --no-audit --no-fund
+
+      - name: Build WebChat assets
+        run: npm run build:webchat
+
+      - name: Build bundled ToolPkg packages
+        run: |
+          npm run build:examples:github
+          python3 tools/example_packages/sync_example_packages.py --no-hot-reload
+
+      - name: Configure Android SDK
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Verify external native dependencies
+        run: |
+          test -s app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
+          test -s app/libs/ffmpeg-kit-local.aar
+          python3 - <<'PY'
+          import zipfile
+          aar = "app/libs/ffmpeg-kit-local.aar"
+          required = [
+              "jni/arm64-v8a/libavcodec.so",
+              "jni/arm64-v8a/libavdevice.so",
+              "jni/arm64-v8a/libavfilter.so",
+              "jni/arm64-v8a/libavformat.so",
+              "jni/arm64-v8a/libavutil.so",
+              "jni/arm64-v8a/libc++_shared.so",
+              "jni/arm64-v8a/libffmpegkit.so",
+              "jni/arm64-v8a/libffmpegkit_abidetect.so",
+              "jni/arm64-v8a/libswresample.so",
+              "jni/arm64-v8a/libswscale.so",
+          ]
+          with zipfile.ZipFile(aar) as z:
+              names = set(z.namelist())
+              missing = [name for name in required if name not in names or z.getinfo(name).file_size <= 0]
+          if missing:
+              raise SystemExit("FFmpegKit AAR missing required libraries: " + ", ".join(missing))
+          print("Verified FFmpegKit AAR and all required arm64 libraries.")
+          PY
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -66,7 +161,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build Debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon :app:assembleDebug --stacktrace
 
       - name: Run unit tests
         if: success()
