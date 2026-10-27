@@ -49,8 +49,8 @@ object FunctionalPrompts {
         1. 必须使用上述固定格式，包括分隔线、标题标识符【】、列表符号等，不得更改。
         2. 标题"对话摘要"必须放在第一行，前后用等号分隔。
         3. 每个部分必须使用【】标识符作为标题，标题后换行。
-        4. "核心任务状态"、"互动情节与设定"、"对话历程与概要"使用段落形式；方括号只为示例，实际输出不需保留.
-        5. "关键信息与上下文"使用列表格式，每个信息点以"- "开头.
+        4. "核心任务状态"使用段落形式；其余部分按具体任务记录使用列表；方括号只为示例，实际输出不需保留.
+        5. 所有工程记录条目使用清晰的列表格式，便于后续模型恢复任务.
         6. 结尾使用等号分隔线.
 
         **内容要求：**
@@ -96,8 +96,8 @@ object FunctionalPrompts {
         1. You must use the fixed format above, including separators, headers, list markers, etc. Do not change them.
         2. The title "Conversation Summary" must be on the first line, surrounded by '='.
         3. Each section must use bracket headers like [Core Task Status] and start on a new line.
-        4. "Core Task Status", "Code Changes & Execution Log", "Conversation Progress & Overview" must be paragraph-style. Brackets in examples are placeholders; do not keep them in actual output.
-        5. "Next Steps & Handoff" must be a list, each item starting with "- ".
+        4. "Core Task Status" may use paragraphs; other sections should use concise, actionable lists. Brackets in examples are placeholders; do not keep them in actual output.
+        5. Use clear lists for engineering records and next actions.
         6. End with the separator line.
 
         **Content requirements:**
@@ -119,12 +119,12 @@ object FunctionalPrompts {
         return if (useEnglish) {
             listOf(
                 "Core Task Status",
-                "Interaction & Scenario",
+                "Code Changes & Execution Log",
                 "Errors & Troubleshooting",
-                "Key Information & Context"
+                "Next Steps & Handoff"
             )
         } else {
-            listOf("核心任务状态", "互动情节与设定", "对话历程与概要", "关键信息与上下文")
+            listOf("核心任务状态", "代码变更与执行记录", "错误与排查过程", "下一步与接手说明")
         }
     }
 
