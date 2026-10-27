@@ -1584,6 +1584,26 @@ class MessageCoordinationDelegate(
             try {
                 val settings = resolveChatContextSettingsForRequest(currentChatModelConfigIdOverride)
                 if (!settings.enableSummary) return@launch
+
+                val messages = chatHistoryDelegate.getRuntimeChatHistory(chatId)
+                val maxTokens = (settings.effectiveContextLength * 1024)
+                    .toLong()
+                    .coerceIn(0L, Int.MAX_VALUE.toLong())
+                    .toInt()
+                val currentTokens = tokenStatsDelegate.getLastCurrentWindowSize(chatId)
+                val shouldSummarize = AIMessageManager.shouldGenerateSummary(
+                    messages = messages,
+                    currentTokens = currentTokens,
+                    maxTokens = maxTokens,
+                    tokenUsageThreshold = settings.summaryTokenThreshold.toDouble(),
+                    enableSummary = settings.enableSummary,
+                    enableSummaryByMessageCount = false,
+                    summaryMessageCountThreshold = settings.summaryMessageCountThreshold
+                )
+                if (!shouldSummarize) {
+                    AppLogger.d(TAG, "任务完成，但上下文未达到总结阈值，跳过自动总结: chatId=$chatId")
+                    return@launch
+                }
                 summarizeHistory(
                     autoContinue = false,
                     chatIdOverride = chatId,
