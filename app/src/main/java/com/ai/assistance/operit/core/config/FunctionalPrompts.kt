@@ -28,21 +28,20 @@ object FunctionalPrompts {
         [显式覆盖信息搜集、任务执行、代码编写或其他关键环节的状态，哪怕某环节尚未启动也要说明原因。]
         [最后补充最近一次任务的进度拆解：哪些已完成、哪些进行中、哪些待处理。]
 
-        【互动情节与设定】
-        [如存在虚构或场景设定，概述名称、角色身份、背景约束及其来源，避免把剧情当成现实。]
-        [用1-2段概括近期关键互动：谁提出了什么、目的为何、采用何种表达方式、对任务或剧情的影响，以及仍需确认的事项。]
-        [若用户给出剧本/业务/策略等非技术内容，提炼要点并说明它们如何指导后续输出。]
+        【代码变更与执行记录】
+        [优先列出真实文件路径、所在分支、提交号和实际修改内容。只记录对话或工具结果明确证实的变更；没有证据时标记“未验证”，不得猜测。]
 
-        【对话历程与概要】
-        [用不少于3段描述整体演进，每段包含“行动+目的+结果”，可涵盖技术、业务、剧情或策略等不同主题，需特别点名信息搜集、任务执行、代码编写等阶段的衔接；如涉及具体代码，可引用关键片段以辅助说明。]
-        [突出转折、已解决的问题和形成的共识，引用必要的路径、命令、场景节点或原话，确保读者能看懂上下文和因果关系。]
+        【错误与排查过程】
+        [记录关键错误日志、复现条件、已经尝试的方案、每次尝试的实际结果和有证据支持的原因。明确区分已解决、未解决与尚未验证的问题。]
 
-        【关键信息与上下文】
-        - [信息点1：用户需求、限制、背景或引用的文件/接口/角色等，说明其具体内容及作用。]
-        - [信息点2：技术或剧本结构中的关键元素（函数、配置、日志、人物动机等）及其意义。]
-        - [信息点3：问题或创意的探索路径、验证结果与当前状态。]
-        - [信息点4：影响后续决策的因素，如优先级、情绪基调、角色约束、外部依赖、时间节点。]
-        - [信息点5+：补充其他必要细节，覆盖现实与虚构信息。每条至少两句：先述事实，再讲影响或后续计划。]
+        【下一步与接手说明】
+        [按优先级列出下一项可执行操作、需要先核实的事项、阻塞项和验收标准。保留必要的命令、路径、版本、配置及环境信息，确保新模型无需原始聊天记录也能接手。]
+
+        【关键事实与约束】
+        - 用户目标、原始要求、禁止事项和验收条件。
+        - 已完成工作及其验证证据；严格区分计划、执行和验证。
+        - 重要技术决策、失败尝试、依赖关系和未解决风险。
+        - 只保留继续任务必需的背景，删除闲聊、重复内容和无关互动。
 
         ============================
 
@@ -76,21 +75,20 @@ object FunctionalPrompts {
         [Explicitly cover the status of information gathering, task execution, code writing, or other key phases; even if a phase has not started, state why.]
         [Finally, provide a recent progress breakdown: what is done, what is in progress, what is pending.]
 
-        [Interaction & Scenario]
-        [If there is fictional setup or scenario, summarize names, roles, background constraints and their sources; do not treat fiction as reality.]
-        [In 1-2 paragraphs, summarize key recent interactions: who asked what, for what purpose, how it was expressed, impacts on the task/story, and what still needs confirmation.]
-        [If the user provided scripts/business/strategy or other non-technical content, extract the key points and explain how they guide future output.]
+        [Code Changes & Execution Log]
+        [List verified file paths, branch, commit and actual changes. Record only changes supported by conversation or tool evidence; otherwise mark them unverified.]
 
-        [Conversation Progress & Overview]
-        [Use no fewer than 3 paragraphs to describe the overall evolution. Each paragraph should include “action + intent + result”. You may cover technical, business, story, or strategy topics. Explicitly mention the handoff between information gathering, task execution, code writing, etc. If relevant, quote key code snippets.]
-        [Highlight turning points, resolved issues, and agreements reached. Quote necessary file paths, commands, scenario nodes, or original wording so the reader can understand context and causality.]
+        [Errors & Troubleshooting]
+        [Record important errors, reproduction conditions, attempted fixes, observed outcomes, and evidence-backed causes. Distinguish resolved, unresolved, and unverified issues.]
 
-        [Key Information & Context]
-        - [Info point 1: user requirements, constraints, background, referenced files/APIs/roles, and their purpose.]
-        - [Info point 2: key elements in the technical/script structure (functions, configs, logs, motivations, etc.) and their meaning.]
-        - [Info point 3: exploration path, verification results, and current status.]
-        - [Info point 4: factors affecting future decisions, such as priorities, emotional tone, role constraints, external dependencies, deadlines.]
-        - [Info point 5+: any other necessary details covering both real and fictional information. Each point must have at least two sentences: state the fact, then explain its impact or next plan.]
+        [Next Steps & Handoff]
+        [List concrete next actions in priority order, prerequisites, blockers, and acceptance criteria. Preserve essential commands, paths, versions, configuration, and environment details so a fresh model can continue without the original chat.]
+
+        [Key Facts & Constraints]
+        - User goals, explicit requirements, prohibitions, and acceptance criteria.
+        - Completed work and verification evidence; distinguish plans, execution, and verification.
+        - Important technical decisions, failed attempts, dependencies, and unresolved risks.
+        - Keep only context required to continue the task; omit small talk, repetition, and irrelevant interaction.
 
         =======================================
 
