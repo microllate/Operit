@@ -1014,16 +1014,15 @@ class MessageProcessingDelegate(
                 // 关闭总结时仍保留真实 limits，避免下游插件收到 0/Infinity 这类无效 JSON 值。
                 val effectiveMaxTokens = maxTokens
                 val effectiveEnableSummary = enableSummary && effectivePersistTurn
+                // 达到上下文阈值时只记录待总结状态，不在工具调用链中途插入总结。
+                // 真正的总结推迟到当前响应流完整结束后执行，避免打断正在进行的任务。
+                var tokenLimitSummaryPending = false
                 val effectiveTokenUsageThreshold =
                     if (effectiveEnableSummary) tokenUsageThreshold else Double.MAX_VALUE
                 val effectiveOnTokenLimitExceeded = if (effectiveEnableSummary) {
                     suspend {
-                        onTokenLimitExceeded(
-                            activeChatId,
-                            effectiveRoleCardId,
-                            isGroupOrchestrationTurn,
-                            groupParticipantNamesText
-                        )
+                        tokenLimitSummaryPending = true
+                        AppLogger.d(TAG, "已达到总结阈值，延迟到当前任务完成后执行总结")
                     }
                 } else {
                     null
@@ -1470,6 +1469,20 @@ class MessageProcessingDelegate(
                         )
                 }
                 aiMessage = aiMessage.copy(completedAt = System.currentTimeMillis())
+
+                // 流收集已完成，当前助手响应及其工具调用链已退出；现在才允许执行总结。
+                if (tokenLimitSummaryPending && effectiveEnableSummary) {
+                    runCatching {
+                        onTokenLimitExceeded(
+                            activeChatId,
+                            effectiveRoleCardId,
+                            isGroupOrchestrationTurn,
+                            groupParticipantNamesText
+                        )
+                    }.onFailure {
+                        AppLogger.w(TAG, "任务完成后执行延迟总结失败", it)
+                    }
+                }
 
                 if (isWaifuModeEnabled) {
                     syncWaifuMessageMetricsHandler?.invoke(aiMessage)
