@@ -1040,11 +1040,28 @@ object AIMessageManager {
             }
         }
 
+        // 工程任务恢复摘要：优先保留可执行进度，避免通用分类丢失关键工程信息。
+        // 该指令仅约束摘要格式，不应作为用户目标或已完成工作的事实写入摘要。
+        val taskRecoverySummaryInstruction = """
+            你正在为一个可能被压缩上下文、并由另一个模型接手的任务生成【任务恢复摘要】。
+            不要写泛泛的聊天概述，不要使用“互动情节与设定”等通用分类。严格按以下结构输出，缺失项写“未提及”，不要猜测：
+            1. 用户目标与约束：用户明确要求、禁止事项、验收标准。
+            2. 已完成工作：实际执行过的操作及结果；明确区分已验证、未验证，禁止把计划写成已完成。
+            3. 文件与代码变更：准确文件路径、改动内容、分支/提交号（对话中存在时才记录）。
+            4. 错误与排查：关键报错原文或摘要、已尝试方案、失败结果、已有证据。
+            5. 当前状态：正在进行的任务、未解决问题、已知风险和阻塞项。
+            6. 下一步操作：按优先级列出具体可执行步骤，以及执行前必须核实的事项。
+            7. 必要环境信息：仅记录接手任务必需的项目、环境、工具、配置。
+            保留重要命令、路径、版本、数值和错误信息。删除闲聊、重复内容和无关背景。
+            如果历史中没有证据支持某项结论，标记“未验证”，不得自行补全。摘要应让没有完整聊天历史的模型可以直接接手工作。
+        """.trimIndent()
+        val summaryInput = listOf("user" to taskRecoverySummaryInstruction) + conversationToSummarize
+
         return try {
-            AppLogger.d(TAG, "开始使用AI生成对话总结：总结 ${messagesToSummarize.size} 条消息")
+            AppLogger.d(TAG, "开始使用AI生成任务恢复摘要：总结 ${messagesToSummarize.size} 条消息")
             val summary =
                 enhancedAiService.generateSummary(
-                    conversationToSummarize,
+                    summaryInput,
                     previousSummary,
                     summaryConfig
                 )
