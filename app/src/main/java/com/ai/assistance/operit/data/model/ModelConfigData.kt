@@ -215,6 +215,37 @@ data class ModelConfigSummary(
         val modelIndex: Int = 0 // 当modelName包含多个模型（逗号分隔）时，选择第几个模型（从0开始）
 )
 
+/**
+ * Returns a conservative, known context-window estimate (in K tokens) for common public model IDs.
+ * Returns null when the model ID is not recognized; callers must not treat an unknown model as a
+ * confirmed capacity. Provider-side metadata should take precedence when available.
+ */
+fun resolveKnownModelContextLengthK(modelName: String): Float? {
+    val ids = modelName.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }
+    if (ids.isEmpty()) return null
+
+    fun resolveOne(id: String): Float? = when {
+        id.contains("gpt-4.1") -> 1024f
+        id.contains("gpt-4o") || id.contains("gpt-4-turbo") -> 128f
+        id.matches(Regex(".*\\b(o1|o3|o4)(-.*)?")) || id.contains("o3-mini") || id.contains("o4-mini") -> 200f
+        id.contains("claude") -> 200f
+        id.contains("gemini-1.5") || id.contains("gemini-2") || id.contains("gemini-3") -> 1024f
+        id.contains("deepseek") -> 64f
+        id.contains("kimi") || id.contains("moonshot") -> 256f
+        id.contains("qwen") -> when {
+            id.contains("qwen2.5") || id.contains("qwen3") -> 128f
+            else -> null
+        }
+        id.contains("mistral-large") || id.contains("codestral") -> 128f
+        else -> null
+    }
+
+    val resolved = ids.map { resolveOne(it) }
+    // If configured with fallback models, use the smallest known capacity to avoid overestimating.
+    if (resolved.any { it == null }) return null
+    return resolved.filterNotNull().minOrNull()
+}
+
 /** 从逗号分隔的模型名称字符串中根据索引获取具体模型 */
 fun getModelByIndex(modelName: String, index: Int): String {
     if (modelName.isEmpty()) return ""
