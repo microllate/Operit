@@ -32,6 +32,9 @@ jobs:
       - name: Set up Android SDK and NDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
+
       - name: Install Android NDK
         run: sdkmanager "ndk;27.2.12479018"
 
