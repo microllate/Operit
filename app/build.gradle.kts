@@ -433,9 +433,8 @@ android {
             }
         }
         debug {
-            applicationIdSuffix = ".debug"
+            // Keep the upstream application ID so this APK targets the same Android package.
             signingConfig = signingConfigs.getByName("debug")
-            resValue("string", "app_name", "Operit Debug")
         }
         create("clone") {
             initWith(getByName("debug"))
