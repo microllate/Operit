@@ -157,6 +157,12 @@ jobs:
           print("Verified FFmpegKit AAR and all required arm64 libraries.")
           PY
 
+      - name: Cache Gradle Wrapper distribution
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: gradle-wrapper-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
