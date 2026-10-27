@@ -1077,21 +1077,7 @@ object AIMessageManager {
                 val packageWarmupBlock = buildPackageWarmupBlock(messagesToSummarize, useEnglish)
                 val summaryWithQuotes = buildString {
                     append(trimmedSummary)
-                    if (summaryConfig.dialogueReviewEnabled && conversationReviewEntries.isNotEmpty()) {
-                        append(
-                            formatDialogueReviewHeader(
-                                defaultHeader = context.getString(R.string.ai_message_dialogue_review),
-                                customTitle = summaryConfig.dialogueReviewTitle
-                            )
-                        )
-                        conversationReviewEntries.forEach { (speaker, content) ->
-                            append("- ")
-                            append(speaker)
-                            append(": ")
-                            append(content)
-                            append("\n")
-                        }
-                    }
+                    // 不再把通用“对话回顾”作为附录追加到任务恢复摘要，避免重复内容挤占上下文。
                     if (packageWarmupBlock.isNotBlank()) {
                         append("\n\n")
                         append(packageWarmupBlock)
