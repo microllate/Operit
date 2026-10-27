@@ -16,19 +16,46 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-
-      - name: Initialize terminal submodule
-        run: git submodule update --init terminal
+        with:
+          submodules: recursive
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
+
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.2.12479018"
+
+      - name: Set up Rust for Android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Build native ripgrep JNI library
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang
+        run: |
+          test -x "$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
+          cargo build --manifest-path tools/native_ripgrep/Cargo.toml --release --target aarch64-linux-android
+          install -D tools/native_ripgrep/target/aarch64-linux-android/release/liboperit_ripgrep.so app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
+          test -s app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
+
+      - name: Check required local FFmpegKit AAR
+        run: |
+          if [ ! -s app/libs/ffmpeg-kit-local.aar ]; then
+            echo "::error::Missing app/libs/ffmpeg-kit-local.aar. This project requires its locally built FFmpegKit AAR; it is not stored in Git. Build it using tools/ffmpeg/build_ffmpeg_kit_wsl.sh and provide the resulting AAR to CI before APK packaging."
+            exit 1
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
