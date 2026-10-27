@@ -1301,8 +1301,7 @@ object AIMessageManager {
             }
         }
 
-        // 消息条数不再作为总结触发条件；总结只由上下文压力标记，
-        // 实际执行时机由消息处理层延迟到当前任务/工具调用链结束后。
+        // 自动总结现在由任务完成回调触发；此旧判断方法不再参与自动总结流程。
         AppLogger.d(TAG, "未达到生成总结的条件. Token使用率: ${if (maxTokens > 0) currentTokens.toDouble() / maxTokens else 0.0}")
         return false
     }
