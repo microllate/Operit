@@ -81,6 +81,7 @@ import com.ai.assistance.operit.R
 import com.ai.assistance.operit.core.config.FunctionalPrompts
 import com.ai.assistance.operit.data.model.FunctionType
 import com.ai.assistance.operit.data.model.ModelConfigData
+import com.ai.assistance.operit.data.model.resolveKnownModelContextLengthK
 import com.ai.assistance.operit.data.model.SummarySectionConfig
 import com.ai.assistance.operit.data.preferences.ApiPreferences
 import com.ai.assistance.operit.data.preferences.FunctionConfigMapping
@@ -152,6 +153,27 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
         mutableStateOf(formatFloatValue(currentConfig?.maxContextLength))
     }
     var contextError by remember { mutableStateOf<String?>(null) }
+
+    // 模型切换时自动更新上下文容量。未知模型采用保守回退值，避免继续沿用旧模型的大窗口。
+    LaunchedEffect(currentConfig?.id, currentConfig?.modelName) {
+        val config = currentConfig ?: return@LaunchedEffect
+        val detectedContextK = resolveKnownModelContextLengthK(config.modelName) ?: 16f
+        if (config.contextLength != detectedContextK ||
+            config.maxContextLength != detectedContextK ||
+            !config.enableMaxContextMode
+        ) {
+            runCatching {
+                modelConfigManager.updateContextSettings(
+                    configId = config.id,
+                    contextLength = detectedContextK,
+                    maxContextLength = detectedContextK,
+                    enableMaxContextMode = true
+                )
+            }.onFailure {
+                AppLogger.w("ContextSummarySettings", "自动更新模型上下文容量失败", it)
+            }
+        }
+    }
 
     var enableSummary by remember(currentConfig?.id) {
         mutableStateOf(currentConfig?.enableSummary ?: false)
@@ -716,36 +738,17 @@ private fun RenderContextSummaryConfigSections(
         text = stringResource(id = R.string.settings_context_card_content),
         backgroundColor = componentBackgroundColor
     )
-    SettingsInputField(
-        title = stringResource(id = R.string.settings_context_length),
-        subtitle = stringResource(id = R.string.settings_context_length_subtitle),
-        value = contextLengthInput,
-        onValueChange = onContextLengthInputChange,
-        unitText = "K",
-        backgroundColor = componentBackgroundColor,
-        allowDecimal = true,
-        keyboardOptions =
-            KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next)
+    val detectedContextK = resolveKnownModelContextLengthK(currentConfig?.modelName.orEmpty())
+    Text(
+        text = if (detectedContextK != null) {
+            "当前模型上下文容量：约 ${detectedContextK.toInt()}K tokens（按模型名称识别）"
+        } else {
+            "当前模型上下文容量：未能识别，暂按 16K tokens 保守处理"
+        },
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
     )
-    SettingsInputField(
-        title = stringResource(id = R.string.settings_max_context_length),
-        subtitle = stringResource(id = R.string.settings_max_context_length_subtitle),
-        value = maxContextLengthInput,
-        onValueChange = onMaxContextLengthInputChange,
-        unitText = "K",
-        backgroundColor = componentBackgroundColor,
-        allowDecimal = true,
-        keyboardOptions =
-            KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done)
-    )
-    contextError?.let {
-        Text(
-            text = it,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-    }
 
     Spacer(modifier = Modifier.size(8.dp))
     SectionTitle(
