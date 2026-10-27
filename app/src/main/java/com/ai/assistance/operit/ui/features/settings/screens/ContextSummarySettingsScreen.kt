@@ -770,23 +770,7 @@ private fun RenderContextSummaryConfigSections(
         keyboardOptions =
             KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next)
     )
-    SettingsSwitchRow(
-        title = stringResource(id = R.string.settings_enable_summary_by_message_count),
-        subtitle = stringResource(id = R.string.settings_enable_summary_by_message_count_desc),
-        checked = enableSummaryByMessageCount,
-        onCheckedChange = onEnableSummaryByMessageCountChange,
-        backgroundColor = componentBackgroundColor,
-        enabled = enableSummary
-    )
-    SettingsInputField(
-        title = stringResource(id = R.string.settings_summary_message_count_threshold),
-        subtitle = stringResource(id = R.string.settings_summary_message_count_threshold_subtitle),
-        value = summaryMessageCountThresholdInput,
-        onValueChange = onSummaryMessageCountThresholdInputChange,
-        unitText = stringResource(id = R.string.model_config_unit_items),
-        backgroundColor = componentBackgroundColor,
-        enabled = enableSummary && enableSummaryByMessageCount
-    )
+    // 消息条数不再触发自动总结，避免任务执行期间因计数达到阈值而插入总结。
     summaryError?.let {
         Text(
             text = it,
