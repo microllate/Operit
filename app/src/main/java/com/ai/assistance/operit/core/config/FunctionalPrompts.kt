@@ -37,7 +37,7 @@ object FunctionalPrompts {
         【下一步与接手说明】
         [按优先级列出下一项可执行操作、需要先核实的事项、阻塞项和验收标准。保留必要的命令、路径、版本、配置及环境信息，确保新模型无需原始聊天记录也能接手。]
 
-        【关键事实与约束】
+        关键事实与约束：
         - 用户目标、原始要求、禁止事项和验收条件。
         - 已完成工作及其验证证据；严格区分计划、执行和验证。
         - 重要技术决策、失败尝试、依赖关系和未解决风险。
@@ -84,7 +84,7 @@ object FunctionalPrompts {
         [Next Steps & Handoff]
         [List concrete next actions in priority order, prerequisites, blockers, and acceptance criteria. Preserve essential commands, paths, versions, configuration, and environment details so a fresh model can continue without the original chat.]
 
-        [Key Facts & Constraints]
+        Key Facts & Constraints:
         - User goals, explicit requirements, prohibitions, and acceptance criteria.
         - Completed work and verification evidence; distinguish plans, execution, and verification.
         - Important technical decisions, failed attempts, dependencies, and unresolved risks.
@@ -96,8 +96,8 @@ object FunctionalPrompts {
         1. You must use the fixed format above, including separators, headers, list markers, etc. Do not change them.
         2. The title "Conversation Summary" must be on the first line, surrounded by '='.
         3. Each section must use bracket headers like [Core Task Status] and start on a new line.
-        4. "Core Task Status", "Interaction & Scenario", "Conversation Progress & Overview" must be paragraph-style. Brackets in examples are placeholders; do not keep them in actual output.
-        5. "Key Information & Context" must be a list, each item starting with "- ".
+        4. "Core Task Status", "Code Changes & Execution Log", "Conversation Progress & Overview" must be paragraph-style. Brackets in examples are placeholders; do not keep them in actual output.
+        5. "Next Steps & Handoff" must be a list, each item starting with "- ".
         6. End with the separator line.
 
         **Content requirements:**
@@ -120,7 +120,7 @@ object FunctionalPrompts {
             listOf(
                 "Core Task Status",
                 "Interaction & Scenario",
-                "Conversation Progress & Overview",
+                "Errors & Troubleshooting",
                 "Key Information & Context"
             )
         } else {
@@ -383,13 +383,13 @@ object FunctionalPrompts {
     const val SUMMARY_MARKER_CN = "==========对话摘要=========="
     const val SUMMARY_MARKER_EN = "==========Conversation Summary=========="
     const val SUMMARY_SECTION_CORE_TASK_CN = "【核心任务状态】"
-    const val SUMMARY_SECTION_INTERACTION_CN = "【互动情节与设定】"
-    const val SUMMARY_SECTION_PROGRESS_CN = "【对话历程与概要】"
-    const val SUMMARY_SECTION_KEY_INFO_CN = "【关键信息与上下文】"
+    const val SUMMARY_SECTION_INTERACTION_CN = "【代码变更与执行记录】"
+    const val SUMMARY_SECTION_PROGRESS_CN = "【错误与排查过程】"
+    const val SUMMARY_SECTION_KEY_INFO_CN = "【下一步与接手说明】"
     const val SUMMARY_SECTION_CORE_TASK_EN = "[Core Task Status]"
-    const val SUMMARY_SECTION_INTERACTION_EN = "[Interaction & Scenario]"
-    const val SUMMARY_SECTION_PROGRESS_EN = "[Conversation Progress & Overview]"
-    const val SUMMARY_SECTION_KEY_INFO_EN = "[Key Information & Context]"
+    const val SUMMARY_SECTION_INTERACTION_EN = "[Code Changes & Execution Log]"
+    const val SUMMARY_SECTION_PROGRESS_EN = "[Errors & Troubleshooting]"
+    const val SUMMARY_SECTION_KEY_INFO_EN = "[Next Steps & Handoff]"
 
     fun summaryUserMessage(useEnglish: Boolean): String {
         return if (useEnglish) "Please summarize the conversation as instructed." else "请按照要求总结对话内容"
