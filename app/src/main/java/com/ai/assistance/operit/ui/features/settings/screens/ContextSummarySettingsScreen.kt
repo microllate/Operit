@@ -337,6 +337,7 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
 
                 RenderContextSummaryConfigSections(
                     componentBackgroundColor = componentBackgroundColor,
+                    modelName = currentConfig?.modelName.orEmpty(),
                     contextLengthInput = contextLengthInput,
                     onContextLengthInputChange = {
                         contextLengthInput = it
@@ -706,6 +707,7 @@ private fun ContextSummaryDialogueReviewAutoSaveEffect(
 @Composable
 private fun RenderContextSummaryConfigSections(
     componentBackgroundColor: Color,
+    modelName: String,
     contextLengthInput: String,
     onContextLengthInputChange: (String) -> Unit,
     maxContextLengthInput: String,
@@ -738,7 +740,7 @@ private fun RenderContextSummaryConfigSections(
         text = stringResource(id = R.string.settings_context_card_content),
         backgroundColor = componentBackgroundColor
     )
-    val detectedContextK = resolveKnownModelContextLengthK(currentConfig?.modelName.orEmpty())
+    val detectedContextK = resolveKnownModelContextLengthK(modelName)
     Text(
         text = if (detectedContextK != null) {
             "当前模型上下文容量：约 ${detectedContextK.toInt()}K tokens（按模型名称识别）"
