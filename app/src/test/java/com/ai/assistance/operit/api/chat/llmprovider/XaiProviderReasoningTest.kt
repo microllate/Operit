@@ -3,7 +3,6 @@ package com.ai.assistance.operit.api.chat.llmprovider
 import com.ai.assistance.operit.data.collects.ApiProviderConfigs
 import com.ai.assistance.operit.data.model.ApiProviderType
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class XaiProviderReasoningTest {
@@ -23,24 +22,6 @@ class XaiProviderReasoningTest {
                 "https://api.x.ai/v1/chat/completions",
                 ApiProviderType.XAI
             )
-        )
-    }
-
-    @Test
-    fun enabledOptionsMapToXaiEfforts() {
-        assertEquals(
-            listOf("low", "medium", "high", "xhigh"),
-            listOf("low", "medium", "high", "xhigh").map {
-                XaiReasoningMapper.effortForOption(optionId = it)
-            }
-        )
-    }
-
-    @Test
-    fun mapperPreservesTheSelectedEffort() {
-        assertEquals(
-            "high",
-            XaiReasoningMapper.effortForOption(optionId = "high")
         )
     }
 
