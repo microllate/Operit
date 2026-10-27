@@ -1301,22 +1301,8 @@ object AIMessageManager {
             }
         }
 
-        // 检查消息条数阈值（如果启用）
-        if (enableSummaryByMessageCount) {
-            val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
-            val relevantMessages = if (lastSummaryIndex != -1) {
-                messages.subList(lastSummaryIndex + 1, messages.size)
-            } else {
-                messages
-            }
-            val userAiMessagesSinceLastSummary = relevantMessages.count { it.sender == "user"}
-
-            if (userAiMessagesSinceLastSummary >= summaryMessageCountThreshold) {
-                AppLogger.d(TAG, "自上次总结后新消息数量达到阈值 ($userAiMessagesSinceLastSummary)，生成总结.")
-                return true
-            }
-        }
-
+        // 消息条数不再作为总结触发条件；总结只由上下文压力标记，
+        // 实际执行时机由消息处理层延迟到当前任务/工具调用链结束后。
         AppLogger.d(TAG, "未达到生成总结的条件. Token使用率: ${if (maxTokens > 0) currentTokens.toDouble() / maxTokens else 0.0}")
         return false
     }
