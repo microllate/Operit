@@ -65,7 +65,9 @@ jobs:
       - name: Accept Android SDK licenses
         shell: bash
         run: |
-          set -euo pipefail
+          set -eu
+          # sdkmanager may close stdin after accepting all licenses; avoid treating
+          # yes receiving SIGPIPE as a workflow failure.
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
 
       - name: Install Android SDK, NDK and CMake
