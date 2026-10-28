@@ -230,7 +230,9 @@ fun resolveKnownModelContextLengthK(modelName: String): Float? {
         id.matches(Regex(".*\\b(o1|o3|o4)(-.*)?")) || id.contains("o3-mini") || id.contains("o4-mini") -> 200f
         id.contains("claude") -> 200f
         id.contains("gemini-1.5") || id.contains("gemini-2") || id.contains("gemini-3") -> 1024f
-        id.contains("deepseek") -> 64f
+        id == "deepseek-flash" || id.startsWith("deepseek-flash-") ||
+        id == "deepseek-v4-flash" || id.startsWith("deepseek-v4-flash-") -> 1024f
+                id.contains("deepseek") -> 64f
         id.contains("kimi") || id.contains("moonshot") -> 256f
         id.contains("qwen") -> when {
             id.contains("qwen2.5") || id.contains("qwen3") -> 128f
