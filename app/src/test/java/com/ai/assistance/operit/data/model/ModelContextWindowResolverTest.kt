@@ -13,6 +13,9 @@ class ModelContextWindowResolverTest {
         assertEquals(200f, resolveKnownModelContextLengthK("claude-3-7-sonnet"))
         assertEquals(1024f, resolveKnownModelContextLengthK("gemini-2.5-pro"))
         assertEquals(64f, resolveKnownModelContextLengthK("deepseek-chat"))
+        assertEquals(1024f, resolveKnownModelContextLengthK("deepseek-flash"))
+        assertEquals(1024f, resolveKnownModelContextLengthK("deepseek-v4-flash"))
+        assertEquals(1024f, resolveKnownModelContextLengthK("deepseek-v4-flash-1017"))
         assertEquals(256f, resolveKnownModelContextLengthK("kimi-for-coding"))
     }
 
