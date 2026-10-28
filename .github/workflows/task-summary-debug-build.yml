@@ -1,4 +1,4 @@
-name: Task Summary Debug APK
+name: Task Summary Debug APK # [run-tests] verify tool history fixes
 
 on:
   push:
