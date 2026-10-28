@@ -210,8 +210,12 @@ object FunctionalPrompts {
         summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig()
     ): String {
         var prompt = summaryPrompt(useEnglish).trimIndent()
-        if (summaryConfig.sectionOverrides.isNotEmpty()) {
-            prompt = applySummarySectionOverrides(summaryConfig.sectionOverrides, useEnglish)
+        val knownSectionIds = legacyPromptSections(useEnglish).mapTo(mutableSetOf()) { it.id }
+        val applicableOverrides = summaryConfig.sectionOverrides.filter {
+            it.id.trim() in knownSectionIds
+        }
+        if (applicableOverrides.isNotEmpty()) {
+            prompt = applySummarySectionOverrides(applicableOverrides, useEnglish)
         }
         val promptWithPreviousSummary = appendPreviousSummary(prompt, previousSummary, useEnglish)
         return summaryConfig.globalRules?.trim()?.takeIf { it.isNotBlank() }?.let { rules ->
