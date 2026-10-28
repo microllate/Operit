@@ -199,8 +199,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Run unit tests (manual opt-in)
-        if: github.event_name == 'workflow_dispatch' && inputs.run_unit_tests
+      - name: Run unit tests (manual or one-time commit opt-in)
+        if: (github.event_name == 'workflow_dispatch' && inputs.run_unit_tests) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-tests]'))
         run: ./gradlew --no-daemon :app:testDebugUnitTest
 
       - name: Upload Debug APK
