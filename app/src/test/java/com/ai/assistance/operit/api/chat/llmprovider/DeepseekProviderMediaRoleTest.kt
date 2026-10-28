@@ -116,7 +116,7 @@ class DeepseekProviderMediaRoleTest {
         val history =
             listOf(
                 PromptTurn(
-                    PromptTurnKind.TOOL_CALL,
+                    PromptTurnKind.ASSISTANT,
                     """<tool name="read_file"><param name="path">/tmp/image.png</param></tool>"""
                 ),
                 PromptTurn(
