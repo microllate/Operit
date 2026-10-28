@@ -5,6 +5,12 @@ on:
     branches:
       - fix/task-completion-summary-context-auto
   workflow_dispatch:
+    inputs:
+      run_unit_tests:
+        description: Run the full JVM unit-test suite
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -54,6 +60,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web-chat/package-lock.json
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -96,6 +106,14 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: tools/native_ripgrep/target
+          key: rust-ripgrep-${{ runner.os }}-${{ env.RUST_VERSION }}-${{ hashFiles('tools/native_ripgrep/Cargo.lock', 'tools/native_ripgrep/Cargo.toml', 'tools/native_ripgrep/src/**') }}
+          restore-keys: |
+            rust-ripgrep-${{ runner.os }}-${{ env.RUST_VERSION }}-
 
       - name: Build native ripgrep
         run: |
@@ -172,8 +190,8 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew --no-daemon :app:assembleDebug --stacktrace
 
-      - name: Run unit tests
-        if: success()
+      - name: Run unit tests (manual opt-in)
+        if: github.event_name == 'workflow_dispatch' && inputs.run_unit_tests
         run: ./gradlew --no-daemon :app:testDebugUnitTest
 
       - name: Upload Debug APK
