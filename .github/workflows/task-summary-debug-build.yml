@@ -187,8 +187,17 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug --stacktrace
+      - name: Build Debug APK and collect profile
+        run: ./gradlew --no-daemon :app:assembleDebug --stacktrace --profile
+
+      - name: Upload Gradle performance report
+        if: always() && hashFiles('build/reports/profile/*.html') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-performance-report
+          path: build/reports/profile/*.html
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Run unit tests (manual opt-in)
         if: github.event_name == 'workflow_dispatch' && inputs.run_unit_tests
