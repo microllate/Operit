@@ -27,6 +27,32 @@ if (localPropertiesFile.exists()) {
     localProperties.load(FileInputStream(localPropertiesFile))
 }
 
+// Release signing rotation is optional for fork CI builds. Without the original
+// signing materials, produce an installable APK signed with the local debug key.
+fun configuredPathExists(propertyName: String): Boolean {
+    val configured = localProperties.getProperty(propertyName)?.trim().orEmpty()
+    if (configured.isEmpty()) return false
+    val path = File(configured).let { if (it.isAbsolute) it else rootProject.file(configured) }
+    return path.isFile
+}
+
+val releaseRotationSigningConfigured = listOf(
+    "RELEASE_STORE_FILE",
+    "RELEASE_STORE_PASSWORD",
+    "RELEASE_KEY_ALIAS",
+    "RELEASE_KEY_PASSWORD",
+    "APK_ROTATION_NEW_STORE_FILE",
+    "APK_ROTATION_NEW_STORE_PASSWORD",
+    "APK_ROTATION_NEW_KEY_ALIAS",
+    "APK_ROTATION_NEW_KEY_PASSWORD",
+    "APK_ROTATION_LINEAGE_FILE",
+).all { propertyName ->
+    val value = localProperties.getProperty(propertyName)?.trim()
+    !value.isNullOrEmpty() &&
+        (propertyName !in setOf("RELEASE_STORE_FILE", "APK_ROTATION_NEW_STORE_FILE", "APK_ROTATION_LINEAGE_FILE") ||
+            configuredPathExists(propertyName))
+}
+
 data class SttModelAsset(
     val targetPath: String,
     val sourceUrl: String,
@@ -430,6 +456,11 @@ android {
             )
             if (releaseSigningConfig != null) {
                 signingConfig = releaseSigningConfig
+            } else {
+                // Fork CI has no access to the upstream release keystore.
+                // Debug signing keeps the generated Release APK installable,
+                // but it cannot update an upstream-signed installation.
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
         debug {
@@ -551,12 +582,14 @@ val signRotatedNightlyApk by tasks.registering {
     }
 }
 
-tasks.matching { it.name == "assembleRelease" }.configureEach {
-    finalizedBy(signRotatedReleaseApk)
-}
+if (releaseRotationSigningConfigured) {
+    tasks.matching { it.name == "assembleRelease" }.configureEach {
+        finalizedBy(signRotatedReleaseApk)
+    }
 
-tasks.matching { it.name == "assembleNightly" }.configureEach {
-    finalizedBy(signRotatedNightlyApk)
+    tasks.matching { it.name == "assembleNightly" }.configureEach {
+        finalizedBy(signRotatedNightlyApk)
+    }
 }
 
 tasks.named("preBuild") {
