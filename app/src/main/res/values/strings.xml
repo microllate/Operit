@@ -8504,4 +8504,12 @@
     <string name="codex_usage_unavailable">额度暂时不可用</string>
     <string name="codex_reset_after_days">%1$d 天后重置</string>
     <string name="codex_reset_after_clock">%1$02d:%2$02d 后重置</string>
+    <string name="token_stats_cost_composition">费用构成</string>
+    <string name="token_stats_cost_uncached_input">未缓存输入</string>
+    <string name="token_stats_cost_cache_hit">缓存命中</string>
+    <string name="token_stats_cost_cache_write">缓存写入</string>
+    <string name="token_stats_cost_output">输出</string>
+    <string name="token_stats_cost_per_request">按次计费</string>
+    <string name="token_stats_cost_total">总费用</string>
+    <string name="token_stats_cost_no_breakdown">暂无可拆分的费用数据</string>
 </resources>
