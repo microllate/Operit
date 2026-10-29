@@ -166,14 +166,6 @@ abstract class TokenUsageDao {
         ORDER BY provider, model, configId
         """
     )
-        @Query(
-        """
-        SELECT MIN(occurredAtMs)
-        FROM token_usage_records
-        WHERE occurredAtMs IS NOT NULL
-            AND (:allModels OR (provider || ':' || model) IN (:providerModels))
-        """
-    )
     abstract suspend fun aggregateModelsInRange(
         startMs: Long,
         endMs: Long,
