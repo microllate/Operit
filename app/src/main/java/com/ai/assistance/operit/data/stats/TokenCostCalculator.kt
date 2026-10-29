@@ -1,6 +1,7 @@
 package com.ai.assistance.operit.data.stats
 
 import com.ai.assistance.operit.data.collects.PricingCurrency
+import java.util.Locale
 import com.ai.assistance.operit.data.dao.TokenUsageModelAggregateRow
 import com.ai.assistance.operit.data.model.BillingMode
 
@@ -17,6 +18,46 @@ object TokenCostCalculator {
         val nativeAmount: Double
         val unknown: Long
         val nativeBreakdown = linkedMapOf<String, Double>()
+        val normalizedModel = row.providerModel.lowercase(Locale.ROOT)
+        val isDeepSeekFlash = normalizedModel.contains("deepseek") &&
+            (normalizedModel.contains("flash") || normalizedModel.endsWith(":deepseek-chat"))
+        if (isDeepSeekFlash && pricing.billingMode != BillingMode.COUNT) {
+            // Official DeepSeek Flash CNY prices per million tokens. DAO peak totals
+            // use the timestamp of each usage record in Beijing time.
+            fun amount(tokens: Long, price: Double): Double =
+                if (price > 0.0) tokens.toDouble() * price / 1_000_000.0 else 0.0
+            val peakInput = amount(row.peakUncachedInputTokens, 2.0)
+            val peakCached = amount(row.peakCachedInputTokens, 0.04)
+            val peakWrite = amount(row.peakCacheWriteTokens, 2.0)
+            val peakOutput = amount(row.peakOutputTokens, 8.0)
+            val offpeakInput = amount((row.uncachedInputTokens - row.peakUncachedInputTokens).coerceAtLeast(0L), 1.0)
+            val offpeakCached = amount((row.cachedInputTokens - row.peakCachedInputTokens).coerceAtLeast(0L), 0.02)
+            val offpeakWrite = amount((row.cacheWriteTokens - row.peakCacheWriteTokens).coerceAtLeast(0L), 1.0)
+            val offpeakOutput = amount((row.outputTokens - row.peakOutputTokens).coerceAtLeast(0L), 4.0)
+            listOf(
+                "peak_input" to peakInput, "peak_cache_hit" to peakCached,
+                "peak_cache_write" to peakWrite, "peak_output" to peakOutput,
+                "offpeak_input" to offpeakInput, "offpeak_cache_hit" to offpeakCached,
+                "offpeak_cache_write" to offpeakWrite, "offpeak_output" to offpeakOutput,
+            ).forEach { (key, value) -> if (value > 0.0) nativeBreakdown[key] = value }
+            nativeAmount = nativeBreakdown.values.sum()
+            unknown = if (row.uncachedInputKnown == 0L && row.cachedInputKnown == 0L &&
+                row.cacheWriteKnown == 0L && row.outputKnown == 0L) row.requests else 0L
+            val converted = TokenCostCurrency.convertTo(
+                nativeAmount, PricingCurrency.CNY, targetCurrency, usdToCnyRate,
+            )
+            return TokenStatsCostSummary(
+                currency = targetCurrency,
+                knownAmount = converted,
+                unknownContributionCount = unknown,
+                totalContributionCount = row.requests,
+                rateUsed = usdToCnyRate,
+                originalCurrencyAmounts = if (nativeAmount > 0.0) mapOf(PricingCurrency.CNY to nativeAmount) else emptyMap(),
+                breakdown = nativeBreakdown.mapValues { (_, value) ->
+                    TokenCostCurrency.convertTo(value, PricingCurrency.CNY, targetCurrency, usdToCnyRate)
+                },
+            )
+        }
         if (pricing.billingMode == BillingMode.COUNT) {
             nativeAmount = pricing.pricePerRequest * row.requests
             if (nativeAmount > 0.0) nativeBreakdown["request"] = nativeAmount
