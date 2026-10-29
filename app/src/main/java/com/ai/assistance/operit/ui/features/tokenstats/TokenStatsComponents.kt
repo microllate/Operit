@@ -582,12 +582,21 @@ fun TokenStatsCostCompositionCard(
     val colors = LocalTokenStatsColors.current
     val cost = summary?.cost
     val total = cost?.knownAmount ?: 0.0
+    val breakdown = cost?.breakdown.orEmpty()
     val rows = listOf(
-        Triple("input", stringResource(R.string.token_stats_cost_uncached_input), cost?.breakdown?.get("input") ?: 0.0),
-        Triple("cache_hit", stringResource(R.string.token_stats_cost_cache_hit), cost?.breakdown?.get("cache_hit") ?: 0.0),
-        Triple("cache_write", stringResource(R.string.token_stats_cost_cache_write), cost?.breakdown?.get("cache_write") ?: 0.0),
-        Triple("output", stringResource(R.string.token_stats_cost_output), cost?.breakdown?.get("output") ?: 0.0),
-        Triple("request", stringResource(R.string.token_stats_cost_per_request), cost?.breakdown?.get("request") ?: 0.0),
+        Triple("peak_input", "高峰期 · ${stringResource(R.string.token_stats_cost_uncached_input)}", breakdown["peak_input"] ?: 0.0),
+        Triple("peak_cache_hit", "高峰期 · ${stringResource(R.string.token_stats_cost_cache_hit)}", breakdown["peak_cache_hit"] ?: 0.0),
+        Triple("peak_cache_write", "高峰期 · ${stringResource(R.string.token_stats_cost_cache_write)}", breakdown["peak_cache_write"] ?: 0.0),
+        Triple("peak_output", "高峰期 · ${stringResource(R.string.token_stats_cost_output)}", breakdown["peak_output"] ?: 0.0),
+        Triple("offpeak_input", "非高峰期 · ${stringResource(R.string.token_stats_cost_uncached_input)}", breakdown["offpeak_input"] ?: 0.0),
+        Triple("offpeak_cache_hit", "非高峰期 · ${stringResource(R.string.token_stats_cost_cache_hit)}", breakdown["offpeak_cache_hit"] ?: 0.0),
+        Triple("offpeak_cache_write", "非高峰期 · ${stringResource(R.string.token_stats_cost_cache_write)}", breakdown["offpeak_cache_write"] ?: 0.0),
+        Triple("offpeak_output", "非高峰期 · ${stringResource(R.string.token_stats_cost_output)}", breakdown["offpeak_output"] ?: 0.0),
+        Triple("input", stringResource(R.string.token_stats_cost_uncached_input), breakdown["input"] ?: 0.0),
+        Triple("cache_hit", stringResource(R.string.token_stats_cost_cache_hit), breakdown["cache_hit"] ?: 0.0),
+        Triple("cache_write", stringResource(R.string.token_stats_cost_cache_write), breakdown["cache_write"] ?: 0.0),
+        Triple("output", stringResource(R.string.token_stats_cost_output), breakdown["output"] ?: 0.0),
+        Triple("request", stringResource(R.string.token_stats_cost_per_request), breakdown["request"] ?: 0.0),
     ).filter { it.third > 0.0 }
     TokenStatsCard(modifier = modifier.fillMaxWidth()) {
         Column(
