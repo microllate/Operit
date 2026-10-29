@@ -201,6 +201,10 @@ object TokenStatsQueryService {
                     .flatMap { it.cost.originalCurrencyAmounts.entries }
                     .groupBy({ it.key }, { it.value })
                     .mapValues { (_, amounts) -> amounts.sum() },
+                breakdown = values
+                    .flatMap { it.cost.breakdown.entries }
+                    .groupBy({ it.key }, { it.value })
+                    .mapValues { (_, amounts) -> amounts.sum() },
             ),
         )
     }
