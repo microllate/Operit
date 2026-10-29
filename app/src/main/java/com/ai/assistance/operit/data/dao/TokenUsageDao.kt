@@ -22,6 +22,10 @@ data class TokenUsageModelAggregateRow(
     val totalInputKnown: Long,
     val outputTokens: Long,
     val outputKnown: Long,
+    val peakUncachedInputTokens: Long = 0L,
+    val peakCachedInputTokens: Long = 0L,
+    val peakCacheWriteTokens: Long = 0L,
+    val peakOutputTokens: Long = 0L,
 ) {
     val providerModel: String
         get() = "$provider:$model"
@@ -104,7 +108,11 @@ abstract class TokenUsageDao {
             COALESCE(SUM(totalInputTokens), 0) AS totalInputTokens,
             COALESCE(SUM(CASE WHEN totalInputTokens IS NOT NULL THEN requestCount ELSE 0 END), 0) AS totalInputKnown,
             COALESCE(SUM(outputTokens), 0) AS outputTokens,
-            COALESCE(SUM(CASE WHEN outputTokens IS NOT NULL THEN requestCount ELSE 0 END), 0) AS outputKnown
+            COALESCE(SUM(CASE WHEN outputTokens IS NOT NULL THEN requestCount ELSE 0 END), 0) AS outputKnown,
+            COALESCE(SUM(CASE WHEN (occurredAtMs IS NOT NULL AND CAST(strftime('%w', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) BETWEEN 1 AND 5 AND ((CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 9 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 12) OR (CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 14 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 18))) THEN COALESCE(uncachedInputTokens, 0) ELSE 0 END), 0) AS peakUncachedInputTokens,
+            COALESCE(SUM(CASE WHEN (occurredAtMs IS NOT NULL AND CAST(strftime('%w', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) BETWEEN 1 AND 5 AND ((CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 9 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 12) OR (CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 14 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 18))) THEN COALESCE(cachedInputTokens, 0) ELSE 0 END), 0) AS peakCachedInputTokens,
+            COALESCE(SUM(CASE WHEN (occurredAtMs IS NOT NULL AND CAST(strftime('%w', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) BETWEEN 1 AND 5 AND ((CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 9 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 12) OR (CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 14 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 18))) THEN COALESCE(cacheWriteTokens, 0) ELSE 0 END), 0) AS peakCacheWriteTokens,
+            COALESCE(SUM(CASE WHEN (occurredAtMs IS NOT NULL AND CAST(strftime('%w', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) BETWEEN 1 AND 5 AND ((CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 9 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 12) OR (CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 14 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 18))) THEN COALESCE(outputTokens, 0) ELSE 0 END), 0) AS peakOutputTokens
         FROM token_usage_records
         WHERE (:allModels OR (provider || ':' || model) IN (:providerModels))
         GROUP BY provider, model, configId
