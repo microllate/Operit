@@ -154,12 +154,27 @@ abstract class TokenUsageDao {
             COALESCE(SUM(totalInputTokens), 0) AS totalInputTokens,
             COALESCE(SUM(CASE WHEN totalInputTokens IS NOT NULL THEN requestCount ELSE 0 END), 0) AS totalInputKnown,
             COALESCE(SUM(outputTokens), 0) AS outputTokens,
-            COALESCE(SUM(CASE WHEN outputTokens IS NOT NULL THEN requestCount ELSE 0 END), 0) AS outputKnown
+            COALESCE(SUM(CASE WHEN outputTokens IS NOT NULL THEN requestCount ELSE 0 END), 0) AS outputKnown,
             COALESCE(SUM(CASE WHEN (occurredAtMs IS NOT NULL AND CAST(strftime('%w', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) BETWEEN 1 AND 5 AND date(datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) NOT IN (:holidayDates) AND ((CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 9 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 12) OR (CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 14 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 18))) THEN COALESCE(uncachedInputTokens, 0) ELSE 0 END), 0) AS peakUncachedInputTokens,
             COALESCE(SUM(CASE WHEN (occurredAtMs IS NOT NULL AND CAST(strftime('%w', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) BETWEEN 1 AND 5 AND date(datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) NOT IN (:holidayDates) AND ((CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 9 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 12) OR (CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 14 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 18))) THEN COALESCE(cachedInputTokens, 0) ELSE 0 END), 0) AS peakCachedInputTokens,
             COALESCE(SUM(CASE WHEN (occurredAtMs IS NOT NULL AND CAST(strftime('%w', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) BETWEEN 1 AND 5 AND date(datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) NOT IN (:holidayDates) AND ((CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 9 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 12) OR (CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 14 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 18))) THEN COALESCE(cacheWriteTokens, 0) ELSE 0 END), 0) AS peakCacheWriteTokens,
             COALESCE(SUM(CASE WHEN (occurredAtMs IS NOT NULL AND CAST(strftime('%w', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) BETWEEN 1 AND 5 AND date(datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) NOT IN (:holidayDates) AND ((CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 9 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 12) OR (CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) >= 14 AND CAST(strftime('%H', datetime(occurredAtMs / 1000 + 28800, 'unixepoch')) AS INTEGER) < 18))) THEN COALESCE(outputTokens, 0) ELSE 0 END), 0) AS peakOutputTokens
-        abstract suspend fun aggregateModelsInRange(
+        FROM token_usage_records
+        WHERE occurredAtMs >= :startMs AND occurredAtMs < :endMs
+            AND (:allModels OR (provider || ':' || model) IN (:providerModels))
+        GROUP BY provider, model, configId
+        ORDER BY provider, model, configId
+        """
+    )
+        @Query(
+        """
+        SELECT MIN(occurredAtMs)
+        FROM token_usage_records
+        WHERE occurredAtMs IS NOT NULL
+            AND (:allModels OR (provider || ':' || model) IN (:providerModels))
+        """
+    )
+    abstract suspend fun aggregateModelsInRange(
         startMs: Long,
         endMs: Long,
         providerModels: List<String>,
