@@ -117,6 +117,8 @@ class ConversationService(
             multiServiceManager: MultiServiceManager,
             summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig(),
             recordTokenUsage: Boolean = true,
+            chatModelConfigIdOverride: String? = null,
+            chatModelIndexOverride: Int? = null,
     ): String {
         try {
             val useEnglish = !LocaleUtils.usesChineseContent(context)
@@ -132,12 +134,19 @@ class ConversationService(
                     ChatUtils.stripGeminiThoughtSignatureMetaTurns(messages)
                 )
 
-            // Get all model parameters from preferences (with enabled state)
-            val modelParameters = multiServiceManager.getModelParametersForFunction(FunctionType.SUMMARY)
+            // 优先使用当前聊天绑定的模型；未提供聊天配置时才回退到独立 SUMMARY 映射。
+            val chatConfigId = chatModelConfigIdOverride?.takeIf { it.isNotBlank() }
+            val modelParameters = if (chatConfigId != null) {
+                multiServiceManager.getModelParametersForConfig(chatConfigId)
+            } else {
+                multiServiceManager.getModelParametersForFunction(FunctionType.SUMMARY)
+            }
             val serializedModelParameters = serializeSummaryHookModelParameters(modelParameters)
-
-            // 获取SUMMARY功能类型的AIService实例
-            val summaryService = multiServiceManager.getServiceForFunction(FunctionType.SUMMARY)
+            val summaryService = if (chatConfigId != null) {
+                multiServiceManager.getServiceForConfig(chatConfigId, chatModelIndexOverride ?: 0)
+            } else {
+                multiServiceManager.getServiceForFunction(FunctionType.SUMMARY)
+            }
             var summaryHistory = sanitizedMessages
             var summaryPrompt = FunctionalPrompts.summaryUserMessage(useEnglish)
             val baseSummaryMetadata =
