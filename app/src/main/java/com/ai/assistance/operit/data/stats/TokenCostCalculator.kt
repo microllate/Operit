@@ -24,16 +24,20 @@ object TokenCostCalculator {
         val isDeepSeekFlash = isDeepSeek && !isDeepSeekPro &&
             (normalizedModel.contains("flash") || normalizedModel.endsWith(":deepseek-chat"))
         if ((isDeepSeekFlash || isDeepSeekPro) && pricing.billingMode != BillingMode.COUNT) {
-            // Official DeepSeek Flash CNY prices per million tokens. DAO peak totals
-            // use the timestamp of each usage record in Beijing time.
             fun amount(tokens: Long, price: Double): Double =
                 if (price > 0.0) tokens.toDouble() * price / 1_000_000.0 else 0.0
-            val peakInputPrice = if (isDeepSeekPro) 9.0 else 0.30
-            val peakCachedPrice = if (isDeepSeekPro) 0.30 else 0.04
-            val peakOutputPrice = if (isDeepSeekPro) 27.0 else 1.20
-            val offpeakInputPrice = if (isDeepSeekPro) 4.5 else 0.15
-            val offpeakCachedPrice = if (isDeepSeekPro) 0.15 else 0.02
-            val offpeakOutputPrice = if (isDeepSeekPro) 13.5 else 0.60
+            val official = OfficialModelPricingCache.get(row.providerModel)
+            val useOfficialUsd = official?.peakInput != null &&
+                official.peakOutput != null && official.peakCachedInput != null &&
+                official.offPeakInput != null && official.offPeakOutput != null &&
+                official.offPeakCachedInput != null
+            // Prefer live official rates; use documented CNY fallback only until first sync succeeds.
+            val peakInputPrice = official?.peakInput ?: if (isDeepSeekPro) 9.0 else 2.0
+            val peakCachedPrice = official?.peakCachedInput ?: if (isDeepSeekPro) 0.30 else 0.04
+            val peakOutputPrice = official?.peakOutput ?: if (isDeepSeekPro) 27.0 else 8.0
+            val offpeakInputPrice = official?.offPeakInput ?: if (isDeepSeekPro) 4.5 else 1.0
+            val offpeakCachedPrice = official?.offPeakCachedInput ?: if (isDeepSeekPro) 0.15 else 0.02
+            val offpeakOutputPrice = official?.offPeakOutput ?: if (isDeepSeekPro) 13.5 else 4.0
             val peakInput = amount(row.peakUncachedInputTokens, peakInputPrice)
             val peakCached = amount(row.peakCachedInputTokens, peakCachedPrice)
             val peakWrite = amount(row.peakCacheWriteTokens, peakInputPrice)
@@ -51,18 +55,17 @@ object TokenCostCalculator {
             nativeAmount = nativeBreakdown.values.sum()
             unknown = if (row.uncachedInputKnown == 0L && row.cachedInputKnown == 0L &&
                 row.cacheWriteKnown == 0L && row.outputKnown == 0L) row.requests else 0L
-            val converted = TokenCostCurrency.convertTo(
-                nativeAmount, PricingCurrency.CNY, targetCurrency, usdToCnyRate,
-            )
+            val sourceCurrency = if (useOfficialUsd) PricingCurrency.USD else PricingCurrency.CNY
+            val converted = TokenCostCurrency.convertTo(nativeAmount, sourceCurrency, targetCurrency, usdToCnyRate)
             return TokenStatsCostSummary(
                 currency = targetCurrency,
                 knownAmount = converted,
                 unknownContributionCount = unknown,
                 totalContributionCount = row.requests,
                 rateUsed = usdToCnyRate,
-                originalCurrencyAmounts = if (nativeAmount > 0.0) mapOf(PricingCurrency.CNY to nativeAmount) else emptyMap(),
+                originalCurrencyAmounts = if (nativeAmount > 0.0) mapOf(sourceCurrency to nativeAmount) else emptyMap(),
                 breakdown = nativeBreakdown.mapValues { (_, value) ->
-                    TokenCostCurrency.convertTo(value, PricingCurrency.CNY, targetCurrency, usdToCnyRate)
+                    TokenCostCurrency.convertTo(value, sourceCurrency, targetCurrency, usdToCnyRate)
                 },
             )
         }
