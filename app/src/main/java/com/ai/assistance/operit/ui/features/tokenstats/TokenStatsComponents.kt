@@ -571,6 +571,97 @@ internal fun TokenStatsCompositionCard(
     }
 }
 
+
+/** Cost breakdown uses the same resolved prices as the total cost, including cache-hit rates. */
+@Composable
+fun TokenStatsCostCompositionCard(
+    summary: TokenStatsTotals?,
+    currency: PricingCurrency,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalTokenStatsColors.current
+    val cost = summary?.cost
+    val total = cost?.knownAmount ?: 0.0
+    val rows = listOf(
+        Triple("input", stringResource(R.string.token_stats_cost_uncached_input), cost?.breakdown?.get("input") ?: 0.0),
+        Triple("cache_hit", stringResource(R.string.token_stats_cost_cache_hit), cost?.breakdown?.get("cache_hit") ?: 0.0),
+        Triple("cache_write", stringResource(R.string.token_stats_cost_cache_write), cost?.breakdown?.get("cache_write") ?: 0.0),
+        Triple("output", stringResource(R.string.token_stats_cost_output), cost?.breakdown?.get("output") ?: 0.0),
+        Triple("request", stringResource(R.string.token_stats_cost_per_request), cost?.breakdown?.get("request") ?: 0.0),
+    ).filter { it.third > 0.0 }
+    TokenStatsCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(TokenStatsSpacing.card),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TokenStatsCardTitle(stringResource(R.string.token_stats_cost_composition))
+            if (rows.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.token_stats_cost_no_breakdown),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.cardSupportingContent,
+                )
+            } else {
+                rows.forEach { (_, label, amount) ->
+                    val fraction = if (total > 0.0) (amount / total).coerceIn(0.0, 1.0) else 0.0
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.cardContent,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = formatLifetimeMoney(amount, currency),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.cardContent,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = String.format(Locale.getDefault(), "%.1f%%", fraction * 100.0),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.cardSupportingContent,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(colors.innerContainer),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(fraction.toFloat())
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(colors.cardAccent),
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(color = colors.cardBorder)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.token_stats_cost_total),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = formatLifetimeMoney(total, currency),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.cardAccent,
+                    )
+                }
+            }
+        }
+    }
+}
+
 // ==== 模型累计（排名列表 + 占比进度条） ====
 
 private const val LIFETIME_MODELS_COLLAPSED_COUNT = 5
