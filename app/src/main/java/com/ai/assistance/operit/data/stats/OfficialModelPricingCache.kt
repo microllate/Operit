@@ -13,6 +13,12 @@ object OfficialModelPricingCache {
         val cacheWrite: Double?,
         val source: String,
         val updatedAtMs: Long,
+        val peakInput: Double? = null,
+        val peakOutput: Double? = null,
+        val peakCachedInput: Double? = null,
+        val offPeakInput: Double? = null,
+        val offPeakOutput: Double? = null,
+        val offPeakCachedInput: Double? = null,
     )
 
     private const val PREFS = "official_model_pricing_cache"
@@ -42,6 +48,12 @@ object OfficialModelPricingCache {
             cacheWrite = row.optDouble("cacheWrite", Double.NaN).takeIf { it.isFinite() && it >= 0 },
             source = row.optString("source", ""),
             updatedAtMs = prefs.getLong(UPDATED, 0L),
+            peakInput = row.optDouble("peakInput", Double.NaN).takeIf { it.isFinite() && it >= 0 },
+            peakOutput = row.optDouble("peakOutput", Double.NaN).takeIf { it.isFinite() && it >= 0 },
+            peakCachedInput = row.optDouble("peakCachedInput", Double.NaN).takeIf { it.isFinite() && it >= 0 },
+            offPeakInput = row.optDouble("offPeakInput", Double.NaN).takeIf { it.isFinite() && it >= 0 },
+            offPeakOutput = row.optDouble("offPeakOutput", Double.NaN).takeIf { it.isFinite() && it >= 0 },
+            offPeakCachedInput = row.optDouble("offPeakCachedInput", Double.NaN).takeIf { it.isFinite() && it >= 0 },
         )
     }
 
