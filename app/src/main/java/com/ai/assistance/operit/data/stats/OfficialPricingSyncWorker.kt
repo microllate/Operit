@@ -56,6 +56,43 @@ class OfficialPricingSyncWorker(context: Context, params: WorkerParameters) : Co
             }
             val catalog = JSONObject(body)
             val prices = JSONObject()
+            // DeepSeek's official rate card is authoritative for its peak/off-peak tiers.
+            // The first 12 USD amounts are ordered by the official pricing table:
+            // cache hit off-peak, cache hit peak, cache miss off-peak, cache miss peak,
+            // output off-peak, output peak; each tier lists Flash then Pro.
+            runCatching {
+                val officialHtml = client.newCall(
+                    Request.Builder()
+                        .url("https://api-docs.deepseek.com/quick_start/pricing/")
+                        .header("Accept", "text/html")
+                        .build()
+                ).execute().use { response ->
+                    if (response.isSuccessful) response.body?.string() else null
+                } ?: return@runCatching
+                if (!officialHtml.contains("deepseek-flash") || !officialHtml.contains("OFF-PEAK") ||
+                    !officialHtml.contains("PEAK")) return@runCatching
+                val amounts = Regex("\\$([0-9]+(?:\\.[0-9]+)?)")
+                    .findAll(officialHtml.substringBefore("Search & Fetch Pricing"))
+                    .mapNotNull { it.groupValues.getOrNull(1)?.toDoubleOrNull() }
+                    .toList()
+                if (amounts.size < 12) return@runCatching
+                fun officialRow(index: Int, prefix: String): JSONObject = JSONObject()
+                    .put("input", amounts[index] * 1_000_000.0)
+                    .put("cachedInput", amounts[if (prefix == "flash") 0 else 1] * 1_000_000.0)
+                    .put("output", amounts[if (prefix == "flash") 8 else 9] * 1_000_000.0)
+                    .put("peakInput", amounts[if (prefix == "flash") 6 else 7] * 1_000_000.0)
+                    .put("peakCachedInput", amounts[if (prefix == "flash") 2 else 3] * 1_000_000.0)
+                    .put("peakOutput", amounts[if (prefix == "flash") 10 else 11] * 1_000_000.0)
+                    .put("offPeakInput", amounts[if (prefix == "flash") 4 else 5] * 1_000_000.0)
+                    .put("offPeakCachedInput", amounts[if (prefix == "flash") 0 else 1] * 1_000_000.0)
+                    .put("offPeakOutput", amounts[if (prefix == "flash") 8 else 9] * 1_000_000.0)
+                    .put("source", "DeepSeek official pricing page")
+                prices.put("deepseek:deepseek-flash", officialRow(4, "flash"))
+                prices.put("deepseek-flash", JSONObject(prices.getJSONObject("deepseek:deepseek-flash").toString()))
+                prices.put("deepseek:deepseek-v4-pro", officialRow(5, "pro"))
+                prices.put("deepseek-v4-pro", JSONObject(prices.getJSONObject("deepseek:deepseek-v4-pro").toString()))
+            }
+
             val providers = catalog.keys()
             while (providers.hasNext()) {
                 val providerId = providers.next()
