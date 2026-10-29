@@ -21,7 +21,7 @@ object TokenStatsQueryService {
             val requestRows = dao.aggregateModelsForLifetime(
                 providerModels = params.providerModels.queryValues(),
                 allModels = params.providerModels == null,
-                holidayDates = listOf("0000-00-00"),
+                holidayDates = OfficialModelPricingCache.getChineseHolidayDates(context).ifEmpty { listOf("0000-00-00") },
             )
             val prices = dao.getAllStatsModels().toPriceSnapshot()
             TokenStatsLifetimeOverview(
