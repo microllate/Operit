@@ -236,3 +236,4 @@ jobs:
             app/build/outputs/bundle/**/*.aab
           if-no-files-found: error
           retention-days: 14
+          # Enable workflow on fork。
