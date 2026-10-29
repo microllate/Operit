@@ -41,6 +41,18 @@ object OfficialModelPricingCache {
         val input = row.optDouble("input", Double.NaN)
         val output = row.optDouble("output", Double.NaN)
         if (!input.isFinite() || !output.isFinite() || input < 0 || output < 0) return null
+        // Reject the previously mis-scaled DeepSeek official snapshot (prices were multiplied
+        // by 1,000,000 twice). Until the corrected sync refreshes it, calculator uses safe CNY fallbacks.
+        if (row.optString("source").contains("DeepSeek official pricing page", ignoreCase = true)) {
+            val peakInput = row.optDouble("peakInput", Double.NaN)
+            val peakOutput = row.optDouble("peakOutput", Double.NaN)
+            val offPeakInput = row.optDouble("offPeakInput", Double.NaN)
+            val offPeakOutput = row.optDouble("offPeakOutput", Double.NaN)
+            if (input > 100.0 || output > 100.0 ||
+                peakInput > 100.0 || peakOutput > 100.0 ||
+                offPeakInput > 100.0 || offPeakOutput > 100.0
+            ) return null
+        }
         return Price(
             input = input,
             output = output,
