@@ -19,21 +19,29 @@ object TokenCostCalculator {
         val unknown: Long
         val nativeBreakdown = linkedMapOf<String, Double>()
         val normalizedModel = row.providerModel.lowercase(Locale.ROOT)
-        val isDeepSeekFlash = normalizedModel.contains("deepseek") &&
+        val isDeepSeek = normalizedModel.contains("deepseek")
+        val isDeepSeekPro = isDeepSeek && normalizedModel.contains("pro")
+        val isDeepSeekFlash = isDeepSeek && !isDeepSeekPro &&
             (normalizedModel.contains("flash") || normalizedModel.endsWith(":deepseek-chat"))
-        if (isDeepSeekFlash && pricing.billingMode != BillingMode.COUNT) {
+        if ((isDeepSeekFlash || isDeepSeekPro) && pricing.billingMode != BillingMode.COUNT) {
             // Official DeepSeek Flash CNY prices per million tokens. DAO peak totals
             // use the timestamp of each usage record in Beijing time.
             fun amount(tokens: Long, price: Double): Double =
                 if (price > 0.0) tokens.toDouble() * price / 1_000_000.0 else 0.0
-            val peakInput = amount(row.peakUncachedInputTokens, 2.0)
-            val peakCached = amount(row.peakCachedInputTokens, 0.04)
-            val peakWrite = amount(row.peakCacheWriteTokens, 2.0)
-            val peakOutput = amount(row.peakOutputTokens, 8.0)
-            val offpeakInput = amount((row.uncachedInputTokens - row.peakUncachedInputTokens).coerceAtLeast(0L), 1.0)
-            val offpeakCached = amount((row.cachedInputTokens - row.peakCachedInputTokens).coerceAtLeast(0L), 0.02)
-            val offpeakWrite = amount((row.cacheWriteTokens - row.peakCacheWriteTokens).coerceAtLeast(0L), 1.0)
-            val offpeakOutput = amount((row.outputTokens - row.peakOutputTokens).coerceAtLeast(0L), 4.0)
+            val peakInputPrice = if (isDeepSeekPro) 9.0 else 0.30
+            val peakCachedPrice = if (isDeepSeekPro) 0.30 else 0.04
+            val peakOutputPrice = if (isDeepSeekPro) 27.0 else 1.20
+            val offpeakInputPrice = if (isDeepSeekPro) 4.5 else 0.15
+            val offpeakCachedPrice = if (isDeepSeekPro) 0.15 else 0.02
+            val offpeakOutputPrice = if (isDeepSeekPro) 13.5 else 0.60
+            val peakInput = amount(row.peakUncachedInputTokens, peakInputPrice)
+            val peakCached = amount(row.peakCachedInputTokens, peakCachedPrice)
+            val peakWrite = amount(row.peakCacheWriteTokens, peakInputPrice)
+            val peakOutput = amount(row.peakOutputTokens, peakOutputPrice)
+            val offpeakInput = amount((row.uncachedInputTokens - row.peakUncachedInputTokens).coerceAtLeast(0L), offpeakInputPrice)
+            val offpeakCached = amount((row.cachedInputTokens - row.peakCachedInputTokens).coerceAtLeast(0L), offpeakCachedPrice)
+            val offpeakWrite = amount((row.cacheWriteTokens - row.peakCacheWriteTokens).coerceAtLeast(0L), offpeakInputPrice)
+            val offpeakOutput = amount((row.outputTokens - row.peakOutputTokens).coerceAtLeast(0L), offpeakOutputPrice)
             listOf(
                 "peak_input" to peakInput, "peak_cache_hit" to peakCached,
                 "peak_cache_write" to peakWrite, "peak_output" to peakOutput,
