@@ -45,6 +45,28 @@ object OfficialModelPricingCache {
         )
     }
 
+    fun getChineseHolidayDates(context: Context): List<String> {
+        val raw = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString("china_public_holidays", null) ?: return emptyList()
+        return runCatching {
+            val array = org.json.JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val date = array.optString(i)
+                    if (date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) add(date)
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    fun replaceChineseHolidayDates(context: Context, dates: Set<String>): Boolean {
+        if (dates.isEmpty()) return false
+        val array = org.json.JSONArray()
+        dates.sorted().forEach { array.put(it) }
+        return context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString("china_public_holidays", array.toString()).commit()
+    }
+
     fun replaceValidated(context: Context, prices: JSONObject, updatedAtMs: Long): Boolean {
         if (prices.length() == 0) return false
         // Validate every row before replacing the previous known-good snapshot.
