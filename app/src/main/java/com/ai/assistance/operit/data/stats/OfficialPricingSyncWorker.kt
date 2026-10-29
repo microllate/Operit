@@ -117,7 +117,9 @@ class OfficialPricingSyncWorker(context: Context, params: WorkerParameters) : Co
                     cost.optDouble("cache_write", Double.NaN)
                         .takeIf { it.isFinite() && it >= 0 }
                         ?.let { row.put("cacheWrite", it * 1_000_000.0) }
-                    prices.put("$providerId:$id", row)
+                    val providerModelKey = "$providerId:$id"
+                    // Preserve successfully parsed official DeepSeek prices over catalog fallbacks.
+                    if (!prices.has(providerModelKey)) prices.put(providerModelKey, row)
                     // Also keep a model-only alias for provider names normalized by Operit.
                     if (!prices.has(id)) prices.put(id, JSONObject(row.toString()))
                 }
