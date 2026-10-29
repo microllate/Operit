@@ -30,6 +30,30 @@ class OfficialPricingSyncWorker(context: Context, params: WorkerParameters) : Co
                 if (!response.isSuccessful) return if (runAttemptCount < 3) Result.retry() else Result.failure()
                 response.body?.string() ?: return Result.retry()
             }
+            // Refresh the current-year Chinese holiday calendar without inference calls.
+            runCatching {
+                val year = java.time.LocalDate.now().year
+                val holidayDates = linkedSetOf<String>()
+                for (holidayYear in (year - 2)..(year + 2)) {
+                    val holidayJson = client.newCall(
+                        Request.Builder()
+                            .url("https://raw.githubusercontent.com/NateScarlet/holiday-cn/master/${holidayYear}.json")
+                            .header("Accept", "application/json")
+                            .build()
+                    ).execute().use { response ->
+                        if (response.isSuccessful) response.body?.string() else null
+                    } ?: continue
+                    val days = JSONObject(holidayJson).optJSONArray("days") ?: continue
+                    for (i in 0 until days.length()) {
+                        val day = days.optJSONObject(i) ?: continue
+                        if (day.optBoolean("isOffDay", false)) {
+                            val date = day.optString("date")
+                            if (date.length == 10 && date[4] == '-' && date[7] == '-') holidayDates.add(date)
+                        }
+                    }
+                }
+                OfficialModelPricingCache.replaceChineseHolidayDates(applicationContext, holidayDates)
+            }
             val catalog = JSONObject(body)
             val prices = JSONObject()
             val providers = catalog.keys()
