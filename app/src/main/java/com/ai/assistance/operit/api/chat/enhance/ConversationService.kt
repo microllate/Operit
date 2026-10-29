@@ -134,18 +134,18 @@ class ConversationService(
                     ChatUtils.stripGeminiThoughtSignatureMetaTurns(messages)
                 )
 
-            // 优先使用当前聊天绑定的模型；未提供聊天配置时才回退到独立 SUMMARY 映射。
+            // 总结默认使用当前聊天的模型配置；有显式聊天覆盖时同时沿用对应模型索引。
             val chatConfigId = chatModelConfigIdOverride?.takeIf { it.isNotBlank() }
             val modelParameters = if (chatConfigId != null) {
                 multiServiceManager.getModelParametersForConfig(chatConfigId)
             } else {
-                multiServiceManager.getModelParametersForFunction(FunctionType.SUMMARY)
+                multiServiceManager.getModelParametersForFunction(FunctionType.CHAT)
             }
             val serializedModelParameters = serializeSummaryHookModelParameters(modelParameters)
             val summaryService = if (chatConfigId != null) {
                 multiServiceManager.getServiceForConfig(chatConfigId, chatModelIndexOverride ?: 0)
             } else {
-                multiServiceManager.getServiceForFunction(FunctionType.SUMMARY)
+                multiServiceManager.getServiceForFunction(FunctionType.CHAT)
             }
             var summaryHistory = sanitizedMessages
             var summaryPrompt = FunctionalPrompts.summaryUserMessage(useEnglish)
