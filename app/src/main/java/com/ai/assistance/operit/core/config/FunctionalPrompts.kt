@@ -16,32 +16,32 @@ object FunctionalPrompts {
      * Prompt for the AI to generate a comprehensive and structured summary of a conversation.
      */
     const val SUMMARY_PROMPT = """
-        你是负责生成对话摘要的AI助手。你的任务是根据"上一次的摘要"（如果提供）和"最近的对话内容"，生成一份全新的、独立的、全面的摘要。这份新摘要将完全取代之前的摘要，成为后续对话的唯一历史参考。
+        你是负责维护长期对话摘要的AI助手。你必须将上一次摘要视为历史事实账本，将最近对话视为增量信息。输出一份完整、可独立使用的最新摘要；不得因重新组织文字而丢失历史记录。
 
         **必须严格遵循以下固定格式输出，不得更改格式结构：**
 
         ==========对话摘要==========
 
-        【核心任务状态】
-        [先交代用户最新需求的内容与情境类型（真实执行/角色扮演/故事/假设等），再说明当前所处步骤、已完成的动作、正在处理的事项以及下一步。]
-        [明确任务状态（已完成/进行中/等待中），列出未完成的依赖或所需信息；如在等待用户输入，说明原因与所需材料。]
-        [显式覆盖信息搜集、任务执行、代码编写或其他关键环节的状态，哪怕某环节尚未启动也要说明原因。]
-        [最后补充最近一次任务的进度拆解：哪些已完成、哪些进行中、哪些待处理。]
+        【用户目标】
+        [记录用户明确提出的最终目标、原始要求、禁止事项和验收条件。除非用户明确修改目标，否则必须逐次继承，不得自行推断、扩展或改写目标。]
 
-        【代码变更与执行记录】
-        [优先列出真实文件路径、所在分支、提交号和实际修改内容。只记录对话或工具结果明确证实的变更；没有证据时标记“未验证”，不得猜测。]
+        【模型执行过程出现的错误】
+        [持续记录项目过程中出现的错误、复现条件、错误信息、尝试过的解决方案及结果。旧错误不得删除；状态可更新为未解决、已解决或待验证，并保留解决依据。]
 
-        【错误与排查过程】
-        [记录关键错误日志、复现条件、已经尝试的方案、每次尝试的实际结果和有证据支持的原因。明确区分已解决、未解决与尚未验证的问题。]
+        【模型已完成的项目】
+        [持续记录已经实际执行并完成的工作、具体产出、文件路径、分支/提交信息及验证证据。不得把计划或尝试标记为完成；旧完成事项不得因摘要更新而丢失。]
 
-        【下一步与接手说明】
-        [按优先级列出下一项可执行操作、需要先核实的事项、阻塞项和验收标准。保留必要的命令、路径、版本、配置及环境信息，确保新模型无需原始聊天记录也能接手。]
+        【下一步策略】
+        [根据最新对话动态更新当前最合理的下一步行动、前置条件、阻塞项和验收标准。此部分只表达当前策略，不要求保留过时策略。]
 
-        关键事实与约束：
-        - 用户目标、原始要求、禁止事项和验收条件。
-        - 已完成工作及其验证证据；严格区分计划、执行和验证。
-        - 重要技术决策、失败尝试、依赖关系和未解决风险。
-        - 只保留继续任务必需的背景，删除闲聊、重复内容和无关互动。
+        增量继承规则（优先级高于一般摘要压缩要求）：
+        - 用户目标：默认原样继承旧摘要。只有用户明确提出修改、增加或撤销目标时才更新，并记录变更内容；不得把模型建议当作用户目标。
+        - 错误记录：旧错误必须全部保留。新错误追加到历史记录；已有错误只有在新对话提供证据时才更新状态或补充排查结果，不能静默删除。
+        - 已完成项目：旧完成事项必须全部保留。新完成事项只有在对话或工具结果明确证明已执行时才能追加；可补充验证证据，不得将计划、建议或未验证操作写成已完成。
+        - 下一步策略：根据最新进展重新生成，允许替换过时策略。
+        - 可以合并完全重复的描述，但不得合并掉独立错误、独立成果或其证据；不得为缩短摘要而删除历史事实。
+        - 如果无法确认某项是否完成或某错误是否解决，保留原记录并标注“待验证”。
+        - 只保留继续任务必需的背景，删除闲聊和无关互动。
 
         ============================
 
@@ -63,32 +63,32 @@ object FunctionalPrompts {
     """
 
     const val SUMMARY_PROMPT_EN = """
-        You are an AI assistant responsible for generating a conversation summary. Your task is to generate a brand-new, self-contained, comprehensive summary based on the "Previous Summary" (if provided) and the "Recent Conversation". This new summary will completely replace the previous summary and will become the only historical reference for subsequent conversations.
+        You maintain a durable conversation summary. Treat the previous summary as a historical ledger and the recent conversation as incremental evidence. Produce a complete, self-contained updated summary without dropping historical records merely to rewrite or shorten the wording.
 
         **You MUST follow the fixed output format below strictly. Do NOT change the structure.**
 
         ==========Conversation Summary==========
 
-        [Core Task Status]
-        [First describe the user's latest request and the scenario type (real execution / roleplay / story / hypothetical, etc.), then explain the current step, completed actions, ongoing work, and next step.]
-        [Explicitly state the task status (completed / in progress / waiting), and list missing dependencies or required information; if waiting for user input, explain why and what is needed.]
-        [Explicitly cover the status of information gathering, task execution, code writing, or other key phases; even if a phase has not started, state why.]
-        [Finally, provide a recent progress breakdown: what is done, what is in progress, what is pending.]
+        [User Goals]
+        [Record the user's explicit goals, original requirements, prohibitions, and acceptance criteria. Inherit them unchanged unless the user explicitly changes them.]
 
-        [Code Changes & Execution Log]
-        [List verified file paths, branch, commit and actual changes. Record only changes supported by conversation or tool evidence; otherwise mark them unverified.]
+        [Errors During Model Execution]
+        [Keep a cumulative history of errors, reproduction conditions, messages, attempted fixes, and outcomes. Never drop old errors; update status only with evidence and distinguish unresolved, resolved, and unverified.]
 
-        [Errors & Troubleshooting]
-        [Record important errors, reproduction conditions, attempted fixes, observed outcomes, and evidence-backed causes. Distinguish resolved, unresolved, and unverified issues.]
+        [Completed Work]
+        [Keep all work actually executed and completed, its outputs, file paths, branch/commit details, and verification evidence. Never present plans or attempts as completed; never drop prior completed items.]
 
-        [Next Steps & Handoff]
-        [List concrete next actions in priority order, prerequisites, blockers, and acceptance criteria. Preserve essential commands, paths, versions, configuration, and environment details so a fresh model can continue without the original chat.]
+        [Next-Step Strategy]
+        [Refresh the current next actions, prerequisites, blockers, and acceptance criteria based on the latest conversation. This section is the current strategy; obsolete strategies need not be retained.]
 
-        Key Facts & Constraints:
-        - User goals, explicit requirements, prohibitions, and acceptance criteria.
-        - Completed work and verification evidence; distinguish plans, execution, and verification.
-        - Important technical decisions, failed attempts, dependencies, and unresolved risks.
-        - Keep only context required to continue the task; omit small talk, repetition, and irrelevant interaction.
+        Incremental inheritance rules (higher priority than ordinary summarization/compression):
+        - User goals: inherit the previous goals unchanged by default. Update only when the user explicitly changes, adds, or withdraws a goal. Never treat an assistant suggestion as a user goal.
+        - Errors: retain every previous error. Append new errors. Update an existing error's status or findings only when recent conversation provides evidence; never silently remove it.
+        - Completed work: retain every previous completed item. Add work only when execution is explicitly supported by conversation or tool evidence. Plans, suggestions, attempts, and unverified actions are not completed work.
+        - Next-step strategy: regenerate from the latest progress; obsolete strategies may be replaced.
+        - Merge only truly duplicate descriptions; do not merge away distinct errors, completed items, or evidence. Never delete historical facts merely to shorten the summary.
+        - If resolution or completion cannot be verified, preserve the record and mark it unverified.
+        - Omit small talk and irrelevant interaction.
 
         =======================================
 
@@ -118,13 +118,13 @@ object FunctionalPrompts {
     private fun summarySectionTitles(useEnglish: Boolean): List<String> {
         return if (useEnglish) {
             listOf(
-                "Core Task Status",
-                "Code Changes & Execution Log",
-                "Errors & Troubleshooting",
-                "Next Steps & Handoff"
+                "User Goals",
+                "Errors During Model Execution",
+                "Completed Work",
+                "Next-Step Strategy"
             )
         } else {
-            listOf("核心任务状态", "代码变更与执行记录", "错误与排查过程", "下一步与接手说明")
+            listOf("用户目标", "模型执行过程出现的错误", "模型已完成的项目", "下一步策略")
         }
     }
 
@@ -217,6 +217,8 @@ object FunctionalPrompts {
         if (applicableOverrides.isNotEmpty()) {
             prompt = applySummarySectionOverrides(applicableOverrides, useEnglish)
         }
+        val integrityRules = if (useEnglish) "\n\n[Mandatory summary integrity rules]\nRegardless of custom section settings, use exactly four sections in this order: User Goals, Errors During Model Execution, Completed Work, Next-Step Strategy. The first three are cumulative history; the fourth is dynamic. Inherit all prior content in the first three sections before applying new evidence. Do not change goals unless the user explicitly does so. Never delete old errors; resolve them only with evidence. Never delete completed items; require execution evidence. If recent conversation does not affect one of the first three sections, preserve that section unchanged. Never turn assistant suggestions into user goals or plans/attempts into completed work." else "\n\n【摘要历史完整性强制规则】\n无论用户自定义摘要分段如何设置，都必须遵守以下规则：四个固定板块依次为“用户目标”“模型执行过程出现的错误”“模型已完成的项目”“下一步策略”；前三项是累积历史，第四项是动态状态。每次生成前先继承前三项全部旧内容，再合并新证据。旧目标除非用户明确修改不得改变；旧错误不得删除，解决状态须有证据；旧完成项目不得删除，完成状态须有执行证据。若新对话没有涉及前三项，则原样保留对应旧内容。不得把模型提出的方案写成用户目标，不得把计划/尝试写成完成。"
+        prompt += "\n\n" + integrityRules
         val promptWithPreviousSummary = appendPreviousSummary(prompt, previousSummary, useEnglish)
         return summaryConfig.globalRules?.trim()?.takeIf { it.isNotBlank() }?.let { rules ->
             "$promptWithPreviousSummary\n\n$rules"
@@ -277,14 +279,14 @@ object FunctionalPrompts {
 
                 Previous Summary (to inherit context):
                 ${previousSummary.trim()}
-                Please merge the key information from the previous summary with the new conversation and generate a brand-new, more complete summary.
+                Merge the recent evidence into the previous summary while preserving every historical user goal, error record, and completed-work record. Update only facts supported by the recent conversation; regenerate only the next-step strategy.
                 """.trimIndent()
             } else {
                 """
 
                 上一次的摘要（用于继承上下文）：
                 ${previousSummary.trim()}
-                请将以上摘要中的关键信息，与本次新的对话内容相融合，生成一份全新的、更完整的摘要。
+                请将本轮新证据增量合并到上一次摘要中，完整保留所有历史用户目标、错误记录和已完成项目。只更新本轮对话有证据支持的事实；仅重新生成下一步策略。
                 """.trimIndent()
             }
     }
