@@ -54,12 +54,13 @@ object FunctionalPrompts {
         6. 结尾使用等号分隔线.
 
         **内容要求：**
-        1. 语言风格：专业、清晰、客观.
-        2. 内容长度：不要限制字数，根据对话内容的复杂程度和重要性，自行决定合适的长度。可以写得详细一些，确保重要信息不丢失。宁可内容多一点，也不要因为过度精简导致关键信息丢失或失真。每个部分都要具备充分篇幅，绝不能以一句话敷衍.
-        3. 信息完整性：优先保证信息的完整性和准确性，技术与非技术内容都需提供必要证据或引用.
-        4. 内容还原：摘要既要说明“过程如何推进”，也要写清“实际产出/讨论内容是什么”，必要时引用结果文本、结论、代码片段或参数，确保在没有原始对话的情况下依然能完全还原信息本身.
-        5. 目标：生成的摘要必须是自包含的。即使AI完全忘记了之前的对话，仅凭这份摘要也能够准确理解历史背景、当前状态、具体进度和下一步行动.
-        6. 时序重点：请先聚焦于最新一段对话（约占输入的最后30%），明确最新指令、问题和进展，再回顾更早的内容。若新消息与旧内容冲突或更新，应以最新对话为准，并解释差异.
+        1. 语言风格：专业、清晰、客观，使用短句，不写叙事性过程回顾.
+        2. 页面摘要必须高度精简：四个固定栏目不得增删。用户目标用1句话；错误栏目每个独立错误最多1条短句；完成栏目每个独立成果最多1条短句；下一步策略只写1条最优先行动。每条原则上不超过40个汉字，整个摘要原则上控制在300字以内.
+        3. 历史完整性通过“短句化”保证，不通过删除事实保证：前三个栏目保留所有独立目标、错误和成果，但必须压缩表达；同一事项的新进展合并到原条目，不重复叙述排查过程、工具调用、日志和代码细节.
+        4. 只保留恢复任务所必需的信息。除非文件路径、提交号、关键参数或验证结果是下一步不可缺少的依据，否则不要列出；不引用大段输出、不粘贴代码、不复述完整执行过程.
+        5. 下一步策略只允许一个明确动作，可附带一个必要的验收条件；不得列出多个备选方案或重复历史背景.
+        6. 先处理最新对话中的进展，再继承旧记录。若新证据改变旧状态，只更新对应短句；没有新证据的旧记录保持原意.
+        7. 不要在四个栏目之外追加工具包介绍、执行日志、对话回顾或其他附录.
     """
 
     const val SUMMARY_PROMPT_EN = """
@@ -101,12 +102,13 @@ object FunctionalPrompts {
         6. End with the separator line.
 
         **Content requirements:**
-        1. Style: professional, clear, objective.
-        2. Length: do not limit length. Decide an appropriate length based on complexity and importance. Prefer being detailed to avoid missing key information.
-        3. Completeness: prioritize completeness and accuracy. Provide evidence/quotes when needed.
-        4. Reconstruction: the summary must describe both “how the process progressed” and “what the actual outputs/discussion were”. Quote resulting text, conclusions, code snippets, or parameters when needed.
-        5. Goal: the summary must be self-contained so that even if the AI forgets the original conversation, it can fully reconstruct context, current status, progress, and next actions.
-        6. Recency: focus first on the most recent part of the conversation (about the last 30% of input), then review earlier content. If new messages conflict with old content, use the latest messages and explain the differences.
+        1. Style: professional, clear, objective, and terse. Use short factual sentences; do not narrate the conversation.
+        2. Keep the visible summary compact: retain exactly four sections. User Goals: one sentence. Errors: at most one short sentence per distinct error. Completed Work: at most one short sentence per distinct deliverable. Next-Step Strategy: exactly one highest-priority action. Each item should normally stay within 25 words; target 200 words total.
+        3. Preserve history by compressing wording, not by deleting facts. Keep every distinct goal, error, and completed item in the first three sections. Merge new status/evidence into its existing item instead of repeating the investigation, tool calls, logs, or code details.
+        4. Include only information required to resume the task. Omit file paths, commit IDs, parameters, and verification details unless they are essential to the next action. Never paste code, long outputs, or a chronological work log.
+        5. The next-step section may contain only one explicit action and, if necessary, one acceptance condition. Do not list alternatives or repeat historical context.
+        6. Process the latest progress first, then inherit prior records. Update an old item only when new evidence supports the change; otherwise preserve its meaning.
+        7. Do not append package descriptions, execution logs, conversation reviews, or any content outside the four sections.
     """
 
     fun summaryPrompt(useEnglish: Boolean): String {
