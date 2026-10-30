@@ -1133,16 +1133,9 @@ object AIMessageManager {
                 }
 
                 // 如果是自动续写，在总结消息尾部添加续写提示
-                val trimmedSummary = summary.trim()
-                val packageWarmupBlock = buildPackageWarmupBlock(messagesToSummarize, useEnglish)
-                val summaryWithQuotes = buildString {
-                    append(trimmedSummary)
-                    // 不再把通用“对话回顾”作为附录追加到任务恢复摘要，避免重复内容挤占上下文。
-                    if (packageWarmupBlock.isNotBlank()) {
-                        append("\n\n")
-                        append(packageWarmupBlock)
-                    }
-                }.trimEnd()
+                // The visible summary message contains only the four compact summary sections.
+                // Package warmup details are not appended to the summary because they can overwhelm it.
+                val summaryWithQuotes = summary.trim()
 
                 val finalSummary = if (autoContinue) {
                     context.getString(R.string.ai_message_continue_task_if_complete, summaryWithQuotes)
