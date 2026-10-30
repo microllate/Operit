@@ -38,7 +38,7 @@ object FunctionalPrompts {
         - 用户目标：默认原样继承旧摘要。只有用户明确提出修改、增加或撤销目标时才更新，并记录变更内容；不得把模型建议当作用户目标。
         - 错误记录：旧错误必须全部保留。新错误追加到历史记录；已有错误只有在新对话提供证据时才更新状态或补充排查结果，不能静默删除。
         - 已完成项目：旧完成事项必须全部保留。新完成事项只有在对话或工具结果明确证明已执行时才能追加；可补充验证证据，不得将计划、建议或未验证操作写成已完成。
-        - 下一步策略：根据最新进展重新生成，允许替换过时策略。
+        - 下一步策略：每次只选择一个最优先、可立即执行的动作；旧策略全部替换，不得把多个待办事项并列保留。必要时只补充一个验收条件。
         - 可以合并完全重复的描述，但不得合并掉独立错误、独立成果或其证据；不得为缩短摘要而删除历史事实。
         - 如果无法确认某项是否完成或某错误是否解决，保留原记录并标注“待验证”。
         - 只保留继续任务必需的背景，删除闲聊和无关互动。
@@ -86,7 +86,7 @@ object FunctionalPrompts {
         - User goals: inherit the previous goals unchanged by default. Update only when the user explicitly changes, adds, or withdraws a goal. Never treat an assistant suggestion as a user goal.
         - Errors: retain every previous error. Append new errors. Update an existing error's status or findings only when recent conversation provides evidence; never silently remove it.
         - Completed work: retain every previous completed item. Add work only when execution is explicitly supported by conversation or tool evidence. Plans, suggestions, attempts, and unverified actions are not completed work.
-        - Next-step strategy: regenerate from the latest progress; obsolete strategies may be replaced.
+        - Next-step strategy: select exactly one highest-priority actionable item and replace all previous next steps. Add at most one acceptance condition; never list multiple parallel tasks.
         - Merge only truly duplicate descriptions; do not merge away distinct errors, completed items, or evidence. Never delete historical facts merely to shorten the summary.
         - If resolution or completion cannot be verified, preserve the record and mark it unverified.
         - Omit small talk and irrelevant interaction.
