@@ -689,10 +689,28 @@ object AIMessageManager {
         isGroupChat: Boolean = false,
         summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig(),
         chatModelConfigIdOverride: String? = null,
-        chatModelIndexOverride: Int? = null
+        chatModelIndexOverride: Int? = null,
+        workspacePath: String? = null,
+        workspaceEnv: String? = null,
+        chatId: String? = null
     ): ChatMessage? {
         val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
-        val previousSummary = if (lastSummaryIndex != -1) messages[lastSummaryIndex].content.trim() else null
+        val messagePreviousSummary = if (lastSummaryIndex != -1) messages[lastSummaryIndex].content.trim() else null
+
+        // The workspace document is the durable source for cumulative history.
+        // The chat message remains the fallback for chats without a workspace document.
+        val summaryDocumentManager = ConversationSummaryDocumentManager.getInstance(context)
+        val storedSummaryDocument = if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
+            val result = summaryDocumentManager.read(workspacePath, workspaceEnv, chatId)
+            if (!result.success) {
+                AppLogger.e(TAG, "读取历史摘要文档失败，终止本次总结: ${result.error}")
+                return null
+            }
+            result.content.orEmpty()
+        } else {
+            ""
+        }
+        val previousSummary = storedSummaryDocument.takeIf { it.isNotBlank() } ?: messagePreviousSummary
 
         val messagesToSummarize = when {
             lastSummaryIndex == -1 -> messages.filter { it.sender == "user" || it.sender == "ai" }
@@ -1078,6 +1096,40 @@ object AIMessageManager {
                             missingSections.joinToString { it.title }
                     )
                     return null
+                }
+
+                // Persist the cumulative first three sections before creating a new summary message.
+                // If persistence fails, reject this summary so the old history is not replaced.
+                if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                    val durableSections = requiredSections.take(3).mapNotNull { section ->
+                        val headerCandidates = listOf("【${section.title}】", "[${section.title}]")
+                        val start = headerCandidates.map { summary.indexOf(it) }
+                            .filter { it >= 0 }.minOrNull() ?: return@mapNotNull null
+                        start to section
+                    }.sortedBy { it.first }
+
+                    if (durableSections.size != 3) {
+                        AppLogger.e(TAG, "无法从新摘要提取全部三个历史板块，拒绝保存")
+                        return null
+                    }
+
+                    val durableContent = durableSections.mapIndexed { index, entry ->
+                        val start = entry.first
+                        val end = durableSections.getOrNull(index + 1)?.first ?: summary.length
+                        summary.substring(start, end).trim()
+                    }.joinToString("\n\n").trim()
+
+                    val writeResult = summaryDocumentManager.write(
+                        workspacePath = workspacePath,
+                        workspaceEnv = workspaceEnv,
+                        chatId = chatId,
+                        expectedCurrentContent = storedSummaryDocument,
+                        newContent = durableContent
+                    )
+                    if (!writeResult.success) {
+                        AppLogger.e(TAG, "保存历史摘要文档失败，拒绝插入新摘要: ${writeResult.error}")
+                        return null
+                    }
                 }
 
                 // 如果是自动续写，在总结消息尾部添加续写提示
