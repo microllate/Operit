@@ -1135,16 +1135,39 @@ object AIMessageManager {
                     }
                 }
 
-                // 如果是自动续写，在总结消息尾部添加续写提示
-                // The visible summary message contains only the four compact summary sections.
-                // Package warmup details are not appended to the summary because they can overwhelm it.
-                val summaryWithQuotes = summary.trim()
+                // The chat context keeps only a compact pointer to the durable history document.
+                // The first three items are fixed notices; only the latest next-step strategy is dynamic.
+                val nextStepSection = requiredSections[3]
+                val nextStepHeaderCandidates = listOf(
+                    "【${nextStepSection.title}】",
+                    "[${nextStepSection.title}]"
+                )
+                val nextStepHeader = nextStepHeaderCandidates
+                    .firstOrNull { summary.contains(it) }
+                    ?: run {
+                        AppLogger.e(TAG, "无法提取摘要中的下一步策略，拒绝插入摘要")
+                        return null
+                    }
+                val nextStepStart = summary.indexOf(nextStepHeader) + nextStepHeader.length
+                val nextStepStrategy = summary.substring(nextStepStart)
+                    .trim()
+                    .trimStart(':', '：', '-', '—', '*', ' ')
+                    .lineSequence()
+                    .map { it.trim().removePrefix("-").removePrefix("•").trim() }
+                    .filter { it.isNotBlank() && !it.startsWith("=") }
+                    .joinToString(" ")
+                    .ifBlank { "无" }
 
-                val finalSummary = if (autoContinue) {
-                    context.getString(R.string.ai_message_continue_task_if_complete, summaryWithQuotes)
-                } else {
-                    summaryWithQuotes
+                val summaryWithQuotes = buildString {
+                    appendLine("==========对话摘要==========")
+                    appendLine("1、用户目标，已更新历史摘要.md文档")
+                    appendLine("2、执行过程出现的错误，已更新历史摘要.md文档")
+                    appendLine("3、已完成的项目，已更新历史摘要.md文档")
+                    appendLine("4、下一步策略：$nextStepStrategy")
+                    append(".operit/chat-summaries/${chatId}/历史摘要.md")
                 }
+
+                // 如果是自动续写，在总结消息尾部添加续写提示
                 
                 ChatMessage(
                     sender = "summary",
