@@ -11,6 +11,7 @@ import com.ai.assistance.operit.api.chat.llmprovider.MediaLinkParser
 import com.ai.assistance.operit.api.chat.llmprovider.MediaLinkBuilder
 import com.ai.assistance.operit.core.chat.hooks.PromptTurn
 import com.ai.assistance.operit.core.chat.hooks.PromptTurnKind
+import com.ai.assistance.operit.core.config.FunctionalPrompts
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingController
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingHookParams
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingPluginRegistry
@@ -1058,9 +1059,29 @@ object AIMessageManager {
                 AppLogger.e(TAG, "AI生成的总结内容为空，放弃本次总结")
                 null
             } else {
+                // 新摘要必须包含四个固定板块；结构不完整时拒绝覆盖旧摘要。
+                val useEnglish = !LocaleUtils.usesChineseContent(context)
+                val requiredSections = FunctionalPrompts.resolveSummarySections(
+                    summaryConfig.sectionOverrides,
+                    useEnglish
+                )
+                val missingSections = requiredSections.filter { section ->
+                    val title = section.title.trim()
+                    title.isNotBlank() &&
+                        !summary.contains("【$title】") &&
+                        !summary.contains("[$title]")
+                }
+                if (missingSections.isNotEmpty()) {
+                    AppLogger.e(
+                        TAG,
+                        "AI生成的摘要缺少必要板块，拒绝覆盖历史摘要: " +
+                            missingSections.joinToString { it.title }
+                    )
+                    return null
+                }
+
                 // 如果是自动续写，在总结消息尾部添加续写提示
                 val trimmedSummary = summary.trim()
-                val useEnglish = !LocaleUtils.usesChineseContent(context)
                 val packageWarmupBlock = buildPackageWarmupBlock(messagesToSummarize, useEnglish)
                 val summaryWithQuotes = buildString {
                     append(trimmedSummary)
