@@ -1101,21 +1101,24 @@ object AIMessageManager {
                 // Persist the cumulative first three sections before creating a new summary message.
                 // If persistence fails, reject this summary so the old history is not replaced.
                 if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                    val durableSections = requiredSections.take(3).mapNotNull { section ->
+                    // Locate all four sections first, so the third durable section
+                    // ends at the Next-Step section instead of absorbing it.
+                    val allSections = requiredSections.mapNotNull { section ->
                         val headerCandidates = listOf("【${section.title}】", "[${section.title}]")
                         val start = headerCandidates.map { summary.indexOf(it) }
                             .filter { it >= 0 }.minOrNull() ?: return@mapNotNull null
                         start to section
                     }.sortedBy { it.first }
 
-                    if (durableSections.size != 3) {
-                        AppLogger.e(TAG, "无法从新摘要提取全部三个历史板块，拒绝保存")
+                    val durableSections = allSections.take(3)
+                    if (allSections.size != 4 || durableSections.size != 3) {
+                        AppLogger.e(TAG, "无法从新摘要提取全部四个板块，拒绝保存")
                         return null
                     }
 
                     val durableContent = durableSections.mapIndexed { index, entry ->
                         val start = entry.first
-                        val end = durableSections.getOrNull(index + 1)?.first ?: summary.length
+                        val end = allSections.getOrNull(index + 1)?.first ?: summary.length
                         summary.substring(start, end).trim()
                     }.joinToString("\n\n").trim()
 
