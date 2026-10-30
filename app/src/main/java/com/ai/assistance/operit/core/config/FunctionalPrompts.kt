@@ -49,7 +49,7 @@ object FunctionalPrompts {
         1. 必须使用上述固定格式，包括分隔线、标题标识符【】、列表符号等，不得更改。
         2. 标题"对话摘要"必须放在第一行，前后用等号分隔。
         3. 每个部分必须使用【】标识符作为标题，标题后换行。
-        4. "核心任务状态"使用段落形式；其余部分按具体任务记录使用列表；方括号只为示例，实际输出不需保留.
+        4. 四个栏目均使用简短列表；没有记录的栏目写“无”；方括号内的说明只是示例，实际输出不得照抄。
         5. 所有工程记录条目使用清晰的列表格式，便于后续模型恢复任务.
         6. 结尾使用等号分隔线.
 
@@ -97,7 +97,7 @@ object FunctionalPrompts {
         1. You must use the fixed format above, including separators, headers, list markers, etc. Do not change them.
         2. The title "Conversation Summary" must be on the first line, surrounded by '='.
         3. Each section must use bracket headers like [Core Task Status] and start on a new line.
-        4. "Core Task Status" may use paragraphs; other sections should use concise, actionable lists. Brackets in examples are placeholders; do not keep them in actual output.
+        4. Use concise lists in all four sections. Write “None” for an empty section. Bracketed descriptions are placeholders and must not be copied.
         5. Use clear lists for engineering records and next actions.
         6. End with the separator line.
 
