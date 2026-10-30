@@ -1798,7 +1798,10 @@ class MessageCoordinationDelegate(
                     isGroupChat = isGroupChat,
                     summaryConfig = summaryConfig,
                     chatModelConfigIdOverride = chatModelConfigIdOverride,
-                    chatModelIndexOverride = chatModelIndexOverride
+                    chatModelIndexOverride = chatModelIndexOverride,
+                    workspacePath = currentChat?.workspace,
+                    workspaceEnv = currentChat?.workspaceEnv,
+                    chatId = originalChatId
                 ) ?: return@launch
 
                 val currentChatId = chatHistoryDelegate.currentChatId.value
@@ -1904,6 +1907,8 @@ class MessageCoordinationDelegate(
                 return false
             }
 
+            val currentChat =
+                currentChatId?.let { id -> chatHistoryDelegate.chatHistories.value.firstOrNull { it.id == id } }
             val currentMessages =
                 currentChatId?.let { chatHistoryDelegate.getRuntimeChatHistory(it) }.orEmpty()
             if (currentMessages.isEmpty()) {
@@ -1927,7 +1932,10 @@ class MessageCoordinationDelegate(
                     effectiveIsGroupChat,
                     summaryConfig,
                     chatModelConfigIdOverride = effectiveChatModelConfigIdOverride,
-                    chatModelIndexOverride = effectiveChatModelIndexOverride
+                    chatModelIndexOverride = effectiveChatModelIndexOverride,
+                    workspacePath = currentChat?.workspace,
+                    workspaceEnv = currentChat?.workspaceEnv,
+                    chatId = currentChatId
                 )
 
             if (summaryMessage != null) {
