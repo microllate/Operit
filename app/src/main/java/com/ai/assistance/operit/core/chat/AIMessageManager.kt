@@ -1167,6 +1167,12 @@ object AIMessageManager {
                     append(".operit/chat-summaries/${chatId}/历史摘要.md")
                 }
 
+                val finalSummary = if (autoContinue) {
+                    context.getString(R.string.ai_message_continue_task_if_complete, summaryWithQuotes)
+                } else {
+                    summaryWithQuotes
+                }
+
                 // 如果是自动续写，在总结消息尾部添加续写提示
                 
                 ChatMessage(
