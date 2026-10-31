@@ -72,7 +72,6 @@ import com.ai.assistance.operit.terminal.utils.SSHFileConnectionManager
 import com.ai.assistance.operit.core.tools.defaultTool.PathValidator
 import com.ai.assistance.operit.util.LocaleUtils
 import com.ai.assistance.operit.util.ripgrep.NativeRipgrep
-import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -4599,130 +4598,6 @@ open class StandardFileSystemTools(protected val context: Context) {
                 ),
                 error = "Error opening file: ${e.message}"
             )
-        }
-    }
-
-
-    /**
-     * Query a compact reverse-engineering index without returning the full JSON file.
-     * index_path points to the .operit/reverse-index directory.
-     */
-    open suspend fun queryReverseIndex(tool: AITool): ToolResult {
-        val indexPath = tool.parameters.find { it.name == "index_path" }?.value?.trim().orEmpty()
-        val indexType = tool.parameters.find { it.name == "index_type" }?.value?.trim()?.lowercase().orEmpty()
-        val query = tool.parameters.find { it.name == "query" }?.value?.trim().orEmpty()
-        val environment = tool.parameters.find { it.name == "environment" }?.value
-        val limit = (tool.parameters.find { it.name == "limit" }?.value?.toIntOrNull() ?: 20).coerceIn(1, 100)
-
-        if (indexPath.isBlank() || query.isBlank()) {
-            return ToolResult(toolName = tool.name, success = false, result = StringResultData(""), error = "index_path and query are required")
-        }
-        val allowedTypes = setOf("files", "functions", "strings", "xrefs", "all")
-        if (indexType !in allowedTypes) {
-            return ToolResult(toolName = tool.name, success = false, result = StringResultData(""), error = "index_type must be files, functions, strings, xrefs, or all")
-        }
-        if (isSafEnvironment(environment)) {
-            return ToolResult(toolName = tool.name, success = false, result = StringResultData(""), error = "query_reverse_index does not support SAF/repo environment")
-        }
-
-        return try {
-            val types = if (indexType == "all") listOf("functions", "strings", "xrefs", "files") else listOf(indexType)
-            val matches = JSONArray()
-            val missingIndexes = mutableListOf<String>()
-
-            for (type in types) {
-                if (matches.length() >= limit) break
-                val filePath = indexPath.trimEnd('/') + "/$type.json"
-                val content = if (isLinuxEnvironment(environment)) {
-                    val readResult = linuxTools.readFileFull(
-                        AITool(
-                            name = "read_file",
-                            parameters = listOf(
-                                ToolParameter("path", filePath),
-                                ToolParameter("text_only", "true")
-                            )
-                        )
-                    )
-                    if (!readResult.success) null else (readResult.result as? FileContentData)?.content
-                } else {
-                    PathValidator.validateAndroidPath(filePath, tool.name)?.let { return it }
-                    val file = File(filePath)
-                    if (file.isFile) file.readText() else null
-                }
-
-                if (content.isNullOrBlank()) {
-                    missingIndexes.add("$type.json")
-                    continue
-                }
-                val root = try {
-                    if (content.trimStart().startsWith("[")) JSONArray(content) else JSONObject(content)
-                } catch (_: Exception) {
-                    missingIndexes.add("$type.json (invalid JSON)")
-                    continue
-                }
-                if (root is JSONObject) {
-                    val keys = root.keys()
-                    while (keys.hasNext() && matches.length() < limit) {
-                        val key = keys.next()
-                        collectReverseIndexMatches(root.opt(key), query, "$type.json", "$type.$key", limit, matches)
-                    }
-                } else {
-                    collectReverseIndexMatches(root, query, "$type.json", type, limit, matches)
-                }
-            }
-
-            val response = JSONObject().apply {
-                put("index_type", indexType)
-                put("query", query)
-                put("match_count", matches.length())
-                put("matches", matches)
-                if (missingIndexes.isNotEmpty()) put("unavailable_indexes", JSONArray(missingIndexes))
-            }
-            ToolResult(toolName = tool.name, success = true, result = StringResultData(response.toString(2)), error = "")
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Error querying reverse index", e)
-            ToolResult(toolName = tool.name, success = false, result = StringResultData(""), error = "Error querying reverse index: ${e.message}")
-        }
-    }
-
-    private fun collectReverseIndexMatches(
-        node: Any?,
-        query: String,
-        source: String,
-        nodePath: String,
-        limit: Int,
-        output: JSONArray
-    ) {
-        if (output.length() >= limit || node == null) return
-        when (node) {
-            is JSONObject -> {
-                if (node.toString().contains(query, ignoreCase = true)) {
-                    output.put(JSONObject().apply {
-                        put("source", source)
-                        put("record_path", nodePath)
-                        put("record", node)
-                    })
-                    return
-                }
-                val keys = node.keys()
-                while (keys.hasNext() && output.length() < limit) {
-                    val key = keys.next()
-                    collectReverseIndexMatches(node.opt(key), query, source, "$nodePath.$key", limit, output)
-                }
-            }
-            is JSONArray -> {
-                for (index in 0 until node.length()) {
-                    if (output.length() >= limit) break
-                    collectReverseIndexMatches(node.opt(index), query, source, "$nodePath[$index]", limit, output)
-                }
-            }
-            else -> if (node.toString().contains(query, ignoreCase = true)) {
-                output.put(JSONObject().apply {
-                    put("source", source)
-                    put("record_path", nodePath)
-                    put("value", node.toString())
-                })
-            }
         }
     }
 
