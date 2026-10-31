@@ -723,6 +723,15 @@ object AIMessageManager {
             return null
         }
 
+        // Generate the workspace tree in code; never send it to the summary model.
+        val workspaceTreeContent = if (!workspacePath.isNullOrBlank()) {
+            val treeResult = summaryDocumentManager.generateWorkspaceTree(workspacePath, workspaceEnv)
+            if (treeResult.success) treeResult.content else {
+                AppLogger.e(TAG, "工作区文件树扫描失败，保留旧文件树: ${treeResult.error}")
+                null
+            }
+        } else null
+
         val memoryTagRegex = Regex("<memory>.*?</memory>", RegexOption.DOT_MATCHES_ALL)
         val conversationReviewEntries = mutableListOf<Pair<String, String>>()
         fun normalizeForReview(text: String): String {
@@ -1127,7 +1136,8 @@ object AIMessageManager {
                         workspaceEnv = workspaceEnv,
                         chatId = chatId,
                         expectedCurrentContent = storedSummaryDocument,
-                        newContent = durableContent
+                        newContent = durableContent,
+                        workspaceTreeContent = workspaceTreeContent
                     )
                     if (!writeResult.success) {
                         AppLogger.e(TAG, "保存历史摘要文档失败，拒绝插入新摘要: ${writeResult.error}")

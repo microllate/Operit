@@ -3,6 +3,7 @@ package com.ai.assistance.operit.core.chat
 import android.content.Context
 import com.ai.assistance.operit.core.tools.AIToolHandler
 import com.ai.assistance.operit.core.tools.FileContentData
+import com.ai.assistance.operit.core.tools.FindFilesResultData
 import com.ai.assistance.operit.data.model.AITool
 import com.ai.assistance.operit.data.model.ToolParameter
 import com.ai.assistance.operit.util.AppLogger
@@ -93,7 +94,8 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         workspaceEnv: String?,
         chatId: String,
         expectedCurrentContent: String,
-        newContent: String
+        newContent: String,
+        workspaceTreeContent: String? = null
     ): DocumentResult {
         val path = resolveDocumentPath(workspacePath, chatId)
             ?: return DocumentResult(false, error = "Workspace path is empty")
@@ -110,6 +112,8 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
 
             // Restore historical records omitted by the model before replacing the file.
             val mergedContent = mergeHistoricalRecords(expectedCurrentContent, newContent)
+            val tree = workspaceTreeContent?.takeIf { it.isNotBlank() } ?: extractWorkspaceTree(expectedCurrentContent)
+            val completeContent = if (tree.isNullOrBlank()) mergedContent else mergedContent + "\n\n【工作区文件树】\n" + tree
 
             val directory = path.substringBeforeLast('/')
             val mkdir = execute(
@@ -128,7 +132,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
                 "write_file",
                 listOf(
                     ToolParameter("path", path),
-                    ToolParameter("content", mergedContent),
+                    ToolParameter("content", completeContent),
                     ToolParameter("append", "false")
                 ),
                 workspaceEnv
@@ -138,7 +142,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
             }
 
             val verified = read(workspacePath, workspaceEnv, chatId)
-            if (!verified.success || verified.content != mergedContent) {
+            if (!verified.success || verified.content != completeContent) {
                 return DocumentResult(false, error = "Summary document read-back verification failed")
             }
             DocumentResult(true, content = verified.content)
@@ -148,6 +152,50 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         }
     }
 
+    suspend fun generateWorkspaceTree(workspacePath: String?, workspaceEnv: String?): DocumentResult {
+        val root = workspacePath?.trim()?.takeIf { it.isNotBlank() }
+            ?: return DocumentResult(false, error = "Workspace path is empty")
+        return try {
+            val result = execute("find_files", listOf(
+                ToolParameter("path", root),
+                ToolParameter("pattern", "*"),
+                ToolParameter("max_depth", "8"),
+                ToolParameter("use_path_pattern", "true"),
+                ToolParameter("case_insensitive", "false")
+            ), workspaceEnv)
+            if (!result.success) return DocumentResult(false, error = result.error.ifBlank { "Workspace scan failed" })
+            val files = (result.result as? FindFilesResultData)?.files
+                ?: return DocumentResult(false, error = "Invalid find_files result")
+            if (files.isEmpty()) return DocumentResult(true, content = "(空工作区)")
+            val prefix = root.trimEnd('/') + "/"
+            val paths = files.take(10000).map { path ->
+                if (path.startsWith(prefix)) path.removePrefix(prefix) else path.substringAfterLast("://").substringAfterLast('/')
+            }.filter { it.isNotBlank() }.distinct().sorted()
+            val entries = sortedMapOf<String, Boolean>()
+            for (path in paths) {
+                val parts = path.split('/').filter { it.isNotBlank() }
+                for (i in 1 until parts.size) entries[parts.take(i).joinToString("/")] = true
+                if (parts.isNotEmpty()) entries[path] = false
+            }
+            val lines = entries.entries.map { entry ->
+                val p = entry.key
+                "  ".repeat(p.count { it == '/' }) + (if (entry.value) "[目录] " else "[文件] ") + p.substringAfterLast('/')
+            }
+            val suffix = if (files.size > 10000) "\n…（超过 10000 个文件，已截断）" else ""
+            DocumentResult(true, content = lines.joinToString("\n") + suffix)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to generate workspace tree", e)
+            DocumentResult(false, error = e.message ?: "Workspace scan failed")
+        }
+    }
+
+    private fun extractWorkspaceTree(content: String): String? {
+        val header = Regex("(?m)^【工作区文件树】\\s*$")
+        val match = header.find(content) ?: return null
+        val start = match.range.last + 1
+        val next = Regex("(?m)^\\s*(?:【[^】]+】|\\[[^]]+])\\s*$").find(content, start)
+        return content.substring(start, next?.range?.first ?: content.length).trim().takeIf { it.isNotBlank() }
+    }
     /** Keeps historical records in the first three cumulative sections. */
     private fun mergeHistoricalRecords(previousContent: String, generatedContent: String): String {
         if (previousContent.isBlank()) return generatedContent
