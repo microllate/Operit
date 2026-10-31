@@ -4632,7 +4632,7 @@ open class StandardFileSystemTools(protected val context: Context) {
 
             for (type in types) {
                 if (matches.length() >= limit) break
-                val filePath = indexPath.trimEnd('/', '\\\\') + "/$type.json"
+                val filePath = indexPath.trimEnd('/') + "/$type.json"
                 val content = if (isLinuxEnvironment(environment)) {
                     val readResult = linuxTools.readFileFull(
                         AITool(
@@ -4643,7 +4643,7 @@ open class StandardFileSystemTools(protected val context: Context) {
                             )
                         )
                     )
-                    if (!readResult.success) null else (readResult.result as? StringResultData)?.content
+                    if (!readResult.success) null else (readResult.result as? FileContentData)?.content
                 } else {
                     PathValidator.validateAndroidPath(filePath, tool.name)?.let { return it }
                     val file = File(filePath)
@@ -4660,7 +4660,15 @@ open class StandardFileSystemTools(protected val context: Context) {
                     missingIndexes.add("$type.json (invalid JSON)")
                     continue
                 }
-                collectReverseIndexMatches(root, query, "$type.json", type, limit, matches)
+                if (root is JSONObject) {
+                    val keys = root.keys()
+                    while (keys.hasNext() && matches.length() < limit) {
+                        val key = keys.next()
+                        collectReverseIndexMatches(root.opt(key), query, "$type.json", "$type.$key", limit, matches)
+                    }
+                } else {
+                    collectReverseIndexMatches(root, query, "$type.json", type, limit, matches)
+                }
             }
 
             val response = JSONObject().apply {
