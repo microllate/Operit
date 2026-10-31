@@ -163,7 +163,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
                 ToolParameter("use_path_pattern", "true"),
                 ToolParameter("case_insensitive", "false")
             ), workspaceEnv)
-            if (!result.success) return DocumentResult(false, error = result.error.ifBlank { "Workspace scan failed" })
+            if (!result.success) return DocumentResult(false, error = result.error.orEmpty().ifBlank { "Workspace scan failed" })
             val files = (result.result as? FindFilesResultData)?.files
                 ?: return DocumentResult(false, error = "Invalid find_files result")
             if (files.isEmpty()) return DocumentResult(true, content = "(空工作区)")
