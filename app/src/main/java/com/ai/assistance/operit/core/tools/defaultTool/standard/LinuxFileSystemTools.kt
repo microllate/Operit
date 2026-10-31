@@ -19,6 +19,7 @@ import com.ai.assistance.operit.data.model.ToolParameter
 import com.ai.assistance.operit.data.model.ToolResult
 import com.ai.assistance.operit.util.FileUtils
 import com.ai.assistance.operit.core.tools.defaultTool.PathValidator
+import com.ai.assistance.operit.terminal.provider.filesystem.FileSystemProvider
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -34,30 +35,41 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
     companion object {
         private const val TAG = "LinuxFileSystemTools"
         private const val FIND_CACHE_TTL_MS = 30_000L
-        private const val FIND_CACHE_MAX_ENTRIES = 128
+        private const val FIND_CACHE_MAX_ENTRIES = 64
+        private const val FIND_SNAPSHOT_MAX_FILES = 20_000
     }
 
-    private data class FindCacheEntry(val files: List<String>, val createdAt: Long)
-    private data class FindCacheKey(val basePath: String, val pattern: String, val maxDepth: Int, val caseInsensitive: Boolean)
-    private val findCache = LinkedHashMap<FindCacheKey, FindCacheEntry>()
+    private data class FindSnapshotEntry(val files: List<String>, val createdAt: Long)
+    private data class FindSnapshotKey(
+        val provider: FileSystemProvider,
+        val basePath: String,
+        val maxDepth: Int
+    )
+    private val findSnapshotCache = LinkedHashMap<FindSnapshotKey, FindSnapshotEntry>()
+    private val findSnapshotMutex = Mutex()
 
-    private fun cachedFind(key: FindCacheKey): List<String>? = synchronized(findCache) {
-        val entry = findCache[key] ?: return@synchronized null
+    private fun cachedFindSnapshot(key: FindSnapshotKey): List<String>? = synchronized(findSnapshotCache) {
+        val entry = findSnapshotCache[key] ?: return@synchronized null
         if (System.currentTimeMillis() - entry.createdAt > FIND_CACHE_TTL_MS) {
-            findCache.remove(key)
+            findSnapshotCache.remove(key)
             return@synchronized null
         }
         entry.files
     }
 
-    private fun cacheFind(key: FindCacheKey, files: List<String>) {
-        synchronized(findCache) {
-            findCache[key] = FindCacheEntry(files.toList(), System.currentTimeMillis())
-            while (findCache.size > FIND_CACHE_MAX_ENTRIES) findCache.remove(findCache.keys.firstOrNull() ?: break)
+    private fun cacheFindSnapshot(key: FindSnapshotKey, files: List<String>) {
+        if (files.size > FIND_SNAPSHOT_MAX_FILES) return
+        synchronized(findSnapshotCache) {
+            findSnapshotCache[key] = FindSnapshotEntry(files.toList(), System.currentTimeMillis())
+            while (findSnapshotCache.size > FIND_CACHE_MAX_ENTRIES) {
+                findSnapshotCache.remove(findSnapshotCache.keys.firstOrNull() ?: break)
+            }
         }
     }
 
-    private fun invalidateFindCache() { synchronized(findCache) { findCache.clear() } }
+    private fun invalidateFindCache() {
+        synchronized(findSnapshotCache) { findSnapshotCache.clear() }
+    }
 
     // 动态获取文件系统（支持SSH切换）
     private val fs get() = getLinuxFileSystem()
@@ -1041,16 +1053,37 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
 
             val maxDepth = tool.parameters.find { it.name == "max_depth" }?.value?.toIntOrNull() ?: -1
             val caseInsensitive = tool.parameters.find { it.name == "case_insensitive" }?.value?.toBoolean() ?: false
-            val cacheKey = FindCacheKey(basePath.trimEnd('/').ifBlank { "/" }, pattern, maxDepth, caseInsensitive)
-            val cachedFiles = cachedFind(cacheKey)
-            val files = cachedFiles ?: fs.findFiles(
-                basePath = basePath,
-                pattern = pattern,
-                maxDepth = maxDepth,
-                caseInsensitive = caseInsensitive
-            ).also { cacheFind(cacheKey, it) }
+            val provider = fs
+            val normalizedBasePath = basePath.trimEnd('/').ifBlank { "/" }
+            val snapshotKey = FindSnapshotKey(provider, normalizedBasePath, maxDepth)
+            var snapshot = cachedFindSnapshot(snapshotKey)
+            var scannedDirectory = false
 
-            ToolProgressBus.update(tool.name, 1f, if (cachedFiles != null) "Search cache hit, found ${files.size}" else "Search completed, found ${files.size}")
+            if (snapshot == null) {
+                snapshot = findSnapshotMutex.withLock {
+                    cachedFindSnapshot(snapshotKey) ?: provider.findFiles(
+                        basePath = basePath,
+                        pattern = "*",
+                        maxDepth = maxDepth,
+                        caseInsensitive = false
+                    ).also {
+                        scannedDirectory = true
+                        cacheFindSnapshot(snapshotKey, it)
+                    }
+                }
+            }
+            val cacheHit = !scannedDirectory
+
+            val regex = globToRegex(pattern, caseInsensitive)
+            val files = snapshot.filter { filePath ->
+                regex.matches(filePath.substringAfterLast('/'))
+            }
+
+            ToolProgressBus.update(
+                tool.name,
+                1f,
+                if (cacheHit) "Directory snapshot reused, found ${files.size}" else "Directory scanned, found ${files.size}"
+            )
 
             return ToolResult(
                 toolName = tool.name,
