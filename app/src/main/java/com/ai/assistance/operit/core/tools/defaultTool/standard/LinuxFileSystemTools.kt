@@ -33,7 +33,31 @@ import java.util.concurrent.atomic.AtomicInteger
 class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) {
     companion object {
         private const val TAG = "LinuxFileSystemTools"
+        private const val FIND_CACHE_TTL_MS = 30_000L
+        private const val FIND_CACHE_MAX_ENTRIES = 128
     }
+
+    private data class FindCacheEntry(val files: List<String>, val createdAt: Long)
+    private data class FindCacheKey(val basePath: String, val pattern: String, val maxDepth: Int, val caseInsensitive: Boolean)
+    private val findCache = LinkedHashMap<FindCacheKey, FindCacheEntry>()
+
+    private fun cachedFind(key: FindCacheKey): List<String>? = synchronized(findCache) {
+        val entry = findCache[key] ?: return@synchronized null
+        if (System.currentTimeMillis() - entry.createdAt > FIND_CACHE_TTL_MS) {
+            findCache.remove(key)
+            return@synchronized null
+        }
+        entry.files
+    }
+
+    private fun cacheFind(key: FindCacheKey, files: List<String>) {
+        synchronized(findCache) {
+            findCache[key] = FindCacheEntry(files.toList(), System.currentTimeMillis())
+            while (findCache.size > FIND_CACHE_MAX_ENTRIES) findCache.remove(findCache.keys.firstOrNull() ?: break)
+        }
+    }
+
+    private fun invalidateFindCache() { synchronized(findCache) { findCache.clear() } }
 
     // 动态获取文件系统（支持SSH切换）
     private val fs get() = getLinuxFileSystem()
@@ -542,6 +566,7 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
                 )
             }
 
+            invalidateFindCache()
             val operation = if (append) "append" else "write"
             return ToolResult(
                 toolName = tool.name,
@@ -615,6 +640,7 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
                 )
             }
 
+            invalidateFindCache()
             return ToolResult(
                 toolName = tool.name,
                 success = true,
@@ -700,6 +726,7 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
                 )
             }
 
+            invalidateFindCache()
             return ToolResult(
                 toolName = tool.name,
                 success = true,
@@ -786,6 +813,7 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
                 )
             }
 
+            invalidateFindCache()
             return ToolResult(
                 toolName = tool.name,
                 success = true,
@@ -858,6 +886,7 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
                 )
             }
 
+            invalidateFindCache()
             return ToolResult(
                 toolName = tool.name,
                 success = true,
@@ -928,6 +957,7 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
                 )
             }
 
+            invalidateFindCache()
             return ToolResult(
                 toolName = tool.name,
                 success = true,
@@ -1009,14 +1039,18 @@ class LinuxFileSystemTools(context: Context) : StandardFileSystemTools(context) 
                 )
             }
 
-            val files = fs.findFiles(
+            val maxDepth = tool.parameters.find { it.name == "max_depth" }?.value?.toIntOrNull() ?: -1
+            val caseInsensitive = tool.parameters.find { it.name == "case_insensitive" }?.value?.toBoolean() ?: false
+            val cacheKey = FindCacheKey(basePath.trimEnd('/').ifBlank { "/" }, pattern, maxDepth, caseInsensitive)
+            val cachedFiles = cachedFind(cacheKey)
+            val files = cachedFiles ?: fs.findFiles(
                 basePath = basePath,
                 pattern = pattern,
-                maxDepth = -1,
-                caseInsensitive = false
-            )
+                maxDepth = maxDepth,
+                caseInsensitive = caseInsensitive
+            ).also { cacheFind(cacheKey, it) }
 
-            ToolProgressBus.update(tool.name, 1f, "Search completed, found ${files.size}")
+            ToolProgressBus.update(tool.name, 1f, if (cachedFiles != null) "Search cache hit, found ${files.size}" else "Search completed, found ${files.size}")
 
             return ToolResult(
                 toolName = tool.name,
