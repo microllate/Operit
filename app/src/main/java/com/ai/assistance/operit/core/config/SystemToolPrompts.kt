@@ -209,17 +209,6 @@ object SystemToolPrompts {
                 )
             ),
             ToolPrompt(
-                name = "query_reverse_index",
-                description = "查询本地逆向索引，只返回匹配记录。搜索原始证据文件前优先使用此工具。index_path 为 .operit/reverse-index 目录路径。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "index_path", type = "string", description = ".operit/reverse-index 目录路径", required = true),
-                    ToolParameterSchema(name = "index_type", type = "string", description = "files、functions、strings、xrefs 或 all", required = true),
-                    ToolParameterSchema(name = "query", type = "string", description = "要查询的函数名/地址、字符串、文件名或调用关系", required = true),
-                    ToolParameterSchema(name = "limit", type = "integer", description = "最多返回的匹配记录数，范围1-100", required = false, default = "20"),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选文件系统环境，例如 linux", required = false)
-                )
-            ),
-            ToolPrompt(
                 name = "grep_code",
                 description = "Search code content matching a regex pattern in files. Returns matches with surrounding context lines.",
                 parametersStructured = listOf(
@@ -364,6 +353,17 @@ object SystemToolPrompts {
                     ToolParameterSchema(name = "max_depth", type = "integer", description = "可选，控制子目录搜索深度，-1=无限", required = false),
                     ToolParameterSchema(name = "use_path_pattern", type = "boolean", description = "布尔值", required = false, default = "false"),
                     ToolParameterSchema(name = "case_insensitive", type = "boolean", description = "布尔值", required = false, default = "false")
+                )
+            ),
+            ToolPrompt(
+                name = "query_reverse_index",
+                description = "查询本地逆向索引，只返回匹配记录。搜索原始证据文件前优先使用此工具。index_path 为 .operit/reverse-index 目录路径。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "index_path", type = "string", description = ".operit/reverse-index 目录路径", required = true),
+                    ToolParameterSchema(name = "index_type", type = "string", description = "files、functions、strings、xrefs 或 all", required = true),
+                    ToolParameterSchema(name = "query", type = "string", description = "要查询的函数名/地址、字符串、文件名或调用关系", required = true),
+                    ToolParameterSchema(name = "limit", type = "integer", description = "最多返回的匹配记录数，范围1-100", required = false, default = "20"),
+                    ToolParameterSchema(name = "environment", type = "string", description = "可选文件系统环境，例如 linux", required = false)
                 )
             ),
             ToolPrompt(
