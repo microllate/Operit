@@ -90,7 +90,7 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "list_files",
-                description = "List files in a directory.",
+                description = "List only the immediate contents of a known directory. Do not use repeatedly to explore a workspace tree. To locate files under a workspace, call find_files once from the workspace root and reuse the returned paths.",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "path", type = "string", description = "e.g. \"/sdcard/Download\"", required = true),
                     ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false)
@@ -187,7 +187,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "find_files",
-                description = "Search for files matching a pattern.",
+                description = "Search recursively for matching files. When locating files in a workspace, prefer one search from the workspace root with a suitable pattern; reuse returned paths instead of repeatedly listing subdirectories.",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "path", type = "string", description = "search path, for Android use /sdcard/..., for Linux use /home/... or /etc/...", required = true),
                     ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
@@ -242,7 +242,7 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "list_files",
-                description = "列出目录中的文件。",
+                description = "只列出已知目录的直接内容。不要用它反复逐层探索整个工作区；需要定位工作区内文件时，从工作区根目录调用一次 find_files，并复用返回的完整路径。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "path", type = "string", description = "例如\"/sdcard/Download\"", required = true),
                     ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false)
@@ -334,7 +334,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "find_files",
-                description = "搜索匹配模式的文件。",
+                description = "递归搜索匹配的文件。定位工作区文件时，优先从工作区根目录用合适的模式一次搜索；后续复用返回路径，不要反复逐层列目录。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "path", type = "string", description = "搜索路径，Android用/sdcard/...，Linux用/home/...或/etc/...", required = true),
                     ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),

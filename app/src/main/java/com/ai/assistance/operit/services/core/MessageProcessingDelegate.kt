@@ -1014,20 +1014,10 @@ class MessageProcessingDelegate(
                 // 关闭总结时仍保留真实 limits，避免下游插件收到 0/Infinity 这类无效 JSON 值。
                 val effectiveMaxTokens = maxTokens
                 val effectiveEnableSummary = enableSummary && effectivePersistTurn
-                val effectiveTokenUsageThreshold =
-                    if (effectiveEnableSummary) tokenUsageThreshold else Double.MAX_VALUE
-                val effectiveOnTokenLimitExceeded = if (effectiveEnableSummary) {
-                    suspend {
-                        onTokenLimitExceeded(
-                            activeChatId,
-                            effectiveRoleCardId,
-                            isGroupOrchestrationTurn,
-                            groupParticipantNamesText
-                        )
-                    }
-                } else {
-                    null
-                }
+                // 自动总结统一在任务完成回调中执行。发送/工具调用阶段禁用阈值回调，
+                // 否则 EnhancedAIService 会停止当前工具链并提前转入总结续写。
+                val effectiveTokenUsageThreshold = Double.MAX_VALUE
+                val effectiveOnTokenLimitExceeded: (suspend () -> Unit)? = null
 
                 // 2. 使用 AIMessageManager 发送消息
                 // 群组编排模式下，只有当消息内容不为空时才添加 [From user] 前缀

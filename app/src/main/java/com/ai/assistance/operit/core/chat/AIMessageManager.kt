@@ -11,6 +11,7 @@ import com.ai.assistance.operit.api.chat.llmprovider.MediaLinkParser
 import com.ai.assistance.operit.api.chat.llmprovider.MediaLinkBuilder
 import com.ai.assistance.operit.core.chat.hooks.PromptTurn
 import com.ai.assistance.operit.core.chat.hooks.PromptTurnKind
+import com.ai.assistance.operit.core.config.FunctionalPrompts
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingController
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingHookParams
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingPluginRegistry
@@ -686,10 +687,30 @@ object AIMessageManager {
         messages: List<ChatMessage>,
         autoContinue: Boolean = false,
         isGroupChat: Boolean = false,
-        summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig()
+        summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig(),
+        chatModelConfigIdOverride: String? = null,
+        chatModelIndexOverride: Int? = null,
+        workspacePath: String? = null,
+        workspaceEnv: String? = null,
+        chatId: String? = null
     ): ChatMessage? {
         val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
-        val previousSummary = if (lastSummaryIndex != -1) messages[lastSummaryIndex].content.trim() else null
+        val messagePreviousSummary = if (lastSummaryIndex != -1) messages[lastSummaryIndex].content.trim() else null
+
+        // The workspace document is the durable source for cumulative history.
+        // The chat message remains the fallback for chats without a workspace document.
+        val summaryDocumentManager = ConversationSummaryDocumentManager.getInstance(context)
+        val storedSummaryDocument = if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
+            val result = summaryDocumentManager.read(workspacePath, workspaceEnv, chatId)
+            if (!result.success) {
+                AppLogger.e(TAG, "读取历史摘要文档失败，终止本次总结: ${result.error}")
+                return null
+            }
+            result.content.orEmpty()
+        } else {
+            ""
+        }
+        val previousSummary = storedSummaryDocument.takeIf { it.isNotBlank() } ?: messagePreviousSummary
 
         val messagesToSummarize = when {
             lastSummaryIndex == -1 -> messages.filter { it.sender == "user" || it.sender == "ai" }
@@ -701,6 +722,15 @@ object AIMessageManager {
             AppLogger.d(TAG, "没有新消息需要总结")
             return null
         }
+
+        // Generate the workspace tree in code; never send it to the summary model.
+        val workspaceTreeContent = if (!workspacePath.isNullOrBlank()) {
+            val treeResult = summaryDocumentManager.generateWorkspaceTree(workspacePath, workspaceEnv)
+            if (treeResult.success) treeResult.content else {
+                AppLogger.e(TAG, "工作区文件树扫描失败，保留旧文件树: ${treeResult.error}")
+                null
+            }
+        } else null
 
         val memoryTagRegex = Regex("<memory>.*?</memory>", RegexOption.DOT_MATCHES_ALL)
         val conversationReviewEntries = mutableListOf<Pair<String, String>>()
@@ -1041,12 +1071,14 @@ object AIMessageManager {
         }
 
         return try {
-            AppLogger.d(TAG, "开始使用AI生成对话总结：总结 ${messagesToSummarize.size} 条消息")
+            AppLogger.d(TAG, "开始使用AI生成任务恢复摘要：总结 ${messagesToSummarize.size} 条消息")
             val summary =
                 enhancedAiService.generateSummary(
                     conversationToSummarize,
                     previousSummary,
-                    summaryConfig
+                    summaryConfig,
+                    chatModelConfigIdOverride = chatModelConfigIdOverride,
+                    chatModelIndexOverride = chatModelIndexOverride
                 )
             AppLogger.d(TAG, "AI生成总结完成: ${summary.take(50)}...")
 
@@ -1054,38 +1086,104 @@ object AIMessageManager {
                 AppLogger.e(TAG, "AI生成的总结内容为空，放弃本次总结")
                 null
             } else {
-                // 如果是自动续写，在总结消息尾部添加续写提示
-                val trimmedSummary = summary.trim()
+                // 新摘要必须包含四个固定板块；结构不完整时拒绝覆盖旧摘要。
                 val useEnglish = !LocaleUtils.usesChineseContent(context)
-                val packageWarmupBlock = buildPackageWarmupBlock(messagesToSummarize, useEnglish)
+                val requiredSections = FunctionalPrompts.resolveSummarySections(
+                    summaryConfig.sectionOverrides,
+                    useEnglish
+                )
+                val missingSections = requiredSections.filter { section ->
+                    val title = section.title.trim()
+                    title.isNotBlank() &&
+                        !summary.contains("【$title】") &&
+                        !summary.contains("[$title]")
+                }
+                if (missingSections.isNotEmpty()) {
+                    AppLogger.e(
+                        TAG,
+                        "AI生成的摘要缺少必要板块，拒绝覆盖历史摘要: " +
+                            missingSections.joinToString { it.title }
+                    )
+                    return null
+                }
+
+                // Persist the cumulative first three sections before creating a new summary message.
+                // If persistence fails, reject this summary so the old history is not replaced.
+                if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                    // Locate all four sections first, so the third durable section
+                    // ends at the Next-Step section instead of absorbing it.
+                    val allSections = requiredSections.mapNotNull { section ->
+                        val headerCandidates = listOf("【${section.title}】", "[${section.title}]")
+                        val start = headerCandidates.map { summary.indexOf(it) }
+                            .filter { it >= 0 }.minOrNull() ?: return@mapNotNull null
+                        start to section
+                    }.sortedBy { it.first }
+
+                    val durableSections = allSections.take(3)
+                    if (allSections.size != 4 || durableSections.size != 3) {
+                        AppLogger.e(TAG, "无法从新摘要提取全部四个板块，拒绝保存")
+                        return null
+                    }
+
+                    val durableContent = durableSections.mapIndexed { index, entry ->
+                        val start = entry.first
+                        val end = allSections.getOrNull(index + 1)?.first ?: summary.length
+                        summary.substring(start, end).trim()
+                    }.joinToString("\n\n").trim()
+
+                    val writeResult = summaryDocumentManager.write(
+                        workspacePath = workspacePath,
+                        workspaceEnv = workspaceEnv,
+                        chatId = chatId,
+                        expectedCurrentContent = storedSummaryDocument,
+                        newContent = durableContent,
+                        workspaceTreeContent = workspaceTreeContent
+                    )
+                    if (!writeResult.success) {
+                        AppLogger.e(TAG, "保存历史摘要文档失败，拒绝插入新摘要: ${writeResult.error}")
+                        return null
+                    }
+                }
+
+                // The chat context keeps only a compact pointer to the durable history document.
+                // The first three items are fixed notices; only the latest next-step strategy is dynamic.
+                val nextStepSection = requiredSections[3]
+                val nextStepHeaderCandidates = listOf(
+                    "【${nextStepSection.title}】",
+                    "[${nextStepSection.title}]"
+                )
+                val nextStepHeader = nextStepHeaderCandidates
+                    .firstOrNull { summary.contains(it) }
+                    ?: run {
+                        AppLogger.e(TAG, "无法提取摘要中的下一步策略，拒绝插入摘要")
+                        return null
+                    }
+                val nextStepStart = summary.indexOf(nextStepHeader) + nextStepHeader.length
+                val nextStepStrategy = summary.substring(nextStepStart)
+                    .trim()
+                    .trimStart(':', '：', '-', '—', '*', ' ')
+                    .lineSequence()
+                    .map { it.trim().removePrefix("-").removePrefix("•").trim() }
+                    .filter { it.isNotBlank() && !it.startsWith("=") }
+                    .joinToString(" ")
+                    .ifBlank { "无" }
+
                 val summaryWithQuotes = buildString {
-                    append(trimmedSummary)
-                    if (summaryConfig.dialogueReviewEnabled && conversationReviewEntries.isNotEmpty()) {
-                        append(
-                            formatDialogueReviewHeader(
-                                defaultHeader = context.getString(R.string.ai_message_dialogue_review),
-                                customTitle = summaryConfig.dialogueReviewTitle
-                            )
-                        )
-                        conversationReviewEntries.forEach { (speaker, content) ->
-                            append("- ")
-                            append(speaker)
-                            append(": ")
-                            append(content)
-                            append("\n")
-                        }
-                    }
-                    if (packageWarmupBlock.isNotBlank()) {
-                        append("\n\n")
-                        append(packageWarmupBlock)
-                    }
-                }.trimEnd()
+                    appendLine("==========对话摘要==========")
+                    appendLine("1、用户目标，已更新历史摘要.md文档")
+                    appendLine("2、执行过程出现的错误，已更新历史摘要.md文档")
+                    appendLine("3、已完成的项目，已更新历史摘要.md文档")
+                    appendLine("4、下一步策略：$nextStepStrategy")
+                    append(".operit/chat-summaries/${chatId}/历史摘要.md")
+                }
 
                 val finalSummary = if (autoContinue) {
                     context.getString(R.string.ai_message_continue_task_if_complete, summaryWithQuotes)
                 } else {
                     summaryWithQuotes
                 }
+
+                // 如果是自动续写，在总结消息尾部添加续写提示
                 
                 ChatMessage(
                     sender = "summary",
@@ -1301,22 +1399,7 @@ object AIMessageManager {
             }
         }
 
-        // 检查消息条数阈值（如果启用）
-        if (enableSummaryByMessageCount) {
-            val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
-            val relevantMessages = if (lastSummaryIndex != -1) {
-                messages.subList(lastSummaryIndex + 1, messages.size)
-            } else {
-                messages
-            }
-            val userAiMessagesSinceLastSummary = relevantMessages.count { it.sender == "user"}
-
-            if (userAiMessagesSinceLastSummary >= summaryMessageCountThreshold) {
-                AppLogger.d(TAG, "自上次总结后新消息数量达到阈值 ($userAiMessagesSinceLastSummary)，生成总结.")
-                return true
-            }
-        }
-
+        // 自动总结现在由任务完成回调触发；此旧判断方法不再参与自动总结流程。
         AppLogger.d(TAG, "未达到生成总结的条件. Token使用率: ${if (maxTokens > 0) currentTokens.toDouble() / maxTokens else 0.0}")
         return false
     }

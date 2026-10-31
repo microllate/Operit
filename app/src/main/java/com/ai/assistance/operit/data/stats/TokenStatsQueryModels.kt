@@ -15,6 +15,8 @@ data class TokenStatsCostSummary(
     val totalContributionCount: Long,
     val rateUsed: Double,
     val originalCurrencyAmounts: Map<PricingCurrency, Double>,
+    /** Current-price cost breakdown in targetCurrency. */
+    val breakdown: Map<String, Double> = emptyMap(),
 )
 
 data class TokenStatsTokenAggregate(

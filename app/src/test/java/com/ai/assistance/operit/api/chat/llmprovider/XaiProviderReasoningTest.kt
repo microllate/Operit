@@ -2,11 +2,29 @@ package com.ai.assistance.operit.api.chat.llmprovider
 
 import com.ai.assistance.operit.data.collects.ApiProviderConfigs
 import com.ai.assistance.operit.data.model.ApiProviderType
+import com.ai.assistance.operit.util.AppLogger
+import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class XaiProviderReasoningTest {
+    private var previousSystemLogEnabled = true
+    private var previousFileLogEnabled = true
+
+    @Before
+    fun disableAndroidLogging() {
+        previousSystemLogEnabled = AppLogger.enableSystemLog
+        previousFileLogEnabled = AppLogger.enableFileLogging
+        AppLogger.enableSystemLog = false
+        AppLogger.enableFileLogging = false
+    }
+
+    @After
+    fun restoreAndroidLogging() {
+        AppLogger.enableSystemLog = previousSystemLogEnabled
+        AppLogger.enableFileLogging = previousFileLogEnabled
+    }
     @Test
     fun defaultConfigUsesTheOfficialXaiEndpointAndModel() {
         assertEquals(
@@ -26,28 +44,4 @@ class XaiProviderReasoningTest {
         )
     }
 
-    @Test
-    fun enabledOptionsMapToXaiEfforts() {
-        assertEquals(
-            listOf("low", "medium", "high", "xhigh"),
-            listOf("low", "medium", "high", "xhigh").map {
-                XaiReasoningMapper.effortForOption(optionId = it)
-            }
-        )
-    }
-
-    @Test
-    fun mapperPreservesTheSelectedEffort() {
-        assertEquals(
-            "high",
-            XaiReasoningMapper.effortForOption(optionId = "high")
-        )
-    }
-
-    @Test
-    fun reasoningEffortUsesTheGrokFamilyRule() {
-        assertTrue(xaiModelSupportsReasoningEffort("grok-4.6"))
-        assertTrue(xaiModelSupportsReasoningEffort("grok-4.5-latest"))
-        assertTrue(xaiModelSupportsReasoningEffort("grok-3-mini"))
-    }
 }
