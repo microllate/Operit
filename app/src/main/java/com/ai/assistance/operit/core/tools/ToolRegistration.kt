@@ -2217,19 +2217,6 @@ fun registerAllTools(handler: AIToolHandler, context: Context) {
             }
     )
 
-    // 查询逆向分析索引，只返回匹配记录
-    handler.registerTool(
-            name = "query_reverse_index",
-            descriptionGenerator = { tool ->
-                val indexType = tool.parameters.find { it.name == "index_type" }?.value ?: "functions"
-                val query = tool.parameters.find { it.name == "query" }?.value ?: ""
-                "Query reverse index ($indexType) for: $query"
-            },
-            executor = { tool ->
-                runBlocking(Dispatchers.IO) { fileSystemTools.queryReverseIndex(tool) }
-            }
-    )
-
     // Grep代码搜索
     handler.registerTool(
             name = "grep_code",
