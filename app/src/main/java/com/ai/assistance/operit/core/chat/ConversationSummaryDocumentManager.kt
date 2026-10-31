@@ -108,6 +108,9 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
                 return DocumentResult(false, error = "Summary document changed; refusing to overwrite newer content")
             }
 
+            // Restore historical records omitted by the model before replacing the file.
+            val mergedContent = mergeHistoricalRecords(expectedCurrentContent, newContent)
+
             val directory = path.substringBeforeLast('/')
             val mkdir = execute(
                 "make_directory",
@@ -125,7 +128,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
                 "write_file",
                 listOf(
                     ToolParameter("path", path),
-                    ToolParameter("content", newContent),
+                    ToolParameter("content", mergedContent),
                     ToolParameter("append", "false")
                 ),
                 workspaceEnv
@@ -135,7 +138,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
             }
 
             val verified = read(workspacePath, workspaceEnv, chatId)
-            if (!verified.success || verified.content != newContent) {
+            if (!verified.success || verified.content != mergedContent) {
                 return DocumentResult(false, error = "Summary document read-back verification failed")
             }
             DocumentResult(true, content = verified.content)
@@ -145,6 +148,33 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         }
     }
 
+    /** Keeps historical records in the first three cumulative sections. */
+    private fun mergeHistoricalRecords(previousContent: String, generatedContent: String): String {
+        if (previousContent.isBlank()) return generatedContent
+        val headers = Regex("(?m)^\\s*(?:【[^】]+】|\\[[^]]+])\\s*$")
+        val old = headers.findAll(previousContent).toList()
+        val fresh = headers.findAll(generatedContent).toList()
+        if (old.size < 3 || fresh.size < 3) {
+            return if (generatedContent.contains(previousContent.trim())) generatedContent
+            else "$generatedContent\\n\\n${previousContent.trim()}"
+        }
+        fun key(line: String) = line.trim().removePrefix("-").removePrefix("•").removePrefix("*")
+            .replace(Regex("[\\s，。；：:、,.!！?？]"), "").lowercase()
+        val result = StringBuilder()
+        for (i in 0 until 3) {
+            val newEnd = fresh.getOrNull(i + 1)?.range?.first ?: generatedContent.length
+            val oldEnd = old.getOrNull(i + 1)?.range?.first ?: previousContent.length
+            val lines = generatedContent.substring(fresh[i].range.first, newEnd).trimEnd().lines().toMutableList()
+            val present = lines.map { key(it) }.filter { it.isNotBlank() && it != "无" && it != "none" }.toMutableSet()
+            val missing = previousContent.substring(old[i].range.last + 1, oldEnd).lines().filter {
+                val k = key(it); k.isNotBlank() && k != "无" && k != "none" && k !in present
+            }
+            lines += missing
+            if (i > 0) result.append("\\n\\n")
+            result.append(lines.joinToString("\\n").trimEnd())
+        }
+        return result.toString().trim()
+    }
     private suspend fun execute(
         toolName: String,
         parameters: List<ToolParameter>,
