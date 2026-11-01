@@ -17,6 +17,14 @@ class PromptTurnKindTest {
         assertEquals(PromptTurnKind.USER, PromptTurnKind.fromRole("unknown"))
     }
 
+    @Test fun fromRole_mapsTaskPlanResult() {
+        assertEquals(PromptTurnKind.TASK_PLAN_RESULT, PromptTurnKind.fromRole("task_plan_result"))
+    }
+
+    @Test fun roleProperty_matchesTaskPlanResult() {
+        assertEquals("task_plan_result", PromptTurn(PromptTurnKind.TASK_PLAN_RESULT, "x").role)
+    }
+
     @Test fun roleProperty_matchesKind() {
         assertEquals("summary", PromptTurn(PromptTurnKind.SUMMARY, "x").role)
     }
