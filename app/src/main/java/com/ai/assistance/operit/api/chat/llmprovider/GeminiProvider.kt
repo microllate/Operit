@@ -850,7 +850,8 @@ open class GeminiProvider(
                     }
 
                     PromptTurnKind.USER,
-                    PromptTurnKind.SUMMARY -> {
+                    PromptTurnKind.SUMMARY,
+                        PromptTurnKind.TASK_PLAN_RESULT -> {
                         val partsArray = JSONArray()
                         appendUnmatchedOpenFunctionResponses(partsArray, "user_boundary")
                         appendParts(partsArray, buildPartsArray(contentWithoutGeminiMeta))
