@@ -180,7 +180,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
                     present += normalized
                 }
             }
-            return lines.joinToString("\\n").trim()
+            return lines.joinToString("\n").trim()
         }
 
         val result = StringBuilder()
@@ -197,18 +197,18 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
                     present += normalized
                 }
             }
-            if (i > 0) result.append("\\n\\n")
-            result.append(lines.joinToString("\\n").trimEnd())
+            if (i > 0) result.append("\n\n")
+            result.append(lines.joinToString("\n").trimEnd())
         }
         return result.toString().trim()
     }
 
     /** Converts escaped and platform line endings into actual newline characters. */
     private fun normalizeLineBreaks(content: String): String =
-        content.replace("\\\\r\\\\n", "\\n")
-            .replace("\\\\n", "\\n")
-            .replace("\\r\\n", "\\n")
-            .replace("\\r", "\\n")
+        content.replace("\\r\\n", "\n")
+            .replace("\\n", "\n")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
     private suspend fun execute(
         toolName: String,
         parameters: List<ToolParameter>,
