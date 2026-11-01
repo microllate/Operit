@@ -54,9 +54,12 @@ object TaskPlanResultResolver {
             current = when (current) {
                 is JsonObject -> current[segment]
                     ?: throw IllegalArgumentException("Result path '$path' has no field '$segment'")
-                is JsonArray -> segment.toIntOrNull()?.let { index ->
-                    if (index in current.indices) current[index] else null
-                } ?: throw IllegalArgumentException("Result path '$path' has invalid array index '$segment'")
+                is JsonArray -> {
+                    val array = current
+                    val index = segment.toIntOrNull()
+                    if (index != null && index >= 0 && index < array.size) array[index]
+                    else throw IllegalArgumentException("Result path '$path' has invalid array index '$segment'")
+                }
                 else -> throw IllegalArgumentException("Result path '$path' cannot access '$segment'")
             }
         }
