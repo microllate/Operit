@@ -27,6 +27,18 @@ data class TaskPlan(
 object TaskPlanParser {
     const val MAX_TASKS = 64
 
+    private fun collectReferences(element: kotlinx.serialization.json.JsonElement): List<String> {
+        return when (element) {
+            is kotlinx.serialization.json.JsonObject -> {
+                val direct = (element["\$ref"] as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.takeIf { it.isString }?.content?.let(::listOf).orEmpty()
+                direct + element.values.flatMap(::collectReferences)
+            }
+            is kotlinx.serialization.json.JsonArray -> element.flatMap(::collectReferences)
+            else -> emptyList()
+        }
+    }
+
     fun parse(rawJson: String): TaskPlan {
         val root = try {
             Json.parseToJsonElement(rawJson).jsonObject
@@ -66,7 +78,7 @@ object TaskPlanParser {
                 throw IllegalArgumentException("Task '$id' depends_on must be an array", e)
             }
             require(deps.distinct().size == deps.size) { "Task '$id' contains duplicate dependencies" }
-            TaskPlanTask(id, tool, params, deps)
+            TaskPlanTask(id, tool, params, (deps + collectReferences(params)).distinct())
         }
 
         val byId = tasks.associateBy { it.taskId }
