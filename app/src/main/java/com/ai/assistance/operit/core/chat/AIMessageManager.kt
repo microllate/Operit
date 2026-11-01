@@ -1077,12 +1077,12 @@ object AIMessageManager {
                 AppLogger.e(TAG, "AI生成的总结内容为空，放弃本次总结")
                 null
             } else {
-                // 新摘要必须包含四个固定板块；结构不完整时拒绝覆盖旧摘要。
+                // 只校验设置中启用的板块；关闭的板块不应再被程序强制要求模型输出。
                 val useEnglish = !LocaleUtils.usesChineseContent(context)
                 val requiredSections = FunctionalPrompts.resolveSummarySections(
                     summaryConfig.sectionOverrides,
                     useEnglish
-                )
+                ).filter { it.enabled }
                 val missingSections = requiredSections.filter { section ->
                     val title = section.title.trim()
                     title.isNotBlank() &&
@@ -1101,8 +1101,7 @@ object AIMessageManager {
                 // Persist the cumulative first three sections before creating a new summary message.
                 // If persistence fails, reject this summary so the old history is not replaced.
                 if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                    // Locate all four sections first, so the third durable section
-                    // ends at the Next-Step section instead of absorbing it.
+                    // 按启用状态提取板块；下一步计划板块不写入累积历史文档。
                     val allSections = requiredSections.mapNotNull { section ->
                         val headerCandidates = listOf("【${section.title}】", "[${section.title}]")
                         val start = headerCandidates.map { summary.indexOf(it) }
@@ -1110,12 +1109,11 @@ object AIMessageManager {
                         start to section
                     }.sortedBy { it.first }
 
-                    val durableSections = allSections.take(3)
-                    if (allSections.size != 4 || durableSections.size != 3) {
-                        AppLogger.e(TAG, "无法从新摘要提取全部四个板块，拒绝保存")
+                    if (allSections.size != requiredSections.size) {
+                        AppLogger.e(TAG, "新摘要缺少已启用板块，拒绝保存")
                         return null
                     }
-
+                    val durableSections = allSections.filter { it.second.id != "key_info" }
                     val durableContent = durableSections.mapIndexed { index, entry ->
                         val start = entry.first
                         val end = allSections.getOrNull(index + 1)?.first ?: summary.length
@@ -1137,7 +1135,11 @@ object AIMessageManager {
 
                 // The chat context keeps only a compact pointer to the durable history document.
                 // The first three items are fixed notices; only the latest next-step strategy is dynamic.
-                val nextStepSection = requiredSections[3]
+                val nextStepSection = requiredSections.firstOrNull { it.id == "key_info" }
+                    ?: run {
+                        AppLogger.e(TAG, "下一步计划板块未启用，无法生成摘要接手提示")
+                        return null
+                    }
                 val nextStepHeaderCandidates = listOf(
                     "【${nextStepSection.title}】",
                     "[${nextStepSection.title}]"
