@@ -878,7 +878,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
                             chatId = currentChatId,
                             beforeTimestampExclusive = afterTimestamp,
                             upToTimestampInclusive = beforeTimestamp,
-                        ).filter { it.sender == "user" || it.sender == "ai" }
+                        )
 
                 if (messagesToSummarize.isEmpty()) {
                     uiStateDelegate.showToast(context.getString(R.string.chat_no_messages_to_summarize))
