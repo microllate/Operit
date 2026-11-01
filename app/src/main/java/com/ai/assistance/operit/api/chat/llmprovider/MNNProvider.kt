@@ -506,7 +506,8 @@ class MNNProvider(
                 when (turn.kind) {
                     PromptTurnKind.SYSTEM -> "system"
                     PromptTurnKind.USER,
-                    PromptTurnKind.SUMMARY,
+                        PromptTurnKind.SUMMARY,
+                        PromptTurnKind.TASK_PLAN_RESULT,
                     PromptTurnKind.TOOL_RESULT -> "user"
                     PromptTurnKind.ASSISTANT,
                     PromptTurnKind.TOOL_CALL -> "assistant"
