@@ -803,7 +803,13 @@ fun getJsToolsDefinition(): String {
                         }
                     }
                 },
-                shell: (command) => toolCall("execute_shell", { command }),
+                shell: (command, timeoutMs) => {
+                    const params = { command };
+                    if (timeoutMs !== undefined && timeoutMs !== null) {
+                        params.timeout_ms = String(timeoutMs);
+                    }
+                    return toolCall("execute_shell", params);
+                },
                 // 执行终端命令 - 一次性收集输出
                 terminal: {
                     create: (sessionName) => toolCall("create_terminal_session", { session_name: sessionName }),
