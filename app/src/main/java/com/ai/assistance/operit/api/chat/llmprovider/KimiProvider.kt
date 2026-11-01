@@ -276,7 +276,8 @@ open class KimiProvider(
                         }
 
                         PromptTurnKind.USER,
-                        PromptTurnKind.SUMMARY -> {
+                        PromptTurnKind.SUMMARY,
+                        PromptTurnKind.TASK_PLAN_RESULT -> {
                             flushOpenToolCallsAsUnmatched("user_boundary")
                             messagesArray.put(
                                 JSONObject().apply {
@@ -421,7 +422,8 @@ open class KimiProvider(
                         }
 
                         PromptTurnKind.USER,
-                        PromptTurnKind.SUMMARY -> {
+                        PromptTurnKind.SUMMARY,
+                        PromptTurnKind.TASK_PLAN_RESULT -> {
                             messagesArray.put(
                                 JSONObject().apply {
                                     put("role", "user")
