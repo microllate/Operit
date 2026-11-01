@@ -18,7 +18,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
     companion object {
         private const val TAG = "SummaryDocumentManager"
         private const val SUMMARY_DIRECTORY = ".operit/chat-summaries"
-        private const val SUMMARY_FILE_NAME = "历史摘要.md"
+        private const val SUMMARY_FILE_NAME = "上下文总结.md"
 
         @Volatile
         private var INSTANCE: ConversationSummaryDocumentManager? = null
