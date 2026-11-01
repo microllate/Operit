@@ -11,6 +11,7 @@ import com.ai.assistance.operit.api.chat.enhance.ConversationService
 import com.ai.assistance.operit.api.chat.enhance.FileBindingService
 import com.ai.assistance.operit.api.chat.enhance.MultiServiceManager
 import com.ai.assistance.operit.api.chat.enhance.ToolExecutionManager
+import com.ai.assistance.operit.api.chat.enhance.TaskPlanParser
 import com.ai.assistance.operit.api.chat.llmprovider.AIService
 import com.ai.assistance.operit.core.chat.logMessageTiming
 import com.ai.assistance.operit.core.chat.messageTimingNow
@@ -3012,9 +3013,28 @@ class EnhancedAIService private constructor(private val context: Context) {
                 useEnglish = isEnglish
             )
 
-            if (hookedTools.isEmpty()) {
+            if (hookedTools.isEmpty() && toolExposureMode == ToolExposureMode.CLI) {
                 AppLogger.d(TAG, "根据当前工具开关，未选择任何Tool Call工具")
                 return null
+            }
+
+            // Internal orchestration entry: it is not a real tool and is intercepted
+            // before ToolExecutionManager, so it never reaches AIToolHandler.
+            if (toolExposureMode != ToolExposureMode.CLI) {
+                hookedTools.add(
+                    ToolPrompt(
+                        name = "submit_task_plan",
+                        description = "Submit a complete batch of tool tasks for local dependency-aware execution. Use this instead of issuing many separate tool calls. The plan object contains tasks with task_id, tool_name, parameters, and depends_on.",
+                        parametersStructured = listOf(
+                            ToolParameterSchema(
+                                name = "plan",
+                                type = "object",
+                                description = "JSON task plan: {\\"tasks\\":[{\\"task_id\\":\\"t1\\",\\"tool_name\\":\\"list_files\\",\\"parameters\\":{},\\"depends_on\\":[]}]}",
+                                required = true
+                            )
+                        )
+                    )
+                )
             }
 
             AppLogger.d(
