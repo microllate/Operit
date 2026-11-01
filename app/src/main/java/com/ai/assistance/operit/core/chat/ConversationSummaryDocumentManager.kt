@@ -149,18 +149,14 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
     }
 
     /**
-     * Keeps historical records while preventing whole-document duplication.
-     *
-     * The summary document's canonical format uses the literal two-character
-     * sequence "\n" as its line separator. Normalize both legacy real newlines
-     * and already-canonical content to real newlines for merging, then serialize
-     * back to the canonical literal format.
+     * Merges cumulative summary sections while preserving omitted historical records.
+     * Both escaped "\\n" sequences and real line breaks are normalized to real newlines.
      */
     private fun mergeHistoricalRecords(previousContent: String, generatedContent: String): String {
-        val previous = normalizeToRealLineBreaks(previousContent)
-        val generated = normalizeToRealLineBreaks(generatedContent)
-        if (previous.isBlank()) return serializeCanonicalLineBreaks(generated)
-        if (generated.isBlank()) return serializeCanonicalLineBreaks(previous)
+        val previous = normalizeLineBreaks(previousContent)
+        val generated = normalizeLineBreaks(generatedContent)
+        if (previous.isBlank()) return generated
+        if (generated.isBlank()) return previous
 
         val headers = Regex("(?m)^[ \\t]*(?:【[^】]+】|\\[[^]]+])[ \\t]*$")
         val old = headers.findAll(previous).toList()
@@ -172,8 +168,8 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
             .replace(Regex("[\\s，。；：:、,.!！?？*_#]"), "")
             .lowercase()
 
-        // If section headings differ, retain the generated content and append
-        // only historical lines that are not already represented.
+        // If section headings differ, retain generated content and append only
+        // historical lines that are not already represented.
         if (old.size < 3 || fresh.size < 3) {
             val lines = generated.lines().toMutableList()
             val present = lines.map(::key).filter { it.isNotBlank() }.toMutableSet()
@@ -184,7 +180,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
                     present += normalized
                 }
             }
-            return serializeCanonicalLineBreaks(lines.joinToString("\n").trim())
+            return lines.joinToString("\\n").trim()
         }
 
         val result = StringBuilder()
@@ -201,24 +197,18 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
                     present += normalized
                 }
             }
-            if (i > 0) result.append("\n\n")
-            result.append(lines.joinToString("\n").trimEnd())
+            if (i > 0) result.append("\\n\\n")
+            result.append(lines.joinToString("\\n").trimEnd())
         }
-        return serializeCanonicalLineBreaks(result.toString().trim())
+        return result.toString().trim()
     }
 
-    /** Converts real and literal escaped line breaks to real newlines for parsing. */
-    private fun normalizeToRealLineBreaks(content: String): String =
-        content.replace("\\r\\n", "\n")
-            .replace("\\n", "\n")
-            .replace("\r\n", "\n")
-            .replace("\r", "\n")
-
-    /** Stores every summary using the established literal "\\n" separator. */
-    private fun serializeCanonicalLineBreaks(content: String): String =
-        content.replace("\r\n", "\n")
-            .replace("\r", "\n")
-            .replace("\n", "\\n")
+    /** Converts escaped and platform line endings into actual newline characters. */
+    private fun normalizeLineBreaks(content: String): String =
+        content.replace("\\\\r\\\\n", "\\n")
+            .replace("\\\\n", "\\n")
+            .replace("\\r\\n", "\\n")
+            .replace("\\r", "\\n")
     private suspend fun execute(
         toolName: String,
         parameters: List<ToolParameter>,
