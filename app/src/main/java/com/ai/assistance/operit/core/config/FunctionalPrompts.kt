@@ -219,7 +219,28 @@ object FunctionalPrompts {
         if (applicableOverrides.isNotEmpty()) {
             prompt = applySummarySectionOverrides(applicableOverrides, useEnglish)
         }
-        val integrityRules = if (useEnglish) "\n\n[Mandatory summary integrity rules]\nRegardless of custom section settings, use exactly four sections in this order: User Goals, Brief Task Process, Completed Items, Next Planned Task. The first three are cumulative history; the fourth is dynamic. Keep Brief Task Process limited to significant problems and diagnostic conclusions; keep Completed Items limited to final implemented deliverables. Do not duplicate the same information across these two sections. Inherit prior content before applying new evidence. Do not change goals unless the user explicitly does so. Preserve historical problem records and completed deliverables; require evidence for status changes and completion. Never turn assistant suggestions into user goals or plans/attempts into completed work." else "\n\n【摘要历史完整性强制规则】\n无论用户自定义摘要分段如何设置，都必须遵守以下规则：四个固定板块依次为“用户目标”“任务过程简要记录”“已完成事项”“下一步计划任务”；前三项是累积历史，第四项是动态状态。“任务过程简要记录”只记录关键问题及原因/处理结论；“已完成事项”只记录最终实际交付的修改或成果。两栏不得重复描述同一内容：问题排查和解决依据放在过程记录，最终做成的结果放在已完成事项。继承历史时也要保持这种分工。旧目标不得擅自改变，历史问题和完成成果不得无证据删除或改写。不得把模型建议写成用户目标，不得把计划/尝试写成完成。"
+        val configuredSections = resolveSummarySections(summaryConfig.sectionOverrides, useEnglish)
+        val enabledSections = configuredSections.filter { it.enabled }
+        val enabledSectionTitles = enabledSections.joinToString(if (useEnglish) ", " else "、") { it.title }
+        val integrityRules = if (useEnglish) {
+            """
+            
+            [Mandatory summary integrity rules]
+            Follow the configured section titles and section instructions above. Output only enabled sections, in this order: $enabledSectionTitles.
+            The user-configured instruction for each section is authoritative for that section; do not override it with conflicting generic rules.
+            Keep process records and completed deliverables distinct: record problems, causes, and troubleshooting conclusions in the process section; record final implemented changes and deliverables in the completed-items section. Do not duplicate the same information across sections.
+            Preserve historical information in enabled cumulative sections and update it only when recent evidence supports a change. The next-step section is dynamic and should contain only the current priority. Never turn assistant suggestions into user goals or plans/attempts into completed work.
+            """.trimIndent()
+        } else {
+            """
+            
+            【摘要历史完整性强制规则】
+            必须遵循上方实际配置的板块标题和板块说明；只输出已启用的板块，并严格按以下顺序排列：$enabledSectionTitles。
+            每个板块以设置中填写的说明为准，不得再用与用户自定义说明冲突的通用规则覆盖。
+            过程记录与完成成果必须分开：问题、原因和排查结论放在过程记录板块；最终实际完成的修改和交付成果放在已完成事项板块。同一信息不得在不同板块重复记录。
+            对启用的累积历史板块保留旧内容，只根据新证据更新；下一步计划板块只保留当前最优先行动。不得把模型建议写成用户目标，不得把计划或尝试写成已完成事项。
+            """.trimIndent()
+        }
         prompt += "\n\n" + integrityRules
         val promptWithPreviousSummary = appendPreviousSummary(prompt, previousSummary, useEnglish)
         return summaryConfig.globalRules?.trim()?.takeIf { it.isNotBlank() }?.let { rules ->
