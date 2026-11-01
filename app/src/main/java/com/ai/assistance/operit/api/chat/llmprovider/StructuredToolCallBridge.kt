@@ -352,7 +352,8 @@ internal object StructuredToolCallBridge {
                 }
 
                 PromptTurnKind.USER,
-                PromptTurnKind.SUMMARY -> {
+                PromptTurnKind.SUMMARY,
+                PromptTurnKind.TASK_PLAN_RESULT -> {
                     flushOpenToolCallsAsUnmatched("user_boundary")
                     messagesArray.put(
                         JSONObject().apply {
