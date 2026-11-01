@@ -12,6 +12,8 @@ import com.ai.assistance.operit.api.chat.enhance.FileBindingService
 import com.ai.assistance.operit.api.chat.enhance.MultiServiceManager
 import com.ai.assistance.operit.api.chat.enhance.ToolExecutionManager
 import com.ai.assistance.operit.api.chat.enhance.TaskPlanParser
+import com.ai.assistance.operit.api.chat.enhance.TaskPlanResultResolver
+import com.ai.assistance.operit.api.chat.enhance.ToolExecutionBatch
 import com.ai.assistance.operit.api.chat.llmprovider.AIService
 import com.ai.assistance.operit.core.chat.logMessageTiming
 import com.ai.assistance.operit.core.chat.messageTimingNow
@@ -3099,7 +3101,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                 functionType = functionType,
                 promptFunctionType = promptFunctionType,
                 useEnglish = isEnglish
-            )
+            ).toMutableList()
 
             if (hookedTools.isEmpty() && toolExposureMode == ToolExposureMode.CLI) {
                 AppLogger.d(TAG, "根据当前工具开关，未选择任何Tool Call工具")
