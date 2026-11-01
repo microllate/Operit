@@ -16,99 +16,51 @@ object FunctionalPrompts {
      * Prompt for the AI to generate a comprehensive and structured summary of a conversation.
      */
     const val SUMMARY_PROMPT = """
-        你是负责维护长期对话摘要的AI助手。你必须将上一次摘要视为历史事实账本，将最近对话视为增量信息。输出一份完整、可独立使用的最新摘要；不得因重新组织文字而丢失历史记录。
+        你是负责生成和维护长期对话摘要的AI助手。请根据对话内容和上一次摘要，生成最新、完整、可独立使用的摘要。
 
-        **必须严格遵循以下固定格式输出，不得更改格式结构：**
+        **必须遵循以下结构：**
 
         ==========对话摘要==========
 
         【用户目标】
-        [记录用户明确提出的最终目标、原始要求、禁止事项和验收条件。除非用户明确修改目标，否则必须逐次继承，不得自行推断、扩展或改写目标。]
 
         【任务过程简要记录】
-        [只记录任务中遇到的关键问题及其排查结论：错误、异常现象、复现条件、未解决原因或验证结论。重点回答“遇到什么问题、查明什么原因、问题状态如何”。不要记录正常执行步骤、工具调用流水或已完成的功能/修改；具体产出只放在“已完成事项”中。]
 
         【已完成事项】
-        [只记录最终实际交付的结果：完成了哪些修改/功能/文件产出，以及必要的提交或验证状态。重点回答“最终做成了什么”。不要重复问题排查过程、错误原因和解决步骤；这些只放在“任务过程简要记录”中。不得把计划或尝试标记为完成。]
 
         【下一步计划任务】
-        [根据最新对话动态更新当前最合理的下一步行动、前置条件、阻塞项和验收标准。此部分只表达当前策略，不要求保留过时策略。]
 
-        增量继承规则（优先级高于一般摘要压缩要求）：
-        - 用户目标：默认原样继承旧摘要。只有用户明确提出修改、增加或撤销目标时才更新，并记录变更内容；不得把模型建议当作用户目标。
-        - 过程记录：只保留关键问题、原因分析和处理/验证结论；同一问题持续跟进时更新原条目，不重复记录每次排查步骤。已完成的修改或交付物不得在此复述。
-        - 已完成事项：只保留有执行证据的最终成果。新成果只有在对话或工具结果明确证明已执行时才能追加；可补充验证状态。不要把过程中的尝试、问题分析或解决步骤重复写入此栏。
-        - 下一步策略：每次只选择一个最优先、可立即执行的动作；旧策略全部替换，不得把多个待办事项并列保留。必要时只补充一个验收条件。
-        - 可以合并完全重复的描述，但不得合并掉独立错误、独立成果或其证据；不得为缩短摘要而删除历史事实。
-        - 如果无法确认某项是否完成或某错误是否解决，保留原记录并标注“待验证”。
-        - 只保留继续任务必需的背景，删除闲聊和无关互动。
-
-        ============================
-
-        **格式要求：**
-        1. 必须使用上述固定格式，包括分隔线、标题标识符【】、列表符号等，不得更改。
-        2. 标题"对话摘要"必须放在第一行，前后用等号分隔。
-        3. 每个部分必须使用【】标识符作为标题，标题后换行。
-        4. 四个栏目均使用简短列表；没有记录的栏目写“无”；方括号内的说明只是示例，实际输出不得照抄。
-        5. 所有工程记录条目使用清晰的列表格式，便于后续模型恢复任务.
-        6. 结尾使用等号分隔线.
-
-        **内容要求：**
-        1. 语言风格：专业、清晰、客观，使用短句，不写叙事性过程回顾.
-        2. 页面摘要必须高度精简：四个固定栏目不得增删。用户目标用1句话；错误栏目每个独立错误最多1条短句；完成栏目每个独立成果最多1条短句；下一步策略只写1条最优先行动。每条原则上不超过40个汉字，整个摘要原则上控制在300字以内.
-        3. 历史完整性通过“短句化”保证，不通过删除事实保证：前三个栏目保留所有独立目标、错误和成果，但必须压缩表达；同一事项的新进展合并到原条目，不重复叙述排查过程、工具调用、日志和代码细节.
-        4. 只保留恢复任务所必需的信息。除非文件路径、提交号、关键参数或验证结果是下一步不可缺少的依据，否则不要列出；不引用大段输出、不粘贴代码、不复述完整执行过程.
-        5. 下一步策略只允许一个明确动作，可附带一个必要的验收条件；不得列出多个备选方案或重复历史背景.
-        6. 先处理最新对话中的进展，再继承旧记录。若新证据改变旧状态，只更新对应短句；没有新证据的旧记录保持原意.
-        7. 不要在四个栏目之外追加工具包介绍、执行日志、对话回顾或其他附录.
+        **通用规则：**
+        1. 每个板块具体记录什么、记录范围、筛选标准和表达方式，完全以本次请求中对应板块的设置说明为准；不得自行添加、推断或覆盖板块细则。
+        2. 设置中关闭的板块不得输出；启用的板块必须按设置顺序输出，并使用设置中的标题。
+        3. 继承上一次摘要中的历史信息。只有新对话提供了明确证据时，才更新或补充对应信息；不得无依据删除或改写历史内容。
+        4. 不得将没有执行的计划、建议或尝试描述为已完成事实。
+        5. 使用简洁、客观、清晰的表达，不输出设置说明之外的附加栏目或解释。
+        6. 空板块按对应设置说明处理；设置说明没有规定时，写“无”。
     """
 
     const val SUMMARY_PROMPT_EN = """
-        You maintain a durable conversation summary. Treat the previous summary as a historical ledger and the recent conversation as incremental evidence. Produce a complete, self-contained updated summary without dropping historical records merely to rewrite or shorten the wording.
+        You generate and maintain durable conversation summaries. Use the conversation and previous summary to produce an up-to-date, complete, self-contained summary.
 
-        **You MUST follow the fixed output format below strictly. Do NOT change the structure.**
+        **Required structure:**
 
         ==========Conversation Summary==========
 
         [User Goals]
-        [Record the user's explicit goals, original requirements, prohibitions, and acceptance criteria. Inherit them unchanged unless the user explicitly changes them.]
 
         [Brief Task Process]
-        [Record only significant problems and their diagnostic conclusions: errors, symptoms, reproduction conditions, root causes, and resolution/verification status. Focus on what went wrong and what was established. Exclude routine execution steps, tool-call logs, and delivered changes; those belong in Completed Items.]
 
         [Completed Items]
-        [Record only final deliverables actually implemented: what was changed or produced, plus essential commit or verification status. Focus on what was ultimately done. Do not repeat troubleshooting, root-cause analysis, or resolution steps from Brief Task Process.]
 
         [Next Planned Task]
-        [Refresh the current next actions, prerequisites, blockers, and acceptance criteria based on the latest conversation. This section is the current strategy; obsolete strategies need not be retained.]
 
-        Incremental inheritance rules (higher priority than ordinary summarization/compression):
-        - User goals: inherit the previous goals unchanged by default. Update only when the user explicitly changes, adds, or withdraws a goal. Never treat an assistant suggestion as a user goal.
-        - Brief task process: retain significant problems and diagnostic conclusions. Update the existing item as evidence changes; do not repeat routine investigation steps. Do not duplicate delivered changes recorded under Completed Items.
-        - Completed items: retain final deliverables with execution evidence. Add only implemented results; do not repeat the problem, diagnosis, or troubleshooting already recorded under Brief Task Process.
-        - Next-step strategy: select exactly one highest-priority actionable item and replace all previous next steps. Add at most one acceptance condition; never list multiple parallel tasks.
-        - Merge only truly duplicate descriptions; do not merge away distinct errors, completed items, or evidence. Never delete historical facts merely to shorten the summary.
-        - If resolution or completion cannot be verified, preserve the record and mark it unverified.
-        - Omit small talk and irrelevant interaction.
-
-        =======================================
-
-        **Formatting requirements:**
-        1. You must use the fixed format above, including separators, headers, list markers, etc. Do not change them.
-        2. The title "Conversation Summary" must be on the first line, surrounded by '='.
-        3. Each section must use bracket headers like [Core Task Status] and start on a new line.
-        4. Use concise lists in all four sections. Write “None” for an empty section. Bracketed descriptions are placeholders and must not be copied.
-        5. Use clear lists for engineering records and next actions.
-        6. End with the separator line.
-
-        **Content requirements:**
-        1. Style: professional, clear, objective, and terse. Use short factual sentences; do not narrate the conversation.
-        2. Keep the visible summary compact: retain exactly four sections. User Goals: one sentence. Errors: at most one short sentence per distinct error. Completed Work: at most one short sentence per distinct deliverable. Next-Step Strategy: exactly one highest-priority action. Each item should normally stay within 25 words; target 200 words total.
-        3. Preserve history by compressing wording, not by deleting facts. Keep every distinct goal, error, and completed item in the first three sections. Merge new status/evidence into its existing item instead of repeating the investigation, tool calls, logs, or code details.
-        4. Include only information required to resume the task. Omit file paths, commit IDs, parameters, and verification details unless they are essential to the next action. Never paste code, long outputs, or a chronological work log.
-        5. The next-step section may contain only one explicit action and, if necessary, one acceptance condition. Do not list alternatives or repeat historical context.
-        6. Process the latest progress first, then inherit prior records. Update an old item only when new evidence supports the change; otherwise preserve its meaning.
-        7. Do not append package descriptions, execution logs, conversation reviews, or any content outside the four sections.
+        **General rules:**
+        1. The content scope, selection criteria, and writing instructions for each section are determined entirely by that section's instructions supplied in the current request. Do not invent, infer, or override section-specific rules.
+        2. Do not output disabled sections. Output enabled sections in the configured order and use their configured titles.
+        3. Inherit historical information from the previous summary. Update or add information only when supported by clear evidence in the recent conversation; do not delete or rewrite history without evidence.
+        4. Never describe an unexecuted plan, suggestion, or attempt as completed work.
+        5. Be concise, objective, and clear. Do not add sections or explanations beyond those configured.
+        6. Handle empty sections according to their configured instructions; if unspecified, write "None".
     """
 
     fun summaryPrompt(useEnglish: Boolean): String {
@@ -225,20 +177,16 @@ object FunctionalPrompts {
         val integrityRules = if (useEnglish) {
             """
             
-            [Mandatory summary integrity rules]
-            Follow the configured section titles and section instructions above. Output only enabled sections, in this order: $enabledSectionTitles.
-            The user-configured instruction for each section is authoritative for that section; do not override it with conflicting generic rules.
-            Keep process records and completed deliverables distinct: record problems, causes, and troubleshooting conclusions in the process section; record final implemented changes and deliverables in the completed-items section. Do not duplicate the same information across sections.
-            Preserve historical information in enabled cumulative sections and update it only when recent evidence supports a change. The next-step section is dynamic and should contain only the current priority. Never turn assistant suggestions into user goals or plans/attempts into completed work.
+            [Configuration enforcement]
+            Follow the configured section titles, order, enabled states, and section-specific instructions above. The configured instructions are the sole authority for section-specific content requirements.
+            Preserve previous summary information unless recent conversation evidence justifies changing it. Do not invent facts or present unexecuted work as completed.
             """.trimIndent()
         } else {
             """
             
-            【摘要历史完整性强制规则】
-            必须遵循上方实际配置的板块标题和板块说明；只输出已启用的板块，并严格按以下顺序排列：$enabledSectionTitles。
-            每个板块以设置中填写的说明为准，不得再用与用户自定义说明冲突的通用规则覆盖。
-            过程记录与完成成果必须分开：问题、原因和排查结论放在过程记录板块；最终实际完成的修改和交付成果放在已完成事项板块。同一信息不得在不同板块重复记录。
-            对启用的累积历史板块保留旧内容，只根据新证据更新；下一步计划板块只保留当前最优先行动。不得把模型建议写成用户目标，不得把计划或尝试写成已完成事项。
+            【设置规则优先级】
+            严格遵循设置中实际配置的板块标题、顺序、启用状态和各板块说明。每个板块的具体内容要求只以对应的设置说明为准。
+            除非最新对话提供了修改依据，否则保留上一次摘要中的历史信息。不得编造事实，不得将未执行的工作描述为已完成。
             """.trimIndent()
         }
         prompt += "\n\n" + integrityRules
