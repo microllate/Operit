@@ -209,16 +209,15 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
 
     /** Converts real and literal escaped line breaks to real newlines for parsing. */
     private fun normalizeToRealLineBreaks(content: String): String =
-        content
-            .replace("\\\\r\\\\n", "\n")
-            .replace("\\\\n", "\n")
-            .replace("\\r\\n", "\n")
-            .replace("\\r", "\n")
+        content.replace("\\r\\n", "\n")
+            .replace("\\n", "\n")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
 
     /** Stores every summary using the established literal "\\n" separator. */
     private fun serializeCanonicalLineBreaks(content: String): String =
-        content.replace("\\r\\n", "\n")
-            .replace("\\r", "\n")
+        content.replace("\r\n", "\n")
+            .replace("\r", "\n")
             .replace("\n", "\\\\n")
     private suspend fun execute(
         toolName: String,
