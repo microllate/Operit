@@ -1136,29 +1136,23 @@ object AIMessageManager {
                 // The chat context keeps only a compact pointer to the durable history document.
                 // The first three items are fixed notices; only the latest next-step strategy is dynamic.
                 val nextStepSection = requiredSections.firstOrNull { it.id == "key_info" }
-                    ?: run {
-                        AppLogger.e(TAG, "下一步计划板块未启用，无法生成摘要接手提示")
-                        return null
-                    }
-                val nextStepHeaderCandidates = listOf(
-                    "【${nextStepSection.title}】",
-                    "[${nextStepSection.title}]"
-                )
-                val nextStepHeader = nextStepHeaderCandidates
-                    .firstOrNull { summary.contains(it) }
-                    ?: run {
-                        AppLogger.e(TAG, "无法提取摘要中的下一步策略，拒绝插入摘要")
-                        return null
-                    }
-                val nextStepStart = summary.indexOf(nextStepHeader) + nextStepHeader.length
-                val nextStepStrategy = summary.substring(nextStepStart)
-                    .trim()
-                    .trimStart(':', '：', '-', '—', '*', ' ')
-                    .lineSequence()
-                    .map { it.trim().removePrefix("-").removePrefix("•").trim() }
-                    .filter { it.isNotBlank() && !it.startsWith("=") }
-                    .joinToString(" ")
-                    .ifBlank { "无" }
+                val nextStepStrategy = nextStepSection?.let { section ->
+                    val headerCandidates = listOf("【${section.title}】", "[${section.title}]")
+                    val header = headerCandidates.firstOrNull { summary.contains(it) }
+                        ?: run {
+                            AppLogger.e(TAG, "无法提取摘要中的下一步计划板块，拒绝插入摘要")
+                            return null
+                        }
+                    val bodyStart = summary.indexOf(header) + header.length
+                    summary.substring(bodyStart)
+                        .trim()
+                        .trimStart(':', '：', '-', '—', '*', ' ')
+                        .lineSequence()
+                        .map { it.trim().removePrefix("-").removePrefix("•").trim() }
+                        .filter { it.isNotBlank() && !it.startsWith("=") }
+                        .joinToString(" ")
+                        .ifBlank { "无" }
+                } ?: "无"
 
                 val summaryWithQuotes = buildString {
                     appendLine("上下文总结包含：用户目标，任务过程简要记录，已完成事项，位于.operit/chat-summaries/${chatId}/上下文总结.md。")
