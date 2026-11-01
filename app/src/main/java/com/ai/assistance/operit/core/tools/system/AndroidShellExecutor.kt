@@ -84,6 +84,14 @@ class AndroidShellExecutor {
         }
 
         suspend fun executeShellCommand(command: String, identityOverride: ShellIdentity?): CommandResult {
+            return executeShellCommand(command, identityOverride, 15000L)
+        }
+
+        suspend fun executeShellCommand(
+            command: String,
+            identityOverride: ShellIdentity?,
+            timeoutMs: Long
+        ): CommandResult {
             val ctx = context ?: return CommandResult(false, "", "Context not initialized")
 
             // 如果调用方显式指定了身份，就直接向下传递；否则使用默认身份
@@ -97,7 +105,7 @@ class AndroidShellExecutor {
             val executorAvailable = preferredExecutor.isAvailable()
 
             if (executorAvailable && permStatus.granted) {
-                val result = preferredExecutor.executeCommand(command, identity)
+                val result = preferredExecutor.executeCommandWithTimeout(command, identity, timeoutMs)
                 return CommandResult(result.success, result.stdout, result.stderr, result.exitCode)
             }
 
