@@ -2131,9 +2131,19 @@ class EnhancedAIService private constructor(private val context: Context) {
                 val plan = TaskPlanParser.parse(planRaw)
                 val allResults = mutableListOf<ToolResult>()
                 val messages = mutableListOf<String>()
+                val failedTaskIds = mutableSetOf<String>()
                 for ((batchIndex, batch) in plan.executionBatches.withIndex()) {
                     if (!context.isConversationActive.get()) break
-                    val invocations = batch.map { task ->
+                    val runnableTasks = batch.filter { task ->
+                        val blockedBy = task.dependsOn.filter { it in failedTaskIds }
+                        if (blockedBy.isNotEmpty()) {
+                            messages += "Task '${task.taskId}' skipped because dependency failed: ${blockedBy.joinToString(", ")}"
+                            failedTaskIds += task.taskId
+                            false
+                        } else true
+                    }
+                    if (runnableTasks.isEmpty()) continue
+                    val invocations = runnableTasks.map { task ->
                         val parameters = task.parameters.map { (name, value) ->
                             com.ai.assistance.operit.data.model.ToolParameter(
                                 name = name,
@@ -2163,9 +2173,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                         callerCardId = roleCardId
                     )
                     allResults += batchResult.results
+                    runnableTasks.zip(batchResult.results).forEach { (task, result) ->
+                        if (!result.success) failedTaskIds += task.taskId
+                    }
                     if (batchResult.message.isNotBlank()) messages += batchResult.message
                 }
-                ToolExecutionBatch(allResults, messages.joinToString("\\n"))
+                ToolExecutionBatch(allResults, messages.joinToString("\n"))
             } else {
                 ToolExecutionManager.executeInvocations(
                     invocations = toolInvocations,
