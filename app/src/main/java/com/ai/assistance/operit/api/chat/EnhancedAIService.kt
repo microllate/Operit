@@ -2224,6 +2224,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     characterName, avatarUri, roleCardId, chatId, onToolInvocation, notifyReplyOverride,
                     chatModelConfigIdOverride, chatModelIndexOverride, memorySpaceIdOverride, stream, enableGroupOrchestrationHint,
                     toolResultMessageOverride = toolBatch.message,
+                    isTaskPlanResult = planInvocations.isNotEmpty(),
                     disableWarning = disableWarning
                 )
             } else if (!toolResultOverrideMessage.isNullOrEmpty()) {
@@ -2301,6 +2302,7 @@ class EnhancedAIService private constructor(private val context: Context) {
             stream: Boolean = true,
             enableGroupOrchestrationHint: Boolean = false,
             toolResultMessageOverride: String? = null,
+            isTaskPlanResult: Boolean = false,
             disableWarning: Boolean = false
     ) {
         val startTime = messageTimingNow()
@@ -2335,7 +2337,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         // Add tool result to conversation history
         context.conversationHistory.add(
             PromptTurn(
-                kind = PromptTurnKind.TOOL_RESULT,
+                kind = if (isTaskPlanResult) PromptTurnKind.TASK_PLAN_RESULT else PromptTurnKind.TOOL_RESULT,
                 content = toolResultMessage,
                 toolName = toolNames.ifBlank { null }
             )
