@@ -897,7 +897,8 @@ open class ClaudeProvider(
                     }
 
                     PromptTurnKind.USER,
-                    PromptTurnKind.SUMMARY -> {
+                    PromptTurnKind.SUMMARY,
+                        PromptTurnKind.TASK_PLAN_RESULT -> {
                         val contentArray = JSONArray()
                         appendUnmatchedOpenToolUses(contentArray, "user_boundary")
                         appendContentBlocks(
