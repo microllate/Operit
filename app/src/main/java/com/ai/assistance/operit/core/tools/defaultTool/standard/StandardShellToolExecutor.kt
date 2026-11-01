@@ -36,7 +36,7 @@ open class StandardShellToolExecutor(private val context: Context) {
         }
 
         val command = tool.parameters.find { it.name == "command" }?.value ?: ""
-        val requestedTimeout = tool.parameters.find { it.name == "timeoutMs" }?.value
+        val requestedTimeout = tool.parameters.find { it.name == "timeout_ms" || it.name == "timeoutMs" }?.value
             ?.toLongOrNull() ?: DEFAULT_TIMEOUT
         val timeoutMs = requestedTimeout.coerceIn(3000L, MAX_TIMEOUT)
 
