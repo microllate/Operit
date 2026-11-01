@@ -29,7 +29,7 @@ object TaskPlanResultResolver {
     ): JsonElement {
         if (element is JsonObject && element.containsKey("\$ref")) {
             val taskId = (element["\$ref"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-                ?: throw IllegalArgumentException("Task result reference must contain a string \\$ref")
+                ?: throw IllegalArgumentException("Task result reference must contain a string reference key")
             val result = resultsByTaskId[taskId]
                 ?: throw IllegalArgumentException("Task result '$taskId' is unavailable")
             require(result.success) { "Task result '$taskId' is not successful: ${result.error.orEmpty()}" }
