@@ -171,9 +171,10 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         // If section headings differ, retain generated content and append only
         // historical lines that are not already represented.
         if (old.size < 3 || fresh.size < 3) {
-            val lines = generated.lines().toMutableList()
+            // Preserve chronology: existing records first, newly generated records last.
+            val lines = previous.lines().toMutableList()
             val present = lines.map(::key).filter { it.isNotBlank() }.toMutableSet()
-            previous.lines().forEach { line ->
+            generated.lines().forEach { line ->
                 val normalized = key(line)
                 if (normalized.isNotBlank() && normalized !in present) {
                     lines += line
@@ -187,10 +188,12 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         for (i in 0 until 3) {
             val newEnd = fresh.getOrNull(i + 1)?.range?.first ?: generated.length
             val oldEnd = old.getOrNull(i + 1)?.range?.first ?: previous.length
-            val lines = generated.substring(fresh[i].range.first, newEnd)
+            // Start with the existing section body, then append only new records.
+            // This keeps the document in chronological order (oldest to newest).
+            val lines = previous.substring(old[i].range.first, oldEnd)
                 .trimEnd().lines().toMutableList()
             val present = lines.map(::key).filter { it.isNotBlank() }.toMutableSet()
-            previous.substring(old[i].range.last + 1, oldEnd).lines().forEach { line ->
+            generated.substring(fresh[i].range.last + 1, newEnd).lines().forEach { line ->
                 val normalized = key(line)
                 if (normalized.isNotBlank() && normalized !in present) {
                     lines += line
