@@ -148,33 +148,56 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         }
     }
 
-    /** Keeps historical records in the first three cumulative sections. */
+    /** Keeps historical records while preventing whole-document duplication. */
     private fun mergeHistoricalRecords(previousContent: String, generatedContent: String): String {
         if (previousContent.isBlank()) return generatedContent
-        val headers = Regex("(?m)^\\s*(?:【[^】]+】|\\[[^]]+])\\s*$")
+        if (generatedContent.isBlank()) return previousContent
+
+        val headers = Regex("(?m)^[ \t]*(?:【[^】]+】|\\[[^]]+])[ \t]*$")
         val old = headers.findAll(previousContent).toList()
         val fresh = headers.findAll(generatedContent).toList()
+
+        fun key(line: String): String = line
+            .trim()
+            .removePrefix("-").removePrefix("•").removePrefix("*")
+            .replace(Regex("[\\s，。；：:、,.!！?？*_#]"), "")
+            .lowercase()
+
+        // When section formats differ, merge missing lines rather than appending
+        // the entire previous document and duplicating all historical sections.
         if (old.size < 3 || fresh.size < 3) {
-            return if (generatedContent.contains(previousContent.trim())) generatedContent
-            else "$generatedContent\\n\\n${previousContent.trim()}"
+            val lines = generatedContent.replace("\\n", "\n").lines().toMutableList()
+            val present = lines.map(::key).filter { it.isNotBlank() }.toMutableSet()
+            previousContent.replace("\\n", "\n").lines().forEach { line ->
+                val normalized = key(line)
+                if (normalized.isNotBlank() && normalized !in present) {
+                    lines += line
+                    present += normalized
+                }
+            }
+            return lines.joinToString("\n").trim()
         }
-        fun key(line: String) = line.trim().removePrefix("-").removePrefix("•").removePrefix("*")
-            .replace(Regex("[\\s，。；：:、,.!！?？]"), "").lowercase()
+
         val result = StringBuilder()
         for (i in 0 until 3) {
             val newEnd = fresh.getOrNull(i + 1)?.range?.first ?: generatedContent.length
             val oldEnd = old.getOrNull(i + 1)?.range?.first ?: previousContent.length
-            val lines = generatedContent.substring(fresh[i].range.first, newEnd).trimEnd().lines().toMutableList()
-            val present = lines.map { key(it) }.filter { it.isNotBlank() && it != "无" && it != "none" }.toMutableSet()
-            val missing = previousContent.substring(old[i].range.last + 1, oldEnd).lines().filter {
-                val k = key(it); k.isNotBlank() && k != "无" && k != "none" && k !in present
+            val lines = generatedContent.substring(fresh[i].range.first, newEnd)
+                .trimEnd().lines().toMutableList()
+            val present = lines.map(::key).filter { it.isNotBlank() }.toMutableSet()
+            previousContent.substring(old[i].range.last + 1, oldEnd).lines().forEach { line ->
+                val normalized = key(line)
+                if (normalized.isNotBlank() && normalized !in present) {
+                    lines += line
+                    present += normalized
+                }
             }
-            lines += missing
-            if (i > 0) result.append("\\n\\n")
-            result.append(lines.joinToString("\\n").trimEnd())
+            if (i > 0) result.append("\n\n")
+            result.append(lines.joinToString("\n").trimEnd())
         }
         return result.toString().trim()
     }
+
     private suspend fun execute(
         toolName: String,
         parameters: List<ToolParameter>,
