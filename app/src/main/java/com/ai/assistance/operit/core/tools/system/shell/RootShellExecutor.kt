@@ -307,9 +307,10 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
         val stderr = StringBuilder()
         try {
             AppLogger.d(TAG, "使用exec执行Root命令(timeout=\${timeoutMs.coerceIn(3000L, 120000L)}ms): $command")
-            process = Runtime.getRuntime().exec(buildSuExecCommand(command))
+            val runningProcess = Runtime.getRuntime().exec(buildSuExecCommand(command))
+            process = runningProcess
             val stdoutJob = launch(Dispatchers.IO) {
-                BufferedReader(InputStreamReader(process!!.inputStream)).use { reader ->
+                BufferedReader(InputStreamReader(runningProcess.inputStream)).use { reader ->
                     while (true) {
                         val line = reader.readLine() ?: break
                         synchronized(stdout) { stdout.append(line).append("\\n") }
@@ -317,7 +318,7 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
                 }
             }
             val stderrJob = launch(Dispatchers.IO) {
-                BufferedReader(InputStreamReader(process!!.errorStream)).use { reader ->
+                BufferedReader(InputStreamReader(runningProcess.errorStream)).use { reader ->
                     while (true) {
                         val line = reader.readLine() ?: break
                         synchronized(stderr) { stderr.append(line).append("\\n") }
@@ -325,11 +326,11 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
                 }
             }
             val effectiveTimeout = timeoutMs.coerceIn(3000L, 120000L)
-            val completed = process.waitFor(effectiveTimeout, TimeUnit.MILLISECONDS)
+            val completed = runningProcess.waitFor(effectiveTimeout, TimeUnit.MILLISECONDS)
             if (!completed) {
-                process.destroy()
-                if (process.isAlive) process.destroyForcibly()
-                process.waitFor(1000L, TimeUnit.MILLISECONDS)
+                runningProcess.destroy()
+                if (runningProcess.isAlive) runningProcess.destroyForcibly()
+                runningProcess.waitFor(1000L, TimeUnit.MILLISECONDS)
                 stdoutJob.cancel()
                 stderrJob.cancel()
                 return@withContext ShellExecutor.CommandResult(
@@ -341,7 +342,7 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
             }
             stdoutJob.join()
             stderrJob.join()
-            val exitCode = process.exitValue()
+            val exitCode = runningProcess.exitValue()
             ShellExecutor.CommandResult(exitCode == 0, stdout.toString().trimEnd(), stderr.toString().trimEnd(), exitCode)
         } catch (e: Exception) {
             process?.let { runCatching { it.destroyForcibly() } }
