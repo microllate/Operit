@@ -30,6 +30,8 @@ object FunctionalPrompts {
 
         【下一步计划任务】
 
+        ============================
+
         **通用规则：**
         1. 每个板块具体记录什么、记录范围、筛选标准和表达方式，完全以本次请求中对应板块的设置说明为准；不得自行添加、推断或覆盖板块细则。
         2. 设置中关闭的板块不得输出；启用的板块必须按设置顺序输出，并使用设置中的标题。
@@ -53,6 +55,8 @@ object FunctionalPrompts {
         [Completed Items]
 
         [Next Planned Task]
+
+        =======================================
 
         **General rules:**
         1. The content scope, selection criteria, and writing instructions for each section are determined entirely by that section's instructions supplied in the current request. Do not invent, infer, or override section-specific rules.
