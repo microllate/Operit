@@ -6,7 +6,8 @@ enum class PromptTurnKind {
     ASSISTANT,
     TOOL_CALL,
     TOOL_RESULT,
-    SUMMARY;
+    SUMMARY,
+    TASK_PLAN_RESULT;
 
     companion object {
         fun fromRole(role: String): PromptTurnKind {
@@ -17,6 +18,7 @@ enum class PromptTurnKind {
                 "tool", "tool_result" -> TOOL_RESULT
                 "tool_call", "tool_use" -> TOOL_CALL
                 "summary" -> SUMMARY
+                "task_plan_result" -> TASK_PLAN_RESULT
                 else -> USER
             }
         }
@@ -38,6 +40,7 @@ data class PromptTurn(
                 PromptTurnKind.TOOL_CALL -> "tool_call"
                 PromptTurnKind.TOOL_RESULT -> "tool_result"
                 PromptTurnKind.SUMMARY -> "summary"
+                PromptTurnKind.TASK_PLAN_RESULT -> "task_plan_result"
             }
 
     companion object {
