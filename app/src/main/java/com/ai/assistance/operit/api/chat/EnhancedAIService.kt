@@ -3117,7 +3117,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                             ToolParameterSchema(
                                 name = "plan",
                                 type = "object",
-                                description = "JSON task plan: {\\"tasks\\":[{\\"task_id\\":\\"t1\\",\\"tool_name\\":\\"list_files\\",\\"parameters\\":{},\\"depends_on\\":[]}]}",
+                                description = """JSON task plan: {"tasks":[{"task_id":"t1","tool_name":"list_files","parameters":{},"depends_on":[]}]}""",
                                 required = true
                             )
                         )
