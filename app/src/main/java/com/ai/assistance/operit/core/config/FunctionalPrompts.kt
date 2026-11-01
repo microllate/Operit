@@ -25,13 +25,13 @@ object FunctionalPrompts {
         【用户目标】
         [记录用户明确提出的最终目标、原始要求、禁止事项和验收条件。除非用户明确修改目标，否则必须逐次继承，不得自行推断、扩展或改写目标。]
 
-        【模型执行过程出现的错误】
+        【任务过程简要记录】
         [持续记录项目过程中出现的错误、复现条件、错误信息、尝试过的解决方案及结果。旧错误不得删除；状态可更新为未解决、已解决或待验证，并保留解决依据。]
 
-        【模型已完成的项目】
+        【已完成事项】
         [持续记录已经实际执行并完成的工作、具体产出、文件路径、分支/提交信息及验证证据。不得把计划或尝试标记为完成；旧完成事项不得因摘要更新而丢失。]
 
-        【下一步策略】
+        【下一步计划任务】
         [根据最新对话动态更新当前最合理的下一步行动、前置条件、阻塞项和验收标准。此部分只表达当前策略，不要求保留过时策略。]
 
         增量继承规则（优先级高于一般摘要压缩要求）：
@@ -73,13 +73,13 @@ object FunctionalPrompts {
         [User Goals]
         [Record the user's explicit goals, original requirements, prohibitions, and acceptance criteria. Inherit them unchanged unless the user explicitly changes them.]
 
-        [Errors During Model Execution]
+        [Brief Task Process]
         [Keep a cumulative history of errors, reproduction conditions, messages, attempted fixes, and outcomes. Never drop old errors; update status only with evidence and distinguish unresolved, resolved, and unverified.]
 
-        [Completed Work]
+        [Completed Items]
         [Keep all work actually executed and completed, its outputs, file paths, branch/commit details, and verification evidence. Never present plans or attempts as completed; never drop prior completed items.]
 
-        [Next-Step Strategy]
+        [Next Planned Task]
         [Refresh the current next actions, prerequisites, blockers, and acceptance criteria based on the latest conversation. This section is the current strategy; obsolete strategies need not be retained.]
 
         Incremental inheritance rules (higher priority than ordinary summarization/compression):
@@ -121,12 +121,12 @@ object FunctionalPrompts {
         return if (useEnglish) {
             listOf(
                 "User Goals",
-                "Errors During Model Execution",
-                "Completed Work",
-                "Next-Step Strategy"
+                "Brief Task Process",
+                "Completed Items",
+                "Next Planned Task"
             )
         } else {
-            listOf("用户目标", "模型执行过程出现的错误", "模型已完成的项目", "下一步策略")
+            listOf("用户目标", "任务过程简要记录", "已完成事项", "下一步计划任务")
         }
     }
 
