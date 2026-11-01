@@ -217,6 +217,23 @@ class StructuredToolCallBridgeHistoryTest {
     }
 
     @Test
+    fun `task plan result is serialized as user context not a tool response`() {
+        val messages =
+            buildMessages(
+                listOf(
+                    PromptTurn(kind = PromptTurnKind.USER, content = "Run the plan."),
+                    PromptTurn(kind = PromptTurnKind.ASSISTANT, content = toolCall("submit_task_plan", "plan" to "{}")),
+                    PromptTurn(kind = PromptTurnKind.TASK_PLAN_RESULT, content = "Plan completed: read_file succeeded.")
+                )
+            )
+
+        assertEquals(listOf("user", "assistant", "tool", "user"), messages.roles())
+        assertTrue(messages.at(2).getString("content").contains("工具结果缺失"))
+        assertEquals("Plan completed: read_file succeeded.", messages.at(3).getString("content"))
+        assertToolResultsFollowTheirCalls(messages)
+    }
+
+    @Test
     fun `built-in tool channel compiles tool turns into plain roles`() {
         val compiled =
             StructuredToolCallBridge.compileHistoryForProvider(
