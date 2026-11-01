@@ -26,18 +26,18 @@ object FunctionalPrompts {
         [记录用户明确提出的最终目标、原始要求、禁止事项和验收条件。除非用户明确修改目标，否则必须逐次继承，不得自行推断、扩展或改写目标。]
 
         【任务过程简要记录】
-        [持续记录项目过程中出现的错误、复现条件、错误信息、尝试过的解决方案及结果。旧错误不得删除；状态可更新为未解决、已解决或待验证，并保留解决依据。]
+        [只记录任务中遇到的关键问题及其排查结论：错误、异常现象、复现条件、未解决原因或验证结论。重点回答“遇到什么问题、查明什么原因、问题状态如何”。不要记录正常执行步骤、工具调用流水或已完成的功能/修改；具体产出只放在“已完成事项”中。]
 
         【已完成事项】
-        [持续记录已经实际执行并完成的工作、具体产出、文件路径、分支/提交信息及验证证据。不得把计划或尝试标记为完成；旧完成事项不得因摘要更新而丢失。]
+        [只记录最终实际交付的结果：完成了哪些修改/功能/文件产出，以及必要的提交或验证状态。重点回答“最终做成了什么”。不要重复问题排查过程、错误原因和解决步骤；这些只放在“任务过程简要记录”中。不得把计划或尝试标记为完成。]
 
         【下一步计划任务】
         [根据最新对话动态更新当前最合理的下一步行动、前置条件、阻塞项和验收标准。此部分只表达当前策略，不要求保留过时策略。]
 
         增量继承规则（优先级高于一般摘要压缩要求）：
         - 用户目标：默认原样继承旧摘要。只有用户明确提出修改、增加或撤销目标时才更新，并记录变更内容；不得把模型建议当作用户目标。
-        - 错误记录：旧错误必须全部保留。新错误追加到历史记录；已有错误只有在新对话提供证据时才更新状态或补充排查结果，不能静默删除。
-        - 已完成项目：旧完成事项必须全部保留。新完成事项只有在对话或工具结果明确证明已执行时才能追加；可补充验证证据，不得将计划、建议或未验证操作写成已完成。
+        - 过程记录：只保留关键问题、原因分析和处理/验证结论；同一问题持续跟进时更新原条目，不重复记录每次排查步骤。已完成的修改或交付物不得在此复述。
+        - 已完成事项：只保留有执行证据的最终成果。新成果只有在对话或工具结果明确证明已执行时才能追加；可补充验证状态。不要把过程中的尝试、问题分析或解决步骤重复写入此栏。
         - 下一步策略：每次只选择一个最优先、可立即执行的动作；旧策略全部替换，不得把多个待办事项并列保留。必要时只补充一个验收条件。
         - 可以合并完全重复的描述，但不得合并掉独立错误、独立成果或其证据；不得为缩短摘要而删除历史事实。
         - 如果无法确认某项是否完成或某错误是否解决，保留原记录并标注“待验证”。
@@ -74,18 +74,18 @@ object FunctionalPrompts {
         [Record the user's explicit goals, original requirements, prohibitions, and acceptance criteria. Inherit them unchanged unless the user explicitly changes them.]
 
         [Brief Task Process]
-        [Keep a cumulative history of errors, reproduction conditions, messages, attempted fixes, and outcomes. Never drop old errors; update status only with evidence and distinguish unresolved, resolved, and unverified.]
+        [Record only significant problems and their diagnostic conclusions: errors, symptoms, reproduction conditions, root causes, and resolution/verification status. Focus on what went wrong and what was established. Exclude routine execution steps, tool-call logs, and delivered changes; those belong in Completed Items.]
 
         [Completed Items]
-        [Keep all work actually executed and completed, its outputs, file paths, branch/commit details, and verification evidence. Never present plans or attempts as completed; never drop prior completed items.]
+        [Record only final deliverables actually implemented: what was changed or produced, plus essential commit or verification status. Focus on what was ultimately done. Do not repeat troubleshooting, root-cause analysis, or resolution steps from Brief Task Process.]
 
         [Next Planned Task]
         [Refresh the current next actions, prerequisites, blockers, and acceptance criteria based on the latest conversation. This section is the current strategy; obsolete strategies need not be retained.]
 
         Incremental inheritance rules (higher priority than ordinary summarization/compression):
         - User goals: inherit the previous goals unchanged by default. Update only when the user explicitly changes, adds, or withdraws a goal. Never treat an assistant suggestion as a user goal.
-        - Errors: retain every previous error. Append new errors. Update an existing error's status or findings only when recent conversation provides evidence; never silently remove it.
-        - Completed work: retain every previous completed item. Add work only when execution is explicitly supported by conversation or tool evidence. Plans, suggestions, attempts, and unverified actions are not completed work.
+        - Brief task process: retain significant problems and diagnostic conclusions. Update the existing item as evidence changes; do not repeat routine investigation steps. Do not duplicate delivered changes recorded under Completed Items.
+        - Completed items: retain final deliverables with execution evidence. Add only implemented results; do not repeat the problem, diagnosis, or troubleshooting already recorded under Brief Task Process.
         - Next-step strategy: select exactly one highest-priority actionable item and replace all previous next steps. Add at most one acceptance condition; never list multiple parallel tasks.
         - Merge only truly duplicate descriptions; do not merge away distinct errors, completed items, or evidence. Never delete historical facts merely to shorten the summary.
         - If resolution or completion cannot be verified, preserve the record and mark it unverified.
@@ -219,7 +219,7 @@ object FunctionalPrompts {
         if (applicableOverrides.isNotEmpty()) {
             prompt = applySummarySectionOverrides(applicableOverrides, useEnglish)
         }
-        val integrityRules = if (useEnglish) "\n\n[Mandatory summary integrity rules]\nRegardless of custom section settings, use exactly four sections in this order: User Goals, Errors During Model Execution, Completed Work, Next-Step Strategy. The first three are cumulative history; the fourth is dynamic. Inherit all prior content in the first three sections before applying new evidence. Do not change goals unless the user explicitly does so. Never delete old errors; resolve them only with evidence. Never delete completed items; require execution evidence. If recent conversation does not affect one of the first three sections, preserve that section unchanged. Never turn assistant suggestions into user goals or plans/attempts into completed work." else "\n\n【摘要历史完整性强制规则】\n无论用户自定义摘要分段如何设置，都必须遵守以下规则：四个固定板块依次为“用户目标”“模型执行过程出现的错误”“模型已完成的项目”“下一步策略”；前三项是累积历史，第四项是动态状态。每次生成前先继承前三项全部旧内容，再合并新证据。旧目标除非用户明确修改不得改变；旧错误不得删除，解决状态须有证据；旧完成项目不得删除，完成状态须有执行证据。若新对话没有涉及前三项，则原样保留对应旧内容。不得把模型提出的方案写成用户目标，不得把计划/尝试写成完成。"
+        val integrityRules = if (useEnglish) "\n\n[Mandatory summary integrity rules]\nRegardless of custom section settings, use exactly four sections in this order: User Goals, Brief Task Process, Completed Items, Next Planned Task. The first three are cumulative history; the fourth is dynamic. Keep Brief Task Process limited to significant problems and diagnostic conclusions; keep Completed Items limited to final implemented deliverables. Do not duplicate the same information across these two sections. Inherit prior content before applying new evidence. Do not change goals unless the user explicitly does so. Preserve historical problem records and completed deliverables; require evidence for status changes and completion. Never turn assistant suggestions into user goals or plans/attempts into completed work." else "\n\n【摘要历史完整性强制规则】\n无论用户自定义摘要分段如何设置，都必须遵守以下规则：四个固定板块依次为“用户目标”“任务过程简要记录”“已完成事项”“下一步计划任务”；前三项是累积历史，第四项是动态状态。“任务过程简要记录”只记录关键问题及原因/处理结论；“已完成事项”只记录最终实际交付的修改或成果。两栏不得重复描述同一内容：问题排查和解决依据放在过程记录，最终做成的结果放在已完成事项。继承历史时也要保持这种分工。旧目标不得擅自改变，历史问题和完成成果不得无证据删除或改写。不得把模型建议写成用户目标，不得把计划/尝试写成完成。"
         prompt += "\n\n" + integrityRules
         val promptWithPreviousSummary = appendPreviousSummary(prompt, previousSummary, useEnglish)
         return summaryConfig.globalRules?.trim()?.takeIf { it.isNotBlank() }?.let { rules ->
