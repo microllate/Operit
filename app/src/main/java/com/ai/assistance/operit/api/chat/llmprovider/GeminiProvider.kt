@@ -250,7 +250,8 @@ open class GeminiProvider(
                     val comparableRole =
                         when (turn.kind) {
                             PromptTurnKind.SYSTEM -> "system"
-                            PromptTurnKind.USER -> "user"
+                            PromptTurnKind.USER,
+                            PromptTurnKind.TASK_PLAN_RESULT -> "user"
                             PromptTurnKind.ASSISTANT -> "assistant"
                             PromptTurnKind.TOOL_CALL -> "tool_call"
                             PromptTurnKind.TOOL_RESULT -> "tool_result"
@@ -636,7 +637,8 @@ open class GeminiProvider(
                     val comparableRole =
                         when (turn.kind) {
                             PromptTurnKind.SYSTEM -> "system"
-                            PromptTurnKind.USER -> "user"
+                            PromptTurnKind.USER,
+                            PromptTurnKind.TASK_PLAN_RESULT -> "user"
                             PromptTurnKind.ASSISTANT -> "assistant"
                             PromptTurnKind.TOOL_CALL -> "tool_call"
                             PromptTurnKind.TOOL_RESULT -> "tool_result"
