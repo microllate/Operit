@@ -171,9 +171,6 @@ object FunctionalPrompts {
         if (applicableOverrides.isNotEmpty()) {
             prompt = applySummarySectionOverrides(applicableOverrides, useEnglish)
         }
-        val configuredSections = resolveSummarySections(summaryConfig.sectionOverrides, useEnglish)
-        val enabledSections = configuredSections.filter { it.enabled }
-        val enabledSectionTitles = enabledSections.joinToString(if (useEnglish) ", " else "、") { it.title }
         val integrityRules = if (useEnglish) {
             """
             
