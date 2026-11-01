@@ -2131,8 +2131,9 @@ class EnhancedAIService private constructor(private val context: Context) {
                         ?: throw IllegalArgumentException("submit_task_plan is missing plan")
                     val plan = TaskPlanParser.parse(planRaw)
                     val allResults = mutableListOf<ToolResult>()
-                val messages = mutableListOf<String>()
-                val failedTaskIds = mutableSetOf<String>()
+                    val messages = mutableListOf<String>()
+                    val failedTaskIds = mutableSetOf<String>()
+                    val resultsByTaskId = mutableMapOf<String, ToolResult>()
                 for ((batchIndex, batch) in plan.executionBatches.withIndex()) {
                     if (!context.isConversationActive.get()) break
                     val runnableTasks = batch.filter { task ->
@@ -2144,8 +2145,18 @@ class EnhancedAIService private constructor(private val context: Context) {
                         } else true
                     }
                     if (runnableTasks.isEmpty()) continue
-                    val invocations = runnableTasks.map { task ->
-                        val parameters = task.parameters.map { (name, value) ->
+                    val resolvedTasks = runnableTasks.mapNotNull { task ->
+                        try {
+                            task to TaskPlanResultResolver.resolveParameters(task.parameters, resultsByTaskId)
+                        } catch (e: Exception) {
+                            failedTaskIds += task.taskId
+                            messages += "Task '${task.taskId}' could not resolve parameters: ${e.message}"
+                            null
+                        }
+                    }
+                    if (resolvedTasks.isEmpty()) continue
+                    val invocations = resolvedTasks.map { (task, resolvedParameters) ->
+                        val parameters = resolvedParameters.map { (name, value) ->
                             com.ai.assistance.operit.data.model.ToolParameter(
                                 name = name,
                                 value = Json.encodeToString(JsonElement.serializer(), value)
@@ -2174,7 +2185,9 @@ class EnhancedAIService private constructor(private val context: Context) {
                         callerCardId = roleCardId
                     )
                     allResults += batchResult.results
-                    runnableTasks.zip(batchResult.results).forEach { (task, result) ->
+                    resolvedTasks.zip(batchResult.results).forEach { (taskAndParameters, result) ->
+                        val task = taskAndParameters.first
+                        resultsByTaskId[task.taskId] = result
                         if (!result.success) failedTaskIds += task.taskId
                     }
                     if (batchResult.message.isNotBlank()) messages += batchResult.message
