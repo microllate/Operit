@@ -350,6 +350,33 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
         }
     }
 
+    override suspend fun executeCommandWithTimeout(
+        command: String,
+        identity: ShellIdentity,
+        timeoutMs: Long
+    ): ShellExecutor.CommandResult {
+        applyExecutionModePreferenceOverride()
+        if (!useExecMode) {
+            // libsu has its own command timeout configured on the shared Shell builder.
+            return executeCommand(command, identity)
+        }
+        val permStatus = hasPermission()
+        if (!permStatus.granted) {
+            return ShellExecutor.CommandResult(false, "", permStatus.reason, -1)
+        }
+        val actualCommand = extractActualCommand(command)
+        val commandToRun = if (identity == ShellIdentity.SHELL) {
+            val launcherPath = ensureShellLauncherInstalled()
+            if (launcherPath.isEmpty()) {
+                return ShellExecutor.CommandResult(false, "", "Shell launcher binary not available", -1)
+            }
+            "$launcherPath $actualCommand"
+        } else {
+            actualCommand
+        }
+        return executeCommandWithExec(commandToRun, timeoutMs)
+    }
+
     override suspend fun executeCommand(
         command: String,
         identity: ShellIdentity
