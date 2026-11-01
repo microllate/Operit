@@ -218,7 +218,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
     private fun serializeCanonicalLineBreaks(content: String): String =
         content.replace("\r\n", "\n")
             .replace("\r", "\n")
-            .replace("\n", "\\\\n")
+            .replace("\n", "\\n")
     private suspend fun execute(
         toolName: String,
         parameters: List<ToolParameter>,
