@@ -98,6 +98,12 @@ METADATA
                     "description": { "zh": "要执行的Shell命令", "en": "Shell command to execute." },
                     "type": "string",
                     "required": true
+                },
+                {
+                    "name": "timeoutMs",
+                    "description": { "zh": "执行超时毫秒数，默认15000，范围3000-120000；超时会终止进程并返回结果。", "en": "Timeout in milliseconds, default 15000, range 3000-120000. The process is terminated and a result is returned on timeout." },
+                    "type": "string",
+                    "required": false
                 }
             ]
         }
@@ -299,13 +305,20 @@ const superAdmin = (function () {
                 throw new Error("命令不能为空");
             }
             const command = params.command;
-            console.log(`执行Shell命令: ${command}`);
-            // 通过Shizuku/Root权限执行shell操作
-            const result = await Tools.System.shell(`${command}`);
+            const requestedTimeout = params.timeoutMs === undefined ? 15000 : parseInt(params.timeoutMs, 10);
+            if (!Number.isFinite(requestedTimeout) || requestedTimeout < 3000) {
+                throw new Error("timeoutMs必须是不少于3000毫秒的整数");
+            }
+            const timeoutMs = Math.min(requestedTimeout, 120000);
+            console.log(`执行Shell命令(timeout=${timeoutMs}ms): ${command}`);
+            const result = await Tools.System.shell(command, timeoutMs);
             return {
                 command: command,
                 output: result.output,
-                exitCode: result.exitCode
+                stderr: result.stderr,
+                exitCode: result.exitCode,
+                timedOut: result.exitCode === 124,
+                timeoutMsUsed: timeoutMs
             };
         }
         catch (error) {
