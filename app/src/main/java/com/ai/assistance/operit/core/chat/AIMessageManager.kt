@@ -1159,7 +1159,7 @@ object AIMessageManager {
                     .ifBlank { "无" }
 
                 val summaryWithQuotes = buildString {
-                    appendLine("上下文总结包含：用户目标，任务过程简要记录，已完成事项，位于.operit/chat-summaries/${chatId}/历史摘要.md。")
+                    appendLine("上下文总结包含：用户目标，任务过程简要记录，已完成事项，位于.operit/chat-summaries/${chatId}/上下文总结.md。")
                     append("下一步计划任务：$nextStepStrategy")
                 }
 
