@@ -12,6 +12,13 @@ interface ShellExecutor {
      */
     suspend fun executeCommand(command: String, identity: ShellIdentity = ShellIdentity.DEFAULT): CommandResult
 
+    /** Execute a command with a bounded timeout when supported by the executor. */
+    suspend fun executeCommandWithTimeout(
+        command: String,
+        identity: ShellIdentity = ShellIdentity.DEFAULT,
+        timeoutMs: Long = 15000L
+    ): CommandResult = executeCommand(command, identity)
+
     /**
      * 获取当前执行器的权限级别
      * @return 当前执行器的权限级别
