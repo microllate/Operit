@@ -22,6 +22,12 @@ object SystemToolPromptsInternal {
                                         type = "string",
                                         description = "shell command to execute",
                                         required = true
+                                    ),
+                                    ToolParameterSchema(
+                                        name = "timeout_ms",
+                                        type = "string",
+                                        description = "optional command timeout in milliseconds (3000-120000, default 15000)",
+                                        required = false
                                     )
                                 )
                         ),
@@ -3014,6 +3020,12 @@ object SystemToolPromptsInternal {
                                         type = "string",
                                         description = "要执行的命令",
                                         required = true
+                                    ),
+                                    ToolParameterSchema(
+                                        name = "timeout_ms",
+                                        type = "string",
+                                        description = "可选命令超时时间（毫秒，3000-120000，默认15000）",
+                                        required = false
                                     )
                                 )
                         ),
