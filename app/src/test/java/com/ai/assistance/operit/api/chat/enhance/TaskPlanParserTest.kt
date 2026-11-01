@@ -20,6 +20,19 @@ class TaskPlanParserTest {
     }
 
     @Test
+    fun infersDependenciesFromResultReferences() {
+        val plan = TaskPlanParser.parse(
+            """{"tasks":[
+              {"task_id":"read","tool_name":"read_file","parameters":{"path":{"\$ref":"find"}}},
+              {"task_id":"find","tool_name":"find_files","parameters":{}}
+            ]}"""
+        )
+        assertEquals(listOf(listOf("find"), listOf("read")),
+            plan.executionBatches.map { batch -> batch.map { it.taskId } })
+        assertEquals(listOf("find"), plan.tasks.first { it.taskId == "read" }.dependsOn)
+    }
+
+    @Test
     fun rejectsDuplicateIdsAndUnknownDependencies() {
         assertFailsWith<IllegalArgumentException> {
             TaskPlanParser.parse("""{"tasks":[{"task_id":"a","tool_name":"x"},{"task_id":"a","tool_name":"y"}]}""")
