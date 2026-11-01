@@ -2122,10 +2122,10 @@ class EnhancedAIService private constructor(private val context: Context) {
             val config = modelSnapshot.config
             val planInvocations = toolInvocations.filter { it.tool.name == "submit_task_plan" }
             val toolBatch = if (planInvocations.isNotEmpty()) {
-                require(planInvocations.size == 1 && toolInvocations.size == 1) {
-                    "submit_task_plan must be the only tool call in its response"
-                }
                 try {
+                    require(planInvocations.size == 1 && toolInvocations.size == 1) {
+                        "submit_task_plan must be the only tool call in its response"
+                    }
                     val planRaw = planInvocations.single().tool.parameters
                         .firstOrNull { it.name == "plan" }?.value
                         ?: throw IllegalArgumentException("submit_task_plan is missing plan")
@@ -2134,7 +2134,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     val messages = mutableListOf<String>()
                     val failedTaskIds = mutableSetOf<String>()
                     val resultsByTaskId = mutableMapOf<String, ToolResult>()
-                for ((batchIndex, batch) in plan.executionBatches.withIndex()) {
+                    for ((batchIndex, batch) in plan.executionBatches.withIndex()) {
                     if (!context.isConversationActive.get()) break
                     val runnableTasks = batch.filter { task ->
                         val blockedBy = task.dependsOn.filter { it in failedTaskIds }
@@ -2191,7 +2191,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                         if (!result.success) failedTaskIds += task.taskId
                     }
                     if (batchResult.message.isNotBlank()) messages += batchResult.message
-                }
+                    }
                     ToolExecutionBatch(allResults, messages.joinToString("\n"))
                 } catch (e: CancellationException) {
                     throw e
