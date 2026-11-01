@@ -2125,11 +2125,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                 require(planInvocations.size == 1 && toolInvocations.size == 1) {
                     "submit_task_plan must be the only tool call in its response"
                 }
-                val planRaw = planInvocations.single().tool.parameters
-                    .firstOrNull { it.name == "plan" }?.value
-                    ?: throw IllegalArgumentException("submit_task_plan is missing plan")
-                val plan = TaskPlanParser.parse(planRaw)
-                val allResults = mutableListOf<ToolResult>()
+                try {
+                    val planRaw = planInvocations.single().tool.parameters
+                        .firstOrNull { it.name == "plan" }?.value
+                        ?: throw IllegalArgumentException("submit_task_plan is missing plan")
+                    val plan = TaskPlanParser.parse(planRaw)
+                    val allResults = mutableListOf<ToolResult>()
                 val messages = mutableListOf<String>()
                 val failedTaskIds = mutableSetOf<String>()
                 for ((batchIndex, batch) in plan.executionBatches.withIndex()) {
@@ -2178,7 +2179,16 @@ class EnhancedAIService private constructor(private val context: Context) {
                     }
                     if (batchResult.message.isNotBlank()) messages += batchResult.message
                 }
-                ToolExecutionBatch(allResults, messages.joinToString("\n"))
+                    ToolExecutionBatch(allResults, messages.joinToString("\n"))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    AppLogger.e(TAG, "任务计划执行失败", e)
+                    ToolExecutionBatch(
+                        emptyList(),
+                        "Task plan execution failed: ${e.message ?: e.javaClass.simpleName}"
+                    )
+                }
             } else {
                 ToolExecutionManager.executeInvocations(
                     invocations = toolInvocations,
