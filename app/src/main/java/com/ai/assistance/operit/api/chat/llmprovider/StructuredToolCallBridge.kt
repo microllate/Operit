@@ -234,7 +234,8 @@ internal object StructuredToolCallBridge {
                 PromptTurnKind.TOOL_CALL -> appendToBlock(ProviderHistoryBlockType.ASSISTANT, turn)
                 PromptTurnKind.TOOL_RESULT -> appendToBlock(ProviderHistoryBlockType.TOOL_RESULT, turn)
                 PromptTurnKind.USER,
-                PromptTurnKind.SUMMARY -> appendToBlock(ProviderHistoryBlockType.USER_INPUT, turn)
+                PromptTurnKind.SUMMARY,
+                PromptTurnKind.TASK_PLAN_RESULT -> appendToBlock(ProviderHistoryBlockType.USER_INPUT, turn)
             }
         }
 
