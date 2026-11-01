@@ -79,6 +79,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import com.ai.assistance.operit.data.repository.CustomEmojiRepository
 import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.preferences.CharacterCardToolAccessResolver
@@ -2118,19 +2120,67 @@ class EnhancedAIService private constructor(private val context: Context) {
                 chatModelIndexOverride
             )
             val config = modelSnapshot.config
-            val toolBatch = ToolExecutionManager.executeInvocations(
-                invocations = toolInvocations,
-                context = this@EnhancedAIService.context,
-                toolHandler = toolHandler,
-                packageManager = packageManager,
-                collector = collector,
-                toolExposureMode = ToolExposureMode.resolve(config.apiProviderType),
-                callerName = characterName,
-                callerChatId = chatId,
-                callerCardId = roleCardId
-            )
+            val planInvocations = toolInvocations.filter { it.tool.name == "submit_task_plan" }
+            val toolBatch = if (planInvocations.isNotEmpty()) {
+                require(planInvocations.size == 1 && toolInvocations.size == 1) {
+                    "submit_task_plan must be the only tool call in its response"
+                }
+                val planRaw = planInvocations.single().tool.parameters
+                    .firstOrNull { it.name == "plan" }?.value
+                    ?: throw IllegalArgumentException("submit_task_plan is missing plan")
+                val plan = TaskPlanParser.parse(planRaw)
+                val allResults = mutableListOf<ToolResult>()
+                val messages = mutableListOf<String>()
+                for ((batchIndex, batch) in plan.executionBatches.withIndex()) {
+                    if (!context.isConversationActive.get()) break
+                    val invocations = batch.map { task ->
+                        val parameters = task.parameters.map { (name, value) ->
+                            com.ai.assistance.operit.data.model.ToolParameter(
+                                name = name,
+                                value = Json.encodeToString(JsonElement.serializer(), value)
+                                    .let { encoded ->
+                                        if (value is kotlinx.serialization.json.JsonPrimitive &&
+                                            value.isString) value.content else encoded
+                                    }
+                            )
+                        }
+                        ToolInvocation(
+                            tool = AITool(name = task.toolName, parameters = parameters),
+                            rawText = "",
+                            responseLocation = IntRange.EMPTY
+                        )
+                    }
+                    AppLogger.d(TAG, "执行任务计划批次 ${batchIndex + 1}/${plan.executionBatches.size}, tasks=${batch.map { it.taskId }}")
+                    val batchResult = ToolExecutionManager.executeInvocations(
+                        invocations = invocations,
+                        context = this@EnhancedAIService.context,
+                        toolHandler = toolHandler,
+                        packageManager = packageManager,
+                        collector = collector,
+                        toolExposureMode = ToolExposureMode.resolve(config.apiProviderType),
+                        callerName = characterName,
+                        callerChatId = chatId,
+                        callerCardId = roleCardId
+                    )
+                    allResults += batchResult.results
+                    if (batchResult.message.isNotBlank()) messages += batchResult.message
+                }
+                ToolExecutionBatch(allResults, messages.joinToString("\\n"))
+            } else {
+                ToolExecutionManager.executeInvocations(
+                    invocations = toolInvocations,
+                    context = this@EnhancedAIService.context,
+                    toolHandler = toolHandler,
+                    packageManager = packageManager,
+                    collector = collector,
+                    toolExposureMode = ToolExposureMode.resolve(config.apiProviderType),
+                    callerName = characterName,
+                    callerChatId = chatId,
+                    callerCardId = roleCardId
+                )
+            }
 
-            if (toolBatch.results.isNotEmpty()) {
+            if (toolBatch.results.isNotEmpty() || toolBatch.message.isNotBlank()) {
                 AppLogger.d(TAG, "所有工具结果收集完毕，准备最终处理。")
                 processToolResults(
                     toolBatch.results, context, functionType, promptFunctionType, collector, enableThinking,
