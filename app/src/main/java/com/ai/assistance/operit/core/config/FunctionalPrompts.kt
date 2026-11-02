@@ -16,9 +16,7 @@ object FunctionalPrompts {
      * Prompt for the AI to generate a comprehensive and structured summary of a conversation.
      */
     const val SUMMARY_PROMPT = """
-        你是负责生成和维护长期对话摘要的AI助手。请根据对话内容和上一次摘要，生成最新、完整、可独立使用的摘要。
-
-        **必须遵循以下结构：**
+        你是负责生成长期对话摘要的AI助手。请结合本轮对话、上一次摘要以及本次请求中的总结设置，生成摘要。
 
         ==========对话摘要==========
 
@@ -31,20 +29,10 @@ object FunctionalPrompts {
         【下一步计划任务】
 
         ============================
-
-        **通用规则：**
-        1. 每个板块具体记录什么、记录范围、筛选标准和表达方式，完全以本次请求中对应板块的设置说明为准；不得自行添加、推断或覆盖板块细则。
-        2. 设置中关闭的板块不得输出；启用的板块必须按设置顺序输出，并使用设置中的标题。
-        3. 继承上一次摘要中的历史信息。只有新对话提供了明确证据时，才更新或补充对应信息；不得无依据删除或改写历史内容。
-        4. 不得将没有执行的计划、建议或尝试描述为已完成事实。
-        5. 使用简洁、客观、清晰的表达，不输出设置说明之外的附加栏目或解释。
-        6. 空板块按对应设置说明处理；设置说明没有规定时，写“无”。
     """
 
     const val SUMMARY_PROMPT_EN = """
-        You generate and maintain durable conversation summaries. Use the conversation and previous summary to produce an up-to-date, complete, self-contained summary.
-
-        **Required structure:**
+        You generate durable conversation summaries. Use the current conversation, previous summary, and summary settings supplied in this request.
 
         ==========Conversation Summary==========
 
@@ -57,14 +45,6 @@ object FunctionalPrompts {
         [Next Planned Task]
 
         =======================================
-
-        **General rules:**
-        1. The content scope, selection criteria, and writing instructions for each section are determined entirely by that section's instructions supplied in the current request. Do not invent, infer, or override section-specific rules.
-        2. Do not output disabled sections. Output enabled sections in the configured order and use their configured titles.
-        3. Inherit historical information from the previous summary. Update or add information only when supported by clear evidence in the recent conversation; do not delete or rewrite history without evidence.
-        4. Never describe an unexecuted plan, suggestion, or attempt as completed work.
-        5. Be concise, objective, and clear. Do not add sections or explanations beyond those configured.
-        6. Handle empty sections according to their configured instructions; if unspecified, write "None".
     """
 
     fun summaryPrompt(useEnglish: Boolean): String {
@@ -178,16 +158,14 @@ object FunctionalPrompts {
         val integrityRules = if (useEnglish) {
             """
             
-            [Configuration enforcement]
-            Follow the configured section titles, order, enabled states, and section-specific instructions above. The configured instructions are the sole authority for section-specific content requirements.
-            Preserve previous summary information unless recent conversation evidence justifies changing it. Do not invent facts or present unexecuted work as completed.
+            [Summary settings]
+            Use the user's "Custom Summary Rules" as the overall summary instructions. Use the summary structure settings for section enabled states, titles, order, and section-specific instructions. Do not invent facts or present unexecuted work as completed.
             """.trimIndent()
         } else {
             """
             
-            【设置规则优先级】
-            严格遵循设置中实际配置的板块标题、顺序、启用状态和各板块说明。每个板块的具体内容要求只以对应的设置说明为准。
-            除非最新对话提供了修改依据，否则保留上一次摘要中的历史信息。不得编造事实，不得将未执行的工作描述为已完成。
+            【设置规则】
+            总体总结要求以用户在“自定义总结规则”中填写的内容为准；栏目启用状态、标题、顺序和栏目说明以总结结构设置为准。不得编造事实，不得将未执行的工作描述为已完成。
             """.trimIndent()
         }
         prompt += "\n\n" + integrityRules
@@ -249,16 +227,16 @@ object FunctionalPrompts {
             if (useEnglish) {
                 """
 
-                Previous Summary (to inherit context):
+                Previous Summary (for reference):
                 ${previousSummary.trim()}
-                Merge the recent evidence into the previous summary while preserving every historical user goal, error record, and completed-work record. Update only facts supported by the recent conversation; regenerate only the next-step strategy.
+                Reorganize the summary using the current summary settings and custom summary rules. Let those rules determine what historical information to retain, compress, merge, or remove.
                 """.trimIndent()
             } else {
                 """
 
-                上一次的摘要（用于继承上下文）：
+                上一次的摘要（供本次总结参考）：
                 ${previousSummary.trim()}
-                请将本轮新证据增量合并到上一次摘要中，完整保留所有历史用户目标、错误记录和已完成项目。只更新本轮对话有证据支持的事实；仅重新生成下一步策略。
+                请按照本次总结设置和自定义总结规则，结合本轮对话重新整理摘要；是否保留、压缩、合并或删除历史内容，由总结规则决定。
                 """.trimIndent()
             }
     }
