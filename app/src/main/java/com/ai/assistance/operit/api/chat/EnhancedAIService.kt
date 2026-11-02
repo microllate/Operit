@@ -3114,7 +3114,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                 hookedTools.add(
                     ToolPrompt(
                         name = "submit_task_plan",
-                        description = "Submit a complete batch of tool tasks for local dependency-aware execution. Use this instead of issuing many separate tool calls. The plan object contains tasks with task_id, tool_name, parameters, and depends_on.",
+                        description = "Submit a complete batch of tool tasks for local dependency-aware execution. For complex multi-step tasks, submit the overall plan before starting execution instead of issuing many separate tool calls. After receiving task-plan results, reassess the remaining work: keep executing the existing plan without resubmitting it when its scope and steps are still valid; submit an updated plan when the goal, execution path, task breakdown, or remaining work changes materially, or when a completed phase or failure/blocker requires replanning. Do not resubmit an unchanged plan after every tool call. Reflect actual execution results and never mark an unverified task complete. Each task contains task_id, tool_name, parameters, and depends_on.",
                         parametersStructured = listOf(
                             ToolParameterSchema(
                                 name = "plan",
