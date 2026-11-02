@@ -80,28 +80,32 @@ jobs:
               'PROXY_HOST="${OPERIT_PROXY_HOST:-172.23.176.1}"',
               'PROXY_HOST="${OPERIT_PROXY_HOST:-}"',
           )
-          old = '''export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
-          export https_proxy="${http_proxy}"
-          export HTTP_PROXY="${http_proxy}"
-          export HTTPS_PROXY="${http_proxy}"
-          export GRADLE_OPTS="${GRADLE_OPTS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"
-          export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"
-          unset ALL_PROXY
-          unset all_proxy
-          export NO_PROXY="localhost,127.0.0.1,::1"
-          export no_proxy="${NO_PROXY}"'''
-          new = '''if [[ -n "${PROXY_HOST}" ]]; then
-            export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
-            export https_proxy="${http_proxy}"
-            export HTTP_PROXY="${http_proxy}"
-            export HTTPS_PROXY="${http_proxy}"
-            export GRADLE_OPTS="${GRADLE_OPTS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"
-            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"
-          else
-            unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
-          fi
-          export NO_PROXY="localhost,127.0.0.1,::1"
-          export no_proxy="${NO_PROXY}"'''
+          old = "\\n".join([
+              'export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"',
+              'export https_proxy="${http_proxy}"',
+              'export HTTP_PROXY="${http_proxy}"',
+              'export HTTPS_PROXY="${http_proxy}"',
+              'export GRADLE_OPTS="${GRADLE_OPTS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"',
+              'export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"',
+              'unset ALL_PROXY',
+              'unset all_proxy',
+              'export NO_PROXY="localhost,127.0.0.1,::1"',
+              'export no_proxy="${NO_PROXY}"',
+          ])
+          new = "\\n".join([
+              'if [[ -n "${PROXY_HOST}" ]]; then',
+              '  export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"',
+              '  export https_proxy="${http_proxy}"',
+              '  export HTTP_PROXY="${http_proxy}"',
+              '  export HTTPS_PROXY="${http_proxy}"',
+              '  export GRADLE_OPTS="${GRADLE_OPTS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"',
+              '  export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"',
+              'else',
+              '  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy',
+              'fi',
+              'export NO_PROXY="localhost,127.0.0.1,::1"',
+              'export no_proxy="${NO_PROXY}"',
+          ])
           if old not in source:
               raise SystemExit("Could not locate the proxy block in build_ffmpeg_kit_wsl.sh")
           path.write_text(source.replace(old, new))
