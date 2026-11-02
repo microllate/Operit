@@ -35,7 +35,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             autoconf automake autopoint build-essential bison cmake flex \
-            gettext gperf git libtool libtool-bin nasm pkg-config texinfo \
+            gettext gperf git groff libtool libtool-bin nasm pkg-config texinfo \
             yasm curl wget perl python3 ruby unzip zip
 
       - name: Set up JDK
