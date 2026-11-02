@@ -122,7 +122,8 @@ jobs:
           export ANDROID_NDK_ROOT_OVERRIDE="$ANDROID_HOME/ndk/22.1.7171670"
           export ANDROID_SDK_ROOT_OVERRIDE="$ANDROID_HOME"
           export JAVA_HOME_OVERRIDE="$JAVA_HOME"
-          bash "$FFMPEG_KIT_DIR/operit-build-ffmpeg-kit.sh" "$FFMPEG_KIT_DIR"
+          mkdir -p "$RUNNER_TEMP/ffmpeg-kit"
+          bash "$FFMPEG_KIT_DIR/operit-build-ffmpeg-kit.sh" "$FFMPEG_KIT_DIR" 2>&1 | tee "$RUNNER_TEMP/ffmpeg-kit/build.log"
 
       - name: Verify and rename AAR
         shell: bash
