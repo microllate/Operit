@@ -84,7 +84,7 @@ jobs:
               'PROXY_HOST="${OPERIT_PROXY_HOST:-172.23.176.1}"',
               'PROXY_HOST="${OPERIT_PROXY_HOST:-}"',
           )
-          old = "\\n".join([
+          old = "\n".join([
               'export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"',
               'export https_proxy="${http_proxy}"',
               'export HTTP_PROXY="${http_proxy}"',
@@ -96,7 +96,7 @@ jobs:
               'export NO_PROXY="localhost,127.0.0.1,::1"',
               'export no_proxy="${NO_PROXY}"',
           ])
-          new = "\\n".join([
+          new = "\n".join([
               'if [[ -n "${PROXY_HOST}" ]]; then',
               '  export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"',
               '  export https_proxy="${http_proxy}"',
