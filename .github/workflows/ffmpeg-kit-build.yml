@@ -2,6 +2,10 @@ name: Build FFmpegKit AAR
 
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/task-completion-summary-context-auto]
+    paths:
+      - .github/workflows/ffmpeg-kit-build.yml
 
 permissions:
   contents: read
