@@ -1,0 +1,168 @@
+name: Build FFmpegKit AAR
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ffmpeg-kit-aar-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build FFmpegKit v6.0 (arm64-v8a)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout Operit branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake autopoint build-essential bison cmake flex \
+            gettext gperf git libtool libtool-bin nasm pkg-config texinfo \
+            yasm curl wget perl python3 ruby unzip zip
+
+      - name: Set up JDK
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "ndk;22.1.7171670"
+
+      - name: Checkout FFmpegKit v6.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v6.0 https://github.com/arthenica/ffmpeg-kit.git "$RUNNER_TEMP/ffmpeg-kit"
+          test "$(git -C "$RUNNER_TEMP/ffmpeg-kit" describe --tags --exact-match)" = "v6.0"
+          echo "FFmpegKit source commit: $(git -C "$RUNNER_TEMP/ffmpeg-kit" rev-parse HEAD)"
+
+      - name: Build customized FFmpegKit AAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          FFMPEG_KIT_DIR="$RUNNER_TEMP/ffmpeg-kit"
+          cp tools/ffmpeg/build_ffmpeg_kit_wsl.sh "$FFMPEG_KIT_DIR/operit-build-ffmpeg-kit.sh"
+
+          # The repository script defaults to a proxy on the developer's local
+          # WSL host. GitHub-hosted runners have direct network access instead.
+          python3 - "$FFMPEG_KIT_DIR/operit-build-ffmpeg-kit.sh" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+          source = source.replace(
+              'PROXY_HOST="${OPERIT_PROXY_HOST:-172.23.176.1}"',
+              'PROXY_HOST="${OPERIT_PROXY_HOST:-}"',
+          )
+          old = '''export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
+          export https_proxy="${http_proxy}"
+          export HTTP_PROXY="${http_proxy}"
+          export HTTPS_PROXY="${http_proxy}"
+          export GRADLE_OPTS="${GRADLE_OPTS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"
+          export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"
+          unset ALL_PROXY
+          unset all_proxy
+          export NO_PROXY="localhost,127.0.0.1,::1"
+          export no_proxy="${NO_PROXY}"'''
+          new = '''if [[ -n "${PROXY_HOST}" ]]; then
+            export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
+            export https_proxy="${http_proxy}"
+            export HTTP_PROXY="${http_proxy}"
+            export HTTPS_PROXY="${http_proxy}"
+            export GRADLE_OPTS="${GRADLE_OPTS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"
+            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}"
+          else
+            unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+          fi
+          export NO_PROXY="localhost,127.0.0.1,::1"
+          export no_proxy="${NO_PROXY}"'''
+          if old not in source:
+              raise SystemExit("Could not locate the proxy block in build_ffmpeg_kit_wsl.sh")
+          path.write_text(source.replace(old, new))
+          PY
+
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export ANDROID_NDK_ROOT_OVERRIDE="$ANDROID_HOME/ndk/22.1.7171670"
+          export ANDROID_SDK_ROOT_OVERRIDE="$ANDROID_HOME"
+          export JAVA_HOME_OVERRIDE="$JAVA_HOME"
+          bash "$FFMPEG_KIT_DIR/operit-build-ffmpeg-kit.sh" "$FFMPEG_KIT_DIR"
+
+      - name: Verify and rename AAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_AAR="$RUNNER_TEMP/ffmpeg-kit/prebuilt/bundle-android-aar/ffmpeg-kit/ffmpeg-kit.aar"
+          test -s "$SOURCE_AAR"
+          cp "$SOURCE_AAR" "$GITHUB_WORKSPACE/ffmpeg-kit-local.aar"
+          python3 - <<'PY'
+          from zipfile import ZipFile
+
+          aar = "ffmpeg-kit-local.aar"
+          required = {
+              "jni/arm64-v8a/libavcodec.so",
+              "jni/arm64-v8a/libavdevice.so",
+              "jni/arm64-v8a/libavfilter.so",
+              "jni/arm64-v8a/libavformat.so",
+              "jni/arm64-v8a/libavutil.so",
+              "jni/arm64-v8a/libc++_shared.so",
+              "jni/arm64-v8a/libffmpegkit.so",
+              "jni/arm64-v8a/libffmpegkit_abidetect.so",
+              "jni/arm64-v8a/libswresample.so",
+              "jni/arm64-v8a/libswscale.so",
+          }
+          with ZipFile(aar) as archive:
+              names = set(archive.namelist())
+              missing = sorted(required - names)
+              empty = sorted(
+                  name for name in required & names
+                  if archive.getinfo(name).file_size == 0
+              )
+          if missing or empty:
+              raise SystemExit(f"AAR validation failed; missing={missing}, empty={empty}")
+          print(f"Validated {aar}")
+          PY
+          sha256sum ffmpeg-kit-local.aar
+
+      - name: Upload FFmpegKit AAR
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ffmpeg-kit-local
+          path: ffmpeg-kit-local.aar
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ffmpeg-kit-build-log
+          path: ${{ runner.temp }}/ffmpeg-kit/build.log
+          if-no-files-found: ignore
+          retention-days: 7
