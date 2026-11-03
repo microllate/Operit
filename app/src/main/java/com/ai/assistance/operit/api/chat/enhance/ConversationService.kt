@@ -662,7 +662,8 @@ class ConversationService(
                 runCatching {
                     val corrections = ToolExperienceRepository.findRelevantCorrections(
                         context = context,
-                        memorySpaceId = effectiveMemorySpaceId,
+                        memorySpaceId = memorySpaceIdOverride?.takeIf { it.isNotBlank() }
+                            ?: userPreferencesManager.activeMemorySpaceIdFlow.first(),
                         query = processedInput,
                         limit = 3
                     )
