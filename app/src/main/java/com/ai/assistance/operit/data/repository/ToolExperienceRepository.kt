@@ -127,7 +127,9 @@ object ToolExperienceRepository {
             val existing = records[index]
             val now = System.currentTimeMillis()
             records[index] = existing.copy(
-                solution = "The exact same invocation later succeeded (tool-level success only; task not verified). Result: " +
+                solution = "Candidate successful retry invocation: " +
+                    safeInvocation.take(MAX_INVOCATION_CHARS / 2) +
+                    "\nTool result (not task-verified): " +
                     redactSensitiveData(result).take(MAX_RESULT_CHARS),
                 status = ToolExperience.STATUS_SOLUTION_CANDIDATE,
                 verifiedAt = null,
