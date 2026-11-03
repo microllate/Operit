@@ -82,7 +82,7 @@ object ToolExperienceRepository {
                     taskId = taskId.take(128),
                     toolName = safeToolName,
                     invocation = safeInvocation,
-                    taskContext = redactSensitiveData(taskContext).take(MAX_FIELD_CHARS),
+                    taskContext = redactSensitiveData(taskContext).take(MAX_TASK_CONTEXT_CHARS),
                     error = safeError,
                     status = ToolExperience.STATUS_OBSERVED_FAILURE,
                     createdAt = now,
@@ -114,7 +114,7 @@ object ToolExperienceRepository {
         val lock = locks.getOrPut(file.absolutePath) { Mutex() }
         lock.withLock {
             val records = readRecords(file).toMutableList()
-            val safeInvocation = redactSensitiveData(invocation).take(MAX_FIELD_CHARS)
+            val safeInvocation = compactInvocation(invocation)
             val normalizedInvocation = normalizeInvocation(safeInvocation)
             val index = records.indices
                 .filter { records[it].toolName == toolName &&
@@ -158,7 +158,7 @@ object ToolExperienceRepository {
         val lock = locks.getOrPut(file.absolutePath) { Mutex() }
         lock.withLock {
             val records = readRecords(file).toMutableList()
-            val safeInvocation = redactSensitiveData(invocation).take(MAX_FIELD_CHARS)
+            val safeInvocation = compactInvocation(invocation)
             val safeResult = redactSensitiveData(result).take(MAX_RESULT_CHARS)
             val normalizedInvocation = normalizeInvocation(safeInvocation)
             val now = System.currentTimeMillis()
@@ -168,7 +168,7 @@ object ToolExperienceRepository {
                     record.chatId == chatId &&
                         record.taskId == taskId &&
                         record.toolName == toolName &&
-                        (taskContext.isBlank() || record.taskContext == redactSensitiveData(taskContext).take(MAX_FIELD_CHARS)) &&
+                        (taskContext.isBlank() || record.taskContext == redactSensitiveData(taskContext).take(MAX_TASK_CONTEXT_CHARS)) &&
                         record.status == ToolExperience.STATUS_OBSERVED_FAILURE &&
                         normalizeInvocation(record.invocation) != normalizedInvocation &&
                         now - record.updatedAt <= MAX_RETRY_WINDOW_MS
@@ -214,7 +214,7 @@ object ToolExperienceRepository {
                 val record = records[index]
                 if (record.chatId == chatId &&
                     record.taskId == taskId &&
-                    record.taskContext == redactSensitiveData(taskContext).take(MAX_FIELD_CHARS) &&
+                    record.taskContext == redactSensitiveData(taskContext).take(MAX_TASK_CONTEXT_CHARS) &&
                     record.status == ToolExperience.STATUS_SOLUTION_CANDIDATE
                 ) {
                     val previous = record.solution.orEmpty()
@@ -399,7 +399,7 @@ object ToolExperienceRepository {
                     record.chatId == chatId &&
                         record.taskId == taskId &&
                         record.toolName == toolName &&
-                        record.taskContext == redactSensitiveData(taskContext).take(MAX_FIELD_CHARS) &&
+                        record.taskContext == redactSensitiveData(taskContext).take(MAX_TASK_CONTEXT_CHARS) &&
                         record.status == ToolExperience.STATUS_SOLUTION_CANDIDATE &&
                         record.solution.orEmpty().contains("Candidate successful retry invocation:") &&
                         record.solution.orEmpty().contains(safeInvocation)
@@ -466,7 +466,7 @@ object ToolExperienceRepository {
                 it.id == experienceId &&
                     it.taskId == taskId &&
                     it.status == ToolExperience.STATUS_SOLUTION_CANDIDATE &&
-                    it.taskContext == redactSensitiveData(taskContext).take(MAX_FIELD_CHARS) &&
+                    it.taskContext == redactSensitiveData(taskContext).take(MAX_TASK_CONTEXT_CHARS) &&
                     !it.solution.isNullOrBlank()
             }
             if (index < 0) return@withLock false
