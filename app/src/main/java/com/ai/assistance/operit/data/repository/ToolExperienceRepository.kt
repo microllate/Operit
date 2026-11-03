@@ -24,7 +24,12 @@ import kotlinx.serialization.json.Json
 object ToolExperienceRepository {
     private const val DIRECTORY_NAME = "tool-experiences"
     private const val MAX_RECORDS = 200
-    private const val MAX_FIELD_CHARS = 8_000
+    private const val MAX_FIELD_CHARS = 1_200
+    private const val MAX_INVOCATION_CHARS = 1_200
+    private const val MAX_TASK_CONTEXT_CHARS = 300
+    private const val MAX_ERROR_CHARS = 500
+    private const val MAX_RESULT_CHARS = 600
+    private const val MAX_SUMMARY_CHARS = 400
     private const val DEFAULT_RESULT_LIMIT = 5
     private const val MAX_RETRY_WINDOW_MS = 30 * 60 * 1000L
     private val json = Json {
@@ -50,8 +55,8 @@ object ToolExperienceRepository {
             val records = readRecords(file).toMutableList()
             val now = System.currentTimeMillis()
             val safeToolName = toolName.take(256)
-            val safeInvocation = redactSensitiveData(invocation).take(MAX_FIELD_CHARS)
-            val safeError = redactSensitiveData(error).take(MAX_FIELD_CHARS)
+            val safeInvocation = compactInvocation(invocation)
+            val safeError = redactSensitiveData(error).take(MAX_ERROR_CHARS)
                 .ifBlank { "Unknown tool execution failure" }
             val signature = signatureOf(safeToolName, safeInvocation, safeError)
             val existingIndex = records.indexOfFirst {
@@ -67,7 +72,7 @@ object ToolExperienceRepository {
                     updatedAt = now,
                     chatId = chatId?.take(256) ?: old.chatId,
                     taskId = taskId.take(128),
-                    taskContext = redactSensitiveData(taskContext).take(MAX_FIELD_CHARS).ifBlank { old.taskContext }
+                    taskContext = redactSensitiveData(taskContext).take(MAX_TASK_CONTEXT_CHARS).ifBlank { old.taskContext }
                 ).also { records[existingIndex] = it }
             } else {
                 ToolExperience(
@@ -123,7 +128,7 @@ object ToolExperienceRepository {
             val now = System.currentTimeMillis()
             records[index] = existing.copy(
                 solution = "The exact same invocation later succeeded (tool-level success only; task not verified). Result: " +
-                    redactSensitiveData(result).take(MAX_FIELD_CHARS / 2),
+                    redactSensitiveData(result).take(MAX_RESULT_CHARS),
                 status = ToolExperience.STATUS_SOLUTION_CANDIDATE,
                 verifiedAt = null,
                 updatedAt = now
@@ -154,7 +159,7 @@ object ToolExperienceRepository {
         lock.withLock {
             val records = readRecords(file).toMutableList()
             val safeInvocation = redactSensitiveData(invocation).take(MAX_FIELD_CHARS)
-            val safeResult = redactSensitiveData(result)
+            val safeResult = redactSensitiveData(result).take(MAX_RESULT_CHARS)
             val normalizedInvocation = normalizeInvocation(safeInvocation)
             val now = System.currentTimeMillis()
             val index = records.indices
@@ -174,9 +179,9 @@ object ToolExperienceRepository {
             val existing = records[index]
             records[index] = existing.copy(
                 solution = "Candidate successful retry invocation: " +
-                    safeInvocation.take(MAX_FIELD_CHARS / 3) +
+                    safeInvocation.take(MAX_INVOCATION_CHARS / 2) +
                     "\nTool result (not task-verified): " +
-                    safeResult.take(MAX_FIELD_CHARS / 3),
+                    safeResult.take(MAX_RESULT_CHARS),
                 status = ToolExperience.STATUS_SOLUTION_CANDIDATE,
                 updatedAt = now
             )
@@ -202,7 +207,7 @@ object ToolExperienceRepository {
         val lock = locks.getOrPut(file.absolutePath) { Mutex() }
         lock.withLock {
             val records = readRecords(file).toMutableList()
-            val safeSummary = redactSensitiveData(summary).take(MAX_FIELD_CHARS / 2)
+            val safeSummary = summarizeForStorage(summary)
             val now = System.currentTimeMillis()
             var updated = 0
             for (index in records.indices) {
@@ -237,6 +242,21 @@ object ToolExperienceRepository {
             }
         ) { match -> match.groupValues[1] + "[REDACTED]" }
     }
+    private fun compactInvocation(value: String): String {
+        val redacted = redactSensitiveData(value)
+        val compacted = redacted
+            .replace(Regex("(?is)(<(?:old|new|content|code)>).*?(</(?:old|new|content|code)>)")) {
+                it.groupValues[1] + "[内容已省略]" + it.groupValues[2]
+            }
+            .replace(Regex("(?is)(\"(?:old|new|content|code)\"\\s*:\\s*\")[^\"]{200,}(\")")) {
+                it.groupValues[1] + "[内容已省略]" + it.groupValues[2]
+            }
+        return compacted.take(MAX_INVOCATION_CHARS)
+    }
+
+    private fun summarizeForStorage(value: String): String =
+        redactSensitiveData(value).replace(Regex("\\s+"), " ").trim().take(MAX_SUMMARY_CHARS)
+
     private fun normalizeInvocation(value: String): String =
         value.trim().lowercase().replace(Regex("\\s+"), " ")
 
@@ -372,7 +392,7 @@ object ToolExperienceRepository {
         val lock = locks.getOrPut(file.absolutePath) { Mutex() }
         lock.withLock {
             val records = readRecords(file).toMutableList()
-            val safeInvocation = redactSensitiveData(invocation).take(MAX_FIELD_CHARS / 3)
+            val safeInvocation = compactInvocation(invocation)
             val index = records.indices
                 .filter { i ->
                     val record = records[i]
@@ -389,7 +409,7 @@ object ToolExperienceRepository {
 
             val now = System.currentTimeMillis()
             val record = records[index]
-            val safeEvidence = redactSensitiveData(evidence).take(MAX_FIELD_CHARS / 3)
+            val safeEvidence = summarizeForStorage(evidence).take(MAX_RESULT_CHARS)
             val evidenceEntry = "\nVerification evidence [$verificationSource]: $safeEvidence"
             records[index] = record.copy(
                 solution = (record.solution.orEmpty() + evidenceEntry).take(MAX_FIELD_CHARS),
