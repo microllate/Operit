@@ -655,6 +655,32 @@ class ConversationService(
                 )
             }
 
+            // Add successful retry corrections as separate, explicitly unverified tool guidance.
+            if (promptFunctionType == PromptFunctionType.CHAT ||
+                promptFunctionType == PromptFunctionType.VOICE
+            ) {
+                runCatching {
+                    val corrections = ToolExperienceRepository.findRelevantCorrections(
+                        context = context,
+                        memorySpaceId = effectiveMemorySpaceId,
+                        query = processedInput,
+                        limit = 3
+                    )
+                    val correctionPrompt = buildToolCorrectionPrompt(corrections)
+                    if (correctionPrompt.isNotBlank()) {
+                        preparedHistory.add(
+                            1,
+                            PromptTurn(
+                                kind = PromptTurnKind.SYSTEM,
+                                content = correctionPrompt
+                            )
+                        )
+                    }
+                }.onFailure { error ->
+                    AppLogger.e(TAG, "检索工具修正候选经验失败", error)
+                }
+            }
+
             // Process each message in chat history
             effectiveChatHistory.forEachIndexed { index, message ->
                 val kind = message.kind
@@ -687,6 +713,33 @@ class ConversationService(
                 )
             )
         return afterContext.preparedHistory
+    }
+
+    /**
+     * Present changed invocations that succeeded after a failure as correction candidates.
+     * They are hints only; the model must still validate current tool schemas and outcomes.
+     */
+    private fun buildToolCorrectionPrompt(corrections: List<ToolExperience>): String {
+        if (corrections.isEmpty()) return ""
+        return buildString {
+            append("\n\n<tool_correction_candidates>\n")
+            append("Relevant historical tool corrections. Each correction followed an observed failure ")
+            append("with a changed invocation that returned tool-level success; the overall task was ")
+            append("not necessarily verified. Use these as warnings and candidate guidance, not guaranteed rules. ")
+            append("Before calling a tool, check its current schema and required parameters. ")
+            append("Do not repeat the recorded failed invocation when the same cause applies.\n")
+            corrections.forEachIndexed { index, experience ->
+                append("\n")
+                append(index + 1).append(". Tool: ").append(experience.toolName).append("\n")
+                append("   Failed invocation: ").append(experience.invocation).append("\n")
+                append("   Observed error: ").append(experience.error).append("\n")
+                append("   Changed invocation that later returned success: ")
+                    .append(experience.solution.orEmpty()).append("\n")
+                append("   Evidence status: ").append(experience.status)
+                    .append(" (not task-verified)\n")
+            }
+            append("</tool_correction_candidates>")
+        }
     }
 
     /**
