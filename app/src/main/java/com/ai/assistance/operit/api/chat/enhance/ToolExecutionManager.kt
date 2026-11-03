@@ -744,60 +744,8 @@ object ToolExecutionManager {
                     displayToolName,
                     executeToolSafely(invocation, executor, toolHandler)
                 )
-                if (finalResult.success) {
-                    runCatching {
-                        val memorySpaceId =
-                            callerMemorySpaceId?.takeIf { it.isNotBlank() }
-                                ?: UserPreferencesManager.getInstance(context).activeMemorySpaceIdFlow.first()
-                        ToolExperienceRepository.recordSuccessfulRetry(
-                            context = context,
-                            memorySpaceId = memorySpaceId,
-                            toolName = toolName,
-                            invocation = invocationDetails,
-                            result = finalResult.result.toString(),
-                            taskId = callerTaskId
-                        )
-                        ToolExperienceRepository.recordSolutionCandidate(
-                            context = context,
-                            memorySpaceId = memorySpaceId,
-                            chatId = callerChatId,
-                            toolName = toolName,
-                            invocation = invocationDetails,
-                            result = finalResult.result.toString(),
-                            taskId = callerTaskId,
-                            taskContext = callerTaskContext.orEmpty()
-                        )
-                        val verificationEvidence = when (val data = finalResult.result) {
-                            is ADBResultData -> if (data.exitCode == 0) {
-                                "COMMAND_EXIT_CODE" to "Command exited with code 0: ${data.command}"
-                            } else null
-                            is TerminalCommandResultData -> if (data.exitCode == 0 && !data.timedOut) {
-                                "COMMAND_EXIT_CODE" to "Command exited with code 0: ${data.command}"
-                            } else null
-                            is HiddenTerminalCommandResultData -> if (data.exitCode == 0 && !data.timedOut) {
-                                "COMMAND_EXIT_CODE" to "Command exited with code 0: ${data.command}"
-                            } else null
-                            is FileContentData -> "FILE_READBACK" to
-                                "Read back ${data.path} (${data.size} bytes); content length=${data.content.length}"
-                            else -> null
-                        }
-                        verificationEvidence?.let { (source, evidence) ->
-                            ToolExperienceRepository.recordVerificationEvidence(
-                                context = context,
-                                memorySpaceId = memorySpaceId,
-                                chatId = callerChatId,
-                                toolName = toolName,
-                                invocation = invocationDetails,
-                                verificationSource = source,
-                                evidence = evidence,
-                                taskContext = callerTaskContext.orEmpty(),
-                                taskId = callerTaskId
-                            )
-                        }
-                    }.onFailure { error ->
-                        AppLogger.e(TAG, "更新已成功重试的工具经验时出错: $displayToolName", error)
-                    }
-                }
+                // Successful retries are no longer stored as verbose execution transcripts.
+                // The task-final chat-model pass converts observed failures into concise rules.
                 if (!finalResult.success) {
                     runCatching {
                         val memorySpaceId =
