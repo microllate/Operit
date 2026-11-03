@@ -30,6 +30,8 @@ import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.preferences.ActivePromptManager
 import com.ai.assistance.operit.data.preferences.CharacterCardToolAccessResolver
 import com.ai.assistance.operit.data.model.PromptFunctionType
+import com.ai.assistance.operit.data.repository.ToolExperienceRepository
+import com.ai.assistance.operit.data.model.ToolExperience
 import com.ai.assistance.operit.data.preferences.MemorySpaceProfileDocumentRepository
 import com.ai.assistance.operit.data.preferences.UserPreferencesManager
 import com.ai.assistance.operit.core.avatar.impl.factory.AvatarModelFactoryImpl
@@ -625,11 +627,30 @@ class ConversationService(
                     finalSystemPrompt,
                     aiName
                 )
+                val toolExperiencePrompt =
+                    if (promptFunctionType == PromptFunctionType.CHAT ||
+                        promptFunctionType == PromptFunctionType.VOICE
+                    ) {
+                        runCatching {
+                            val experiences = ToolExperienceRepository.findRelevant(
+                                context = context,
+                                memorySpaceId = effectiveMemorySpaceId,
+                                query = processedInput,
+                                limit = 3
+                            )
+                            buildToolExperiencePrompt(experiences)
+                        }.onFailure { error ->
+                            AppLogger.e(TAG, "检索工具经验失败", error)
+                        }.getOrDefault("")
+                    } else {
+                        ""
+                    }
                 preparedHistory.add(
                     0,
                     PromptTurn(
                         kind = PromptTurnKind.SYSTEM,
-                        content = finalSystemPromptWithReplacements
+                        content = finalSystemPromptWithReplacements +
+                            toolExperiencePrompt
                     )
                 )
             }
@@ -666,6 +687,41 @@ class ConversationService(
                 )
             )
         return afterContext.preparedHistory
+    }
+
+    /**
+     * Inject only relevant historical tool observations. An observed failure is a warning,
+     * never an instruction that claims to be a verified fix.
+     */
+    private fun buildToolExperiencePrompt(experiences: List<ToolExperience>): String {
+        if (experiences.isEmpty()) return ""
+        return buildString {
+            append("\n\n<tool_experience_observations>\n")
+            append("Historical tool observations relevant to the current task. ")
+            append("These records are not guaranteed solutions. Treat observed failures as warnings; ")
+            append("do not repeat the same failed approach without checking the cause. ")
+            append("A solution is reliable only when its status is VERIFIED_SOLUTION.\n")
+            experiences.forEachIndexed { index, experience ->
+                append("\n")
+                append(index + 1).append(". Tool: ").append(experience.toolName).append("\n")
+                append("   Status: ").append(experience.status).append("\n")
+                append("   Previous parameter names: ").append(experience.invocation).append("\n")
+                append("   Previous error: ").append(experience.error).append("\n")
+                if (!experience.solution.isNullOrBlank()) {
+                    append("   ")
+                    append(
+                        if (experience.status == ToolExperience.STATUS_VERIFIED_SOLUTION) {
+                            "Verified solution: "
+                        } else {
+                            "Unverified solution candidate: "
+                        }
+                    )
+                    append(experience.solution).append("\n")
+                }
+                append("   Occurrences: ").append(experience.occurrences).append("\n")
+            }
+            append("</tool_experience_observations>")
+        }
     }
 
     /**
