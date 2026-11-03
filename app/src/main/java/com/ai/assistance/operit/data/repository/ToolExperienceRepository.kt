@@ -32,6 +32,7 @@ object ToolExperienceRepository {
     private const val MAX_SUMMARY_CHARS = 400
     private const val DEFAULT_RESULT_LIMIT = 5
     private const val MAX_RETRY_WINDOW_MS = 30 * 60 * 1000L
+    private const val MAX_PENDING_FAILURE_AGE_MS = 24 * 60 * 60 * 1000L
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -671,12 +672,20 @@ object ToolExperienceRepository {
         if (!file.isFile) return emptyList()
         return runCatching {
             val stored = json.decodeFromString<List<ToolExperience>>(file.readText(Charsets.UTF_8))
-            val compacted = stored.map { record ->
+            val now = System.currentTimeMillis()
+            // Migrate away legacy execution transcripts and stale observations. Keep only
+            // concise rules plus recent failures that may still belong to an active task.
+            val retained = stored.filter { record ->
+                record.status == ToolExperience.STATUS_COMPACT_RULE ||
+                    (record.status == ToolExperience.STATUS_OBSERVED_FAILURE &&
+                        now - record.updatedAt <= MAX_PENDING_FAILURE_AGE_MS)
+            }
+            val compacted = retained.map { record ->
                 record.copy(
                     invocation = compactInvocation(record.invocation),
                     taskContext = redactSensitiveData(record.taskContext).take(MAX_TASK_CONTEXT_CHARS),
                     error = redactSensitiveData(record.error).take(MAX_ERROR_CHARS),
-                    solution = record.solution?.let { redactSensitiveData(it).take(MAX_FIELD_CHARS) }
+                    solution = record.solution?.let { redactSensitiveData(it).take(MAX_SUMMARY_CHARS) }
                 )
             }
             if (compacted != stored) writeRecords(file, compacted)
