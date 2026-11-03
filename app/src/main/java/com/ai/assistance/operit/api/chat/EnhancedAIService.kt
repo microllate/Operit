@@ -2258,7 +2258,10 @@ class EnhancedAIService private constructor(private val context: Context) {
                         toolExposureMode = ToolExposureMode.resolve(config.apiProviderType),
                         callerName = characterName,
                         callerChatId = chatId,
-                        callerCardId = roleCardId
+                        callerCardId = roleCardId,
+                        callerMemorySpaceId = memorySpaceIdOverride,
+                        callerTaskContext = context.originalUserTask,
+                        callerTaskId = context.taskId
                     )
                     allResults += batchResult.results
                     resolvedTasks.zip(batchResult.results).forEach { (taskAndParameters, result) ->
@@ -2288,7 +2291,10 @@ class EnhancedAIService private constructor(private val context: Context) {
                     toolExposureMode = ToolExposureMode.resolve(config.apiProviderType),
                     callerName = characterName,
                     callerChatId = chatId,
-                    callerCardId = roleCardId
+                    callerCardId = roleCardId,
+                    callerMemorySpaceId = memorySpaceIdOverride,
+                    callerTaskContext = context.originalUserTask,
+                    callerTaskId = context.taskId
                 )
             }
 
