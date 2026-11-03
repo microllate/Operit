@@ -1,6 +1,12 @@
 package com.ai.assistance.operit.api.chat.enhance
 
 import android.content.Context
+import com.ai.assistance.operit.core.tools.ADBResultData
+import com.ai.assistance.operit.core.tools.TerminalCommandResultData
+import com.ai.assistance.operit.core.tools.HiddenTerminalCommandResultData
+import com.ai.assistance.operit.core.tools.FileContentData
+import com.ai.assistance.operit.data.preferences.UserPreferencesManager
+import com.ai.assistance.operit.data.repository.ToolExperienceRepository
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.core.tools.AIToolHandler
@@ -510,7 +516,10 @@ object ToolExecutionManager {
         toolExposureMode: ToolExposureMode = ToolExposureMode.FULL,
         callerName: String? = null,
         callerChatId: String? = null,
-        callerCardId: String? = null
+        callerCardId: String? = null,
+        callerMemorySpaceId: String? = null,
+        callerTaskContext: String? = null,
+        callerTaskId: String = ""
     ): ToolExecutionBatch = coroutineScope {
         val orderedResults = OrderedToolResults(invocations.size) { markup ->
             collector.emit(ensureOwnLine(markup))
@@ -636,6 +645,11 @@ object ToolExecutionManager {
                 val result =
                     executeTool(
                         invocation = invocation,
+                        context = context,
+                        callerChatId = callerChatId,
+                        callerMemorySpaceId = callerMemorySpaceId,
+                        callerTaskContext = callerTaskContext,
+                        callerTaskId = callerTaskId,
                         toolHandler = toolHandler,
                         packageManager = packageManager,
                         runtimeContext = toolRuntimeContext
@@ -649,6 +663,11 @@ object ToolExecutionManager {
             val result =
                 executeTool(
                     invocation = invocation,
+                    context = context,
+                    callerChatId = callerChatId,
+                    callerMemorySpaceId = callerMemorySpaceId,
+                    callerTaskContext = callerTaskContext,
+                    callerTaskId = callerTaskId,
                     toolHandler = toolHandler,
                     packageManager = packageManager,
                     runtimeContext = toolRuntimeContext
@@ -667,6 +686,11 @@ object ToolExecutionManager {
      */
     private suspend fun executeTool(
         invocation: ToolInvocation,
+        context: Context,
+        callerChatId: String?,
+        callerMemorySpaceId: String?,
+        callerTaskContext: String?,
+        callerTaskId: String,
         toolHandler: AIToolHandler,
         packageManager: PackageManager,
         runtimeContext: ToolRuntimeContext
@@ -688,16 +712,111 @@ object ToolExecutionManager {
                             result = StringResultData(""),
                             error = errorMessage
                         )
+                    runCatching {
+                        val memorySpaceId =
+                            callerMemorySpaceId?.takeIf { it.isNotBlank() }
+                                ?: UserPreferencesManager.getInstance(context).activeMemorySpaceIdFlow.first()
+                        ToolExperienceRepository.recordFailure(
+                            context = context,
+                            memorySpaceId = memorySpaceId,
+                            toolName = toolName,
+                            invocation = invocation.tool.parameters
+                                .joinToString(", ") { parameter -> "${parameter.name}=${parameter.value}" },
+                            error = errorMessage,
+                            chatId = callerChatId,
+                            taskId = callerTaskId,
+                            taskContext = callerTaskContext.orEmpty()
+                        )
+                    }.onFailure { error ->
+                        AppLogger.e(TAG, "记录工具不可用经验时出错: $toolName", error)
+                    }
                     toolHandler.notifyToolExecutionResult(invocation.tool, notAvailableResult)
                     return@withContext notAvailableResult
                 }
 
                 toolHandler.notifyToolExecutionStarted(invocation.tool)
 
+                // Persist actual argument values so a later success can be matched exactly.
+                val invocationDetails = invocation.tool.parameters
+                    .joinToString(", ") { parameter -> "${parameter.name}=${parameter.value}" }
+
                 val finalResult = aggregateToolResults(
                     displayToolName,
                     executeToolSafely(invocation, executor, toolHandler)
                 )
+                if (finalResult.success) {
+                    runCatching {
+                        val memorySpaceId =
+                            callerMemorySpaceId?.takeIf { it.isNotBlank() }
+                                ?: UserPreferencesManager.getInstance(context).activeMemorySpaceIdFlow.first()
+                        ToolExperienceRepository.recordSuccessfulRetry(
+                            context = context,
+                            memorySpaceId = memorySpaceId,
+                            toolName = toolName,
+                            invocation = invocationDetails,
+                            result = finalResult.result.toString(),
+                            taskId = callerTaskId
+                        )
+                        ToolExperienceRepository.recordSolutionCandidate(
+                            context = context,
+                            memorySpaceId = memorySpaceId,
+                            chatId = callerChatId,
+                            toolName = toolName,
+                            invocation = invocationDetails,
+                            result = finalResult.result.toString(),
+                            taskId = callerTaskId,
+                            taskContext = callerTaskContext.orEmpty()
+                        )
+                        val verificationEvidence = when (val data = finalResult.result) {
+                            is ADBResultData -> if (data.exitCode == 0) {
+                                "COMMAND_EXIT_CODE" to "Command exited with code 0: ${data.command}"
+                            } else null
+                            is TerminalCommandResultData -> if (data.exitCode == 0 && !data.timedOut) {
+                                "COMMAND_EXIT_CODE" to "Command exited with code 0: ${data.command}"
+                            } else null
+                            is HiddenTerminalCommandResultData -> if (data.exitCode == 0 && !data.timedOut) {
+                                "COMMAND_EXIT_CODE" to "Command exited with code 0: ${data.command}"
+                            } else null
+                            is FileContentData -> "FILE_READBACK" to
+                                "Read back ${data.path} (${data.size} bytes); content length=${data.content.length}"
+                            else -> null
+                        }
+                        verificationEvidence?.let { (source, evidence) ->
+                            ToolExperienceRepository.recordVerificationEvidence(
+                                context = context,
+                                memorySpaceId = memorySpaceId,
+                                chatId = callerChatId,
+                                toolName = toolName,
+                                invocation = invocationDetails,
+                                verificationSource = source,
+                                evidence = evidence,
+                                taskContext = callerTaskContext.orEmpty(),
+                                taskId = callerTaskId
+                            )
+                        }
+                    }.onFailure { error ->
+                        AppLogger.e(TAG, "更新已成功重试的工具经验时出错: $displayToolName", error)
+                    }
+                }
+                if (!finalResult.success) {
+                    runCatching {
+                        val memorySpaceId =
+                            callerMemorySpaceId?.takeIf { it.isNotBlank() }
+                                ?: UserPreferencesManager.getInstance(context).activeMemorySpaceIdFlow.first()
+                        ToolExperienceRepository.recordFailure(
+                            context = context,
+                            memorySpaceId = memorySpaceId,
+                            toolName = toolName,
+                            invocation = invocationDetails,
+                            error = finalResult.error ?: finalResult.result.toString(),
+                            chatId = callerChatId,
+                            taskId = callerTaskId,
+                            taskContext = callerTaskContext.orEmpty()
+                        )
+                    }.onFailure { error ->
+                        AppLogger.e(TAG, "记录工具失败经验时出错: $displayToolName", error)
+                    }
+                }
                 toolHandler.notifyToolExecutionResult(invocation.tool, finalResult)
                 return@withContext finalResult
             } finally {
