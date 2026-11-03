@@ -564,7 +564,17 @@ object ToolExperienceRepository {
     private fun readRecords(file: File): List<ToolExperience> {
         if (!file.isFile) return emptyList()
         return runCatching {
-            json.decodeFromString<List<ToolExperience>>(file.readText(Charsets.UTF_8))
+            val stored = json.decodeFromString<List<ToolExperience>>(file.readText(Charsets.UTF_8))
+            val compacted = stored.map { record ->
+                record.copy(
+                    invocation = compactInvocation(record.invocation),
+                    taskContext = redactSensitiveData(record.taskContext).take(MAX_TASK_CONTEXT_CHARS),
+                    error = redactSensitiveData(record.error).take(MAX_ERROR_CHARS),
+                    solution = record.solution?.let { redactSensitiveData(it).take(MAX_FIELD_CHARS) }
+                )
+            }
+            if (compacted != stored) writeRecords(file, compacted)
+            compacted
         }.getOrElse { emptyList() }
     }
 
