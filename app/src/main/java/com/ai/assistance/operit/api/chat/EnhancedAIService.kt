@@ -36,6 +36,8 @@ import com.ai.assistance.operit.data.model.FunctionType
 import com.ai.assistance.operit.data.model.InputProcessingState
 import com.ai.assistance.operit.data.model.PromptFunctionType
 import com.ai.assistance.operit.data.model.ToolInvocation
+import com.ai.assistance.operit.data.repository.ToolExperienceRepository
+import com.ai.assistance.operit.data.model.ToolExperience
 import com.ai.assistance.operit.data.model.ToolResult
 import com.ai.assistance.operit.data.model.ModelConfigData
 import com.ai.assistance.operit.data.model.ModelParameter
@@ -1062,6 +1064,55 @@ class EnhancedAIService private constructor(private val context: Context) {
 
                     var finalProcessedInput = message
                     var finalPreparedHistory = preparedHistory
+
+                    // Reuse only independently verified tool experiences. Unverified failures
+                    // and candidates remain internal observations and must not guide execution as facts.
+                    runCatching {
+                        val experienceMemorySpaceId =
+                            memorySpaceIdOverride?.takeIf { it.isNotBlank() }
+                                ?: preferencesManager.activeMemorySpaceIdFlow.first()
+                        val verifiedExperiences = ToolExperienceRepository.findRelevant(
+                            context = this@EnhancedAIService.context,
+                            memorySpaceId = experienceMemorySpaceId,
+                            query = message,
+                            limit = 3
+                        )
+                        if (verifiedExperiences.isNotEmpty()) {
+                            val verifiedSolutions = verifiedExperiences.filter {
+                                it.status == ToolExperience.STATUS_VERIFIED_SOLUTION && it.verifiedAt != null
+                            }
+                            val observedFailures = verifiedExperiences.filter {
+                                it.status == ToolExperience.STATUS_OBSERVED_FAILURE
+                            }
+                            val experiencePrompt = buildString {
+                                if (verifiedSolutions.isNotEmpty()) {
+                                    appendLine()
+                                    appendLine("[Verified tool solutions]")
+                                    appendLine("These solutions were independently verified in previous tasks.")
+                                    appendLine("Reuse only when the current task and tool arguments are materially equivalent.")
+                                    verifiedSolutions.forEachIndexed { index, experience ->
+                                        appendLine("${index + 1}. Tool: ${experience.toolName}")
+                                        appendLine("   Invocation: ${experience.invocation.take(900)}")
+                                        appendLine("   Verified solution: ${experience.solution.orEmpty().take(1800)}")
+                                    }
+                                }
+                                if (observedFailures.isNotEmpty()) {
+                                    appendLine()
+                                    appendLine("[Known tool failure patterns — warnings, not solutions]")
+                                    appendLine("These failures were observed in previous tasks. Avoid repeating the same failing conditions; adapt parameters or approach.")
+                                    observedFailures.take(3).forEachIndexed { index, experience ->
+                                        appendLine("${index + 1}. Tool: ${experience.toolName}")
+                                        appendLine("   Invocation: ${experience.invocation.take(900)}")
+                                        appendLine("   Observed error: ${experience.error.take(1200)}")
+                                    }
+                                }
+                                appendLine("Historical records are guidance only. Verify outcomes in the current task.")
+                            }
+                            finalProcessedInput += experiencePrompt
+                        }
+                    }.onFailure { error ->
+                        AppLogger.w(TAG, "检索已验证工具经验失败，本轮继续正常请求模型", error)
+                    }
                     val beforeFinalizeContext =
                         applyPromptFinalizeHooks(
                             PromptHookContext(
@@ -2033,6 +2084,29 @@ class EnhancedAIService private constructor(private val context: Context) {
         
         // 保存最后的回复内容用于通知
         lastReplyContent = context.roundManager.getDisplayContent()
+
+        // Persist the model's final task summary alongside changed-invocation candidates.
+        // Keep these records unverified: a natural-language final answer is not proof of task correctness.
+        runCatching {
+            val currentChatId = chatId?.takeIf { it.isNotBlank() }
+            val profileId = memorySpaceIdOverride?.takeIf { it.isNotBlank() }
+                ?: preferencesManager.activeMemorySpaceIdFlow.first()
+            val updated = ToolExperienceRepository.recordTaskCompletionSummary(
+                context = this@EnhancedAIService.context,
+                memorySpaceId = profileId,
+                chatId = currentChatId,
+                summary = content,
+                taskId = context.taskId,
+                taskContext = context.originalUserTask
+            )
+            if (updated > 0) {
+                AppLogger.d(TAG, "已将任务完成摘要附加到 $updated 条工具经验候选（保持未验证状态）")
+            }
+        }.onFailure { error ->
+            AppLogger.e(TAG, "保存工具经验任务摘要失败", error)
+        }
+
+
 
         // Ensure input processing state is updated to completed
         if (!isSubTask) {
