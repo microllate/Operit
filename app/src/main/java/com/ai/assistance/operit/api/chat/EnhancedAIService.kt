@@ -2110,6 +2110,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                 } else {
                     AppLogger.w(TAG, "工具经验总结未返回有效JSON，跳过保存")
                 }
+                ToolExperienceRepository.clearTaskFailures(
+                    context = this@EnhancedAIService.context,
+                    memorySpaceId = profileId,
+                    chatId = currentChatId,
+                    taskId = context.taskId
+                )
             }
         }.onFailure { error ->
             AppLogger.e(TAG, "生成精简工具经验规则失败", error)
