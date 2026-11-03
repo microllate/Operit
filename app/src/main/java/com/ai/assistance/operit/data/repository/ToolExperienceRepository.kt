@@ -233,6 +233,89 @@ object ToolExperienceRepository {
         }
     }
 
+    /** Returns only this task's observed failures for model-generated rule extraction. */
+    suspend fun getTaskFailures(
+        context: Context,
+        memorySpaceId: String,
+        chatId: String?,
+        taskId: String
+    ): List<ToolExperience> = withContext(Dispatchers.IO) {
+        if (taskId.isBlank()) return@withContext emptyList()
+        val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
+        val lock = locks.getOrPut(file.absolutePath) { Mutex() }
+        lock.withLock {
+            readRecords(file)
+                .filter {
+                    it.taskId == taskId &&
+                        (chatId.isNullOrBlank() || it.chatId == chatId) &&
+                        it.status == ToolExperience.STATUS_OBSERVED_FAILURE
+                }
+                .sortedBy { it.createdAt }
+                .take(20)
+        }
+    }
+
+    /** Store one concise model-authored rule per tool; newer rules replace stale rules for that tool. */
+    suspend fun saveCompactRule(
+        context: Context,
+        memorySpaceId: String,
+        toolName: String,
+        rule: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val safeTool = toolName.trim().take(128)
+        val safeRule = redactSensitiveData(rule).replace(Regex("\\s+"), " ").trim().take(180)
+        if (safeTool.isBlank() || safeRule.isBlank()) return@withContext false
+        val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
+        val lock = locks.getOrPut(file.absolutePath) { Mutex() }
+        lock.withLock {
+            val records = readRecords(file).toMutableList()
+            val now = System.currentTimeMillis()
+            val matching = records.filter {
+                it.status == ToolExperience.STATUS_COMPACT_RULE &&
+                    it.toolName.equals(safeTool, ignoreCase = true)
+            }
+            val previous = matching.maxByOrNull { it.updatedAt }
+            records.removeAll(matching.toSet())
+            records.add(
+                ToolExperience(
+                    id = previous?.id ?: UUID.randomUUID().toString(),
+                    memorySpaceId = memorySpaceId.trim().ifBlank { "default" },
+                    toolName = safeTool,
+                    invocation = "",
+                    taskContext = "",
+                    error = "",
+                    solution = safeRule,
+                    status = ToolExperience.STATUS_COMPACT_RULE,
+                    occurrences = (previous?.occurrences ?: 0) + 1,
+                    createdAt = previous?.createdAt ?: now,
+                    updatedAt = now
+                )
+            )
+            writeRecords(file, records.sortedByDescending { it.updatedAt }.take(MAX_RECORDS))
+            true
+        }
+    }
+
+    /** Compact rules are loaded as a small index, without keyword matching against the user prompt. */
+    suspend fun findCompactRules(
+        context: Context,
+        memorySpaceId: String,
+        limit: Int = 30
+    ): List<ToolExperience> = withContext(Dispatchers.IO) {
+        if (limit <= 0) return@withContext emptyList()
+        val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
+        val lock = locks.getOrPut(file.absolutePath) { Mutex() }
+        lock.withLock {
+            readRecords(file)
+                .filter {
+                    it.status == ToolExperience.STATUS_COMPACT_RULE &&
+                        !it.solution.isNullOrBlank()
+                }
+                .sortedByDescending { it.updatedAt }
+                .take(limit)
+        }
+    }
+
     private fun redactSensitiveData(value: String): String {
         val sensitiveName = Regex(
             """(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|passwd|secret|authorization|cookie|client[_-]?secret)(\s*[=:]\s*)([^,;\s]+|"[^"]*"|'[^']*')"""
