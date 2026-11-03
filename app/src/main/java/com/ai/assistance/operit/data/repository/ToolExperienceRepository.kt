@@ -244,6 +244,28 @@ object ToolExperienceRepository {
      * Find successful retry candidates that pair an observed failure with a changed invocation.
      * These are useful correction hints, but remain explicitly unverified at task level.
      */
+    /**
+     * Expand natural-language file-operation requests to the tool vocabulary used in
+     * recorded experiences. This runs before the model's first tool call.
+     */
+    private fun expandToolExperienceQuery(query: String): String {
+        val normalized = query.lowercase()
+        val additions = linkedSetOf<String>()
+        fun addWhenMatched(vararg terms: String, expansion: String) {
+            if (terms.any { normalized.contains(it) }) additions += expansion
+        }
+
+        addWhenMatched("修改文件", "编辑文件", "编辑代码", "替换内容", "修改代码", "写入文件", "更新文件",
+            "改文件", "patch", "edit file", expansion = "edit_file old new required parameters")
+        addWhenMatched("读取文件", "查看文件", "阅读文件", "打开文件", "文件内容",
+            "read file", expansion = "read_file read_file_part read_file_full")
+        addWhenMatched("列出文件", "文件列表", "目录列表", "查看目录", "列出目录",
+            "list files", expansion = "list_files")
+        addWhenMatched("搜索文件", "查找文件", "搜索代码", "查找代码", "代码搜索",
+            "grep", "find files", expansion = "find_files grep_code")
+        return (query + " " + additions.joinToString(" ")).trim()
+    }
+
     suspend fun findRelevantCorrections(
         context: Context,
         memorySpaceId: String,
@@ -254,7 +276,7 @@ object ToolExperienceRepository {
         val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
         val lock = locks.getOrPut(file.absolutePath) { Mutex() }
         lock.withLock {
-            val queryTokens = tokenize(query)
+            val queryTokens = tokenize(expandToolExperienceQuery(query))
             if (queryTokens.isEmpty()) return@withLock emptyList()
 
             readRecords(file)
