@@ -294,7 +294,8 @@ object ToolExperienceRepository {
             val now = System.currentTimeMillis()
             val matching = records.filter {
                 it.status == ToolExperience.STATUS_COMPACT_RULE &&
-                    it.toolName.equals(safeTool, ignoreCase = true)
+                    it.toolName.equals(safeTool, ignoreCase = true) &&
+                    it.solution.orEmpty().equals(safeRule, ignoreCase = true)
             }
             val previous = matching.maxByOrNull { it.updatedAt }
             records.removeAll(matching.toSet())
@@ -313,6 +314,14 @@ object ToolExperienceRepository {
                     updatedAt = now
                 )
             )
+            val toolRules = records
+                .filter {
+                    it.status == ToolExperience.STATUS_COMPACT_RULE &&
+                        it.toolName.equals(safeTool, ignoreCase = true)
+                }
+                .sortedByDescending { it.updatedAt }
+            val excessRuleIds = toolRules.drop(5).map { it.id }.toSet()
+            records.removeAll { it.id in excessRuleIds }
             writeRecords(file, records.sortedByDescending { it.updatedAt }.take(MAX_RECORDS))
             true
         }
