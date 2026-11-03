@@ -2055,7 +2055,7 @@ class EnhancedAIService private constructor(private val context: Context) {
             )
             val snapshot = context.modelExecutionSnapshot
             if (failures.isNotEmpty() && snapshot != null) {
-                val failureText = failures.joinToString("\\n") { failure ->
+                val failureText = failures.joinToString("\n") { failure ->
                     "- Tool: ${failure.toolName}; invocation: ${failure.invocation.take(220)}; error: ${failure.error.take(300)}"
                 }.take(6000)
                 val extractionPrompt = """
