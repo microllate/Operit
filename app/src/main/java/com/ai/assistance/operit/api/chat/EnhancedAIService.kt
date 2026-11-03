@@ -437,6 +437,9 @@ class EnhancedAIService private constructor(private val context: Context) {
         val isConversationActive: AtomicBoolean = AtomicBoolean(true),
         val conversationHistory: MutableList<PromptTurn>,
         val eventChannel: MutableSharedStream<TextStreamEvent>,
+        // Tool-experience metadata for this message execution.
+        val taskId: String = "task-$executionId",
+        val originalUserTask: String = "",
         var modelExecutionSnapshot: ModelExecutionSnapshot? = null
     )
 
@@ -973,7 +976,8 @@ class EnhancedAIService private constructor(private val context: Context) {
                 MessageExecutionContext(
                     executionId = nextExecutionContextId.incrementAndGet(),
                     conversationHistory = chatHistory.toMutableList(),
-                    eventChannel = eventChannel
+                    eventChannel = eventChannel,
+                    originalUserTask = message
                 )
             registerExecutionContext(execContext)
             var hadFatalError = false
