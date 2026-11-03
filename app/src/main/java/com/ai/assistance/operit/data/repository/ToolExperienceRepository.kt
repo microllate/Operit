@@ -316,7 +316,7 @@ object ToolExperienceRepository {
         val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
         val lock = locks.getOrPut(file.absolutePath) { Mutex() }
         lock.withLock {
-            val queryTokens = tokenize(query)
+            val queryTokens = tokenize(expandToolExperienceQuery(query))
             if (queryTokens.isEmpty()) return@withLock emptyList()
 
             readRecords(file)
