@@ -25,5 +25,6 @@ data class ToolExperience(
         const val STATUS_SOLUTION_CANDIDATE = "SOLUTION_CANDIDATE"
         const val STATUS_VERIFIED_SOLUTION = "VERIFIED_SOLUTION"
         const val STATUS_INVALIDATED = "INVALIDATED"
+        const val STATUS_COMPACT_RULE = "COMPACT_RULE"
     }
 }
