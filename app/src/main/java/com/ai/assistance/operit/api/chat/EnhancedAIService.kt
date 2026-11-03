@@ -2058,6 +2058,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                 val failureText = failures.joinToString("\n") { failure ->
                     "- Tool: ${failure.toolName}; invocation: ${failure.invocation.take(220)}; error: ${failure.error.take(300)}"
                 }.take(6000)
+                val subsequentToolEvidence = context.conversationHistory
+                    .filter { it.kind == PromptTurnKind.TOOL_RESULT }
+                    .takeLast(12)
+                    .joinToString("\n") { turn ->
+                        "- Tool: ${turn.toolName.orEmpty()}; result: ${turn.content.take(350)}"
+                    }.take(4000)
                 val extractionPrompt = """
                     Review the tool failures from this completed task and the final outcome.
                     Save only reusable, actionable rules that are clearly supported by what happened.
@@ -2068,6 +2074,8 @@ class EnhancedAIService private constructor(private val context: Context) {
                     Task: ${context.originalUserTask.take(800)}
                     Tool failures:
                     $failureText
+                    Subsequent tool results (including successful alternatives):
+                    ${subsequentToolEvidence.ifBlank { "No additional tool results available." }}
                     Final task outcome:
                     ${content.take(1600)}
                 """.trimIndent()
