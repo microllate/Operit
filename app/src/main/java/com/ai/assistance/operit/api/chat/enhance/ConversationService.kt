@@ -395,7 +395,7 @@ class ConversationService(
         return firstLine
             .replace(Regex("^[#*`_>\\-\\s]+"), "")
             .replace(Regex("[#*`_]+$"), "")
-            .replace(Regex("[\\p{Cntrl}&&[^\\n\\t]]"), "")
+            .replace(Regex("[\\p{Cntrl}&&[^\n\\t]]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
             .trim('"', '\'', '“', '”', '‘', '’', '「', '」', '『', '』')
@@ -638,12 +638,12 @@ class ConversationService(
                         )
                         if (rules.isNotEmpty()) {
                             val rulePrompt = buildString {
-                                append("<tool_experience_rules>\\n")
+                                append("<tool_experience_rules>\n")
                                 append("Apply these concise lessons when the matching tool or situation is used. ")
-                                append("Do not use ADB when a rule says to use a normal terminal shell.\\n")
+                                append("Do not use ADB when a rule says to use a normal terminal shell.\n")
                                 rules.forEach { rule ->
                                     append("- Tool: ").append(rule.toolName)
-                                        .append(" | Rule: ").append(rule.solution).append("\\n")
+                                        .append(" | Rule: ").append(rule.solution).append("\n")
                                 }
                                 append("</tool_experience_rules>")
                             }
