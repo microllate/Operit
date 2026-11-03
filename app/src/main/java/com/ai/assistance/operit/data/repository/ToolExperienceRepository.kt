@@ -240,6 +240,50 @@ object ToolExperienceRepository {
     private fun normalizeInvocation(value: String): String =
         value.trim().lowercase().replace(Regex("\\s+"), " ")
 
+    /**
+     * Find successful retry candidates that pair an observed failure with a changed invocation.
+     * These are useful correction hints, but remain explicitly unverified at task level.
+     */
+    suspend fun findRelevantCorrections(
+        context: Context,
+        memorySpaceId: String,
+        query: String,
+        limit: Int = 3
+    ): List<ToolExperience> = withContext(Dispatchers.IO) {
+        if (query.isBlank() || limit <= 0) return@withContext emptyList()
+        val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
+        val lock = locks.getOrPut(file.absolutePath) { Mutex() }
+        lock.withLock {
+            val queryTokens = tokenize(query)
+            if (queryTokens.isEmpty()) return@withLock emptyList()
+
+            readRecords(file)
+                .asSequence()
+                .filter {
+                    it.status == ToolExperience.STATUS_SOLUTION_CANDIDATE &&
+                        it.solution.orEmpty().contains("Candidate successful retry invocation:")
+                }
+                .map { record ->
+                    val searchable = listOf(
+                        record.toolName,
+                        record.invocation,
+                        record.taskContext,
+                        record.error,
+                        record.solution.orEmpty()
+                    ).joinToString(" ").lowercase()
+                    record to queryTokens.count { searchable.contains(it) }
+                }
+                .filter { (_, score) -> score > 0 }
+                .sortedWith(
+                    compareByDescending<Pair<ToolExperience, Int>> { it.second }
+                        .thenByDescending { it.first.updatedAt }
+                )
+                .take(limit)
+                .map { it.first }
+                .toList()
+        }
+    }
+
     suspend fun findRelevant(
         context: Context,
         memorySpaceId: String,
