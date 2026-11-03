@@ -680,6 +680,8 @@ class ConversationService(
                 }
             }
         }
+        }
+
         val afterContext =
             dispatchHistoryHooks(
                 beforeContext.copy(
