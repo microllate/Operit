@@ -627,60 +627,35 @@ class ConversationService(
                     finalSystemPrompt,
                     aiName
                 )
-                val toolExperiencePrompt =
-                    if (promptFunctionType == PromptFunctionType.CHAT ||
-                        promptFunctionType == PromptFunctionType.VOICE
-                    ) {
-                        runCatching {
-                            val experiences = ToolExperienceRepository.findRelevant(
-                                context = context,
-                                memorySpaceId = effectiveMemorySpaceId,
-                                query = processedInput,
-                                limit = 3
-                            )
-                            buildToolExperiencePrompt(experiences)
-                        }.onFailure { error ->
-                            AppLogger.e(TAG, "检索工具经验失败", error)
-                        }.getOrDefault("")
-                    } else {
-                        ""
-                    }
-                preparedHistory.add(
-                    0,
-                    PromptTurn(
-                        kind = PromptTurnKind.SYSTEM,
-                        content = finalSystemPromptWithReplacements +
-                            toolExperiencePrompt
-                    )
-                )
-            }
-
-            // Add successful retry corrections as separate, explicitly unverified tool guidance.
-            if (promptFunctionType == PromptFunctionType.CHAT ||
-                promptFunctionType == PromptFunctionType.VOICE
-            ) {
-                runCatching {
-                    val corrections = ToolExperienceRepository.findRelevantCorrections(
-                        context = context,
-                        memorySpaceId = memorySpaceIdOverride?.takeIf { it.isNotBlank() }
-                            ?: userPreferencesManager.activeMemorySpaceIdFlow.first(),
-                        query = processedInput,
-                        limit = 3
-                    )
-                    val correctionPrompt = buildToolCorrectionPrompt(corrections)
-                    if (correctionPrompt.isNotBlank()) {
-                        preparedHistory.add(
-                            1,
-                            PromptTurn(
-                                kind = PromptTurnKind.SYSTEM,
-                                content = correctionPrompt
-                            )
+                if (promptFunctionType == PromptFunctionType.CHAT ||
+                    promptFunctionType == PromptFunctionType.VOICE
+                ) {
+                    runCatching {
+                        val rules = ToolExperienceRepository.findCompactRules(
+                            context = context,
+                            memorySpaceId = effectiveMemorySpaceId,
+                            limit = 30
                         )
+                        if (rules.isNotEmpty()) {
+                            val rulePrompt = buildString {
+                                append("<tool_experience_rules>\\n")
+                                append("Apply these concise lessons when the matching tool or situation is used. ")
+                                append("Do not use ADB when a rule says to use a normal terminal shell.\\n")
+                                rules.forEach { rule ->
+                                    append("- Tool: ").append(rule.toolName)
+                                        .append(" | Rule: ").append(rule.solution).append("\\n")
+                                }
+                                append("</tool_experience_rules>")
+                            }
+                            preparedHistory.add(
+                                1,
+                                PromptTurn(kind = PromptTurnKind.SYSTEM, content = rulePrompt)
+                            )
+                        }
+                    }.onFailure { error ->
+                        AppLogger.e(TAG, "加载精简工具经验规则失败", error)
                     }
-                }.onFailure { error ->
-                    AppLogger.e(TAG, "检索工具修正候选经验失败", error)
                 }
-            }
 
             // Process each message in chat history
             effectiveChatHistory.forEachIndexed { index, message ->
