@@ -627,6 +627,15 @@ class ConversationService(
                     finalSystemPrompt,
                     aiName
                 )
+                // Always add the composed system prompt to the outgoing history.
+                // It contains workspace instructions, role-card prompts, tags and user profile.
+                preparedHistory.add(
+                    0,
+                    PromptTurn(
+                        kind = PromptTurnKind.SYSTEM,
+                        content = finalSystemPromptWithReplacements
+                    )
+                )
                 if (promptFunctionType == PromptFunctionType.CHAT ||
                     promptFunctionType == PromptFunctionType.VOICE
                 ) {
