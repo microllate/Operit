@@ -255,6 +255,27 @@ object ToolExperienceRepository {
         }
     }
 
+    /** Remove transient raw failures after the task has been summarized. */
+    suspend fun clearTaskFailures(
+        context: Context,
+        memorySpaceId: String,
+        chatId: String?,
+        taskId: String
+    ) = withContext(Dispatchers.IO) {
+        if (taskId.isBlank()) return@withContext
+        val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
+        val lock = locks.getOrPut(file.absolutePath) { Mutex() }
+        lock.withLock {
+            val records = readRecords(file)
+            val remaining = records.filterNot {
+                it.taskId == taskId &&
+                    (chatId.isNullOrBlank() || it.chatId == chatId) &&
+                    it.status == ToolExperience.STATUS_OBSERVED_FAILURE
+            }
+            if (remaining.size != records.size) writeRecords(file, remaining)
+        }
+    }
+
     /** Store one concise model-authored rule per tool; newer rules replace stale rules for that tool. */
     suspend fun saveCompactRule(
         context: Context,
