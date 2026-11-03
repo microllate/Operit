@@ -2042,28 +2042,78 @@ class EnhancedAIService private constructor(private val context: Context) {
         // 保存最后的回复内容用于通知
         lastReplyContent = context.roundManager.getDisplayContent()
 
-        // Persist the model's final task summary alongside changed-invocation candidates.
-        // Keep these records unverified: a natural-language final answer is not proof of task correctness.
+        // Ask the same chat model to distill this task's observed tool failures into reusable one-line rules.
         runCatching {
             val currentChatId = chatId?.takeIf { it.isNotBlank() }
             val profileId = memorySpaceIdOverride?.takeIf { it.isNotBlank() }
                 ?: preferencesManager.activeMemorySpaceIdFlow.first()
-            val updated = ToolExperienceRepository.recordTaskCompletionSummary(
+            val failures = ToolExperienceRepository.getTaskFailures(
                 context = this@EnhancedAIService.context,
                 memorySpaceId = profileId,
                 chatId = currentChatId,
-                summary = content,
-                taskId = context.taskId,
-                taskContext = context.originalUserTask
+                taskId = context.taskId
             )
-            if (updated > 0) {
-                AppLogger.d(TAG, "已将任务完成摘要附加到 $updated 条工具经验候选（保持未验证状态）")
+            val snapshot = context.modelExecutionSnapshot
+            if (failures.isNotEmpty() && snapshot != null) {
+                val failureText = failures.joinToString("\\n") { failure ->
+                    "- Tool: ${failure.toolName}; invocation: ${failure.invocation.take(220)}; error: ${failure.error.take(300)}"
+                }.take(6000)
+                val extractionPrompt = """
+                    Review the tool failures from this completed task and the final outcome.
+                    Save only reusable, actionable rules that are clearly supported by what happened.
+                    A rule must say exactly what to do or avoid next time, in one short sentence.
+                    Do not save generic advice, guesses, or rules for failures that were not resolved.
+                    Return ONLY a JSON array, with objects shaped as {"tool":"exact tool name","rule":"one concise sentence"}.
+                    Return [] if no reliable reusable rule can be derived.
+                    Task: ${context.originalUserTask.take(800)}
+                    Tool failures:
+                    $failureText
+                    Final task outcome:
+                    ${content.take(1600)}
+                """.trimIndent()
+                val response = StringBuilder()
+                snapshot.service.sendMessage(
+                    context = this@EnhancedAIService.context,
+                    chatHistory = listOf(
+                        PromptTurn(
+                            kind = PromptTurnKind.SYSTEM,
+                            content = "Extract concise reusable tool rules. Output valid JSON only."
+                        ),
+                        PromptTurn(kind = PromptTurnKind.USER, content = extractionPrompt)
+                    ),
+                    modelParameters = snapshot.modelParameters,
+                    stream = false,
+                    enableRetry = false,
+                    recordTokenUsage = false
+                ).collect { chunk -> response.append(chunk) }
+
+                val raw = ChatUtils.removeThinkingContent(response.toString()).trim()
+                val jsonStart = raw.indexOf('[')
+                val jsonEnd = raw.lastIndexOf(']')
+                if (jsonStart >= 0 && jsonEnd > jsonStart) {
+                    val rules = org.json.JSONArray(raw.substring(jsonStart, jsonEnd + 1))
+                    var saved = 0
+                    for (index in 0 until rules.length()) {
+                        val item = rules.optJSONObject(index) ?: continue
+                        val tool = item.optString("tool").trim()
+                        val rule = item.optString("rule").trim()
+                        if (tool.isNotBlank() && rule.isNotBlank() &&
+                            ToolExperienceRepository.saveCompactRule(
+                                context = this@EnhancedAIService.context,
+                                memorySpaceId = profileId,
+                                toolName = tool,
+                                rule = rule
+                            )
+                        ) saved++
+                    }
+                    AppLogger.d(TAG, "工具经验总结完成：保存/更新 $saved 条精简规则")
+                } else {
+                    AppLogger.w(TAG, "工具经验总结未返回有效JSON，跳过保存")
+                }
             }
         }.onFailure { error ->
-            AppLogger.e(TAG, "保存工具经验任务摘要失败", error)
+            AppLogger.e(TAG, "生成精简工具经验规则失败", error)
         }
-
-
 
         // Ensure input processing state is updated to completed
         if (!isSubTask) {
