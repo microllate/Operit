@@ -11,7 +11,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -63,6 +66,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -107,6 +112,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
 /**
@@ -169,6 +175,7 @@ enum class ChatStyle {
     BUBBLE
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatArea(
     chatHistory: List<ChatMessage>,
@@ -237,6 +244,8 @@ fun ChatArea(
     showChatFloatingDotsAnimation: Boolean = true,
 ) {
     val context = LocalContext.current
+    val textToolbar = LocalTextToolbar.current
+    val viewConfiguration = LocalViewConfiguration.current
     val coroutineScope = rememberCoroutineScope()
     val themeSnapshot = LocalThemePreferenceSnapshot.current
     val showMessageTokenStats = themeSnapshot.showMessageTokenStats
@@ -363,6 +372,20 @@ fun ChatArea(
                 .background(Color.Transparent)
                 .onGloballyPositioned { coordinates ->
                     viewportHeightPx = coordinates.size.height
+                }
+                // 只观察轻触，不消费触摸事件；点击聊天区域时关闭系统文字选择工具栏。
+                .pointerInput(textToolbar, viewConfiguration) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Initial,
+                        )
+                        val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                            ?: return@awaitEachGesture
+                        if (up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) {
+                            textToolbar.hide()
+                        }
+                    }
                 },
     ) {
         Column(
@@ -692,29 +715,51 @@ private fun MessageItem(
                     )
                 } else Modifier
             )
-            .pointerInput(message.timestamp, message.sender, isMultiSelectMode) {
-                // 只识别双击来打开原有消息菜单；不注册长按手势。
-                // 长按完整交给消息正文内部的 SelectionContainer，避免外层手势抢占系统文字选择。
-                detectTapGestures(
-                    onTap = {
+            .pointerInput(message.timestamp, message.sender, isMultiSelectMode, isHiddenUserMessage) {
+                // 在 Initial pass 观察双击但不消费任何事件，确保内部 SelectionContainer
+                // 能完整收到长按、拖动和抬起事件，系统文字选择优先。
+                awaitEachGesture {
+                    val firstDown = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial,
+                    )
+                    val firstUp = waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                        ?: return@awaitEachGesture
+                    if (firstUp.uptimeMillis - firstDown.uptimeMillis >= viewConfiguration.longPressTimeoutMillis) {
+                        return@awaitEachGesture
+                    }
+
+                    val secondDown = withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
+                        awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Initial,
+                        )
+                    }
+                    if (secondDown == null) {
                         if (isMultiSelectMode && isActionable) {
                             onToggleSelection?.invoke()
                         } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
                             showHiddenUserMessageDialog = true
                         }
-                    },
-                    onDoubleTap = {
-                        if (!isMultiSelectMode && isActionable) {
-                            pluginMenuItems =
-                                if (!isHiddenUserMessage) {
-                                    ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
-                                } else {
-                                    emptyList()
-                                }
-                            showContextMenu = true
-                        }
-                    },
-                )
+                        return@awaitEachGesture
+                    }
+                    if ((secondDown.position - firstDown.position).getDistance() > viewConfiguration.touchSlop) {
+                        return@awaitEachGesture
+                    }
+                    val secondUp = waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                        ?: return@awaitEachGesture
+                    if (secondUp.uptimeMillis - secondDown.uptimeMillis < viewConfiguration.longPressTimeoutMillis &&
+                        !isMultiSelectMode && isActionable
+                    ) {
+                        pluginMenuItems =
+                            if (!isHiddenUserMessage) {
+                                ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
+                            } else {
+                                emptyList()
+                            }
+                        showContextMenu = true
+                    }
+                }
             },
     ) {
         Column {
