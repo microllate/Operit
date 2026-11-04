@@ -106,6 +106,18 @@ jobs:
         with:
           packages: ''
 
+      - name: Free runner disk space
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Disk usage before cleanup:"
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/share/swift
+          sudo rm -rf "$ANDROID_HOME/ndk" "$ANDROID_HOME/cmake" "$ANDROID_HOME/system-images" "$ANDROID_HOME/emulator"
+          sudo docker image prune --all --force || true
+          echo "Disk usage after cleanup:"
+          df -h /
+
       - name: Install Android SDK, NDK and CMake
         shell: bash
         run: |
