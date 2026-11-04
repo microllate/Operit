@@ -9,7 +9,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -422,9 +421,9 @@ fun BubbleAiMessageComposable(
                             modifier = bubbleModifier,
                             contentPadding = PaddingValues(0.dp),
                         ) {
-                            SelectionContainer {
+                            
                                 renderContent()
-                            }
+                            
                         }
                     } else {
                         Surface(
@@ -462,9 +461,9 @@ fun BubbleAiMessageComposable(
                                     2.dp
                                 },
                         ) {
-                            SelectionContainer {
+                            
                                 renderContent()
-                            }
+                            
                         }
                     }
                 }
@@ -635,9 +634,9 @@ fun BubbleAiMessageComposable(
                             modifier = bubbleModifier,
                             contentPadding = PaddingValues(0.dp),
                         ) {
-                            SelectionContainer {
+                            
                                 renderContent()
-                            }
+                            
                         }
                     } else {
                         Surface(
@@ -675,9 +674,9 @@ fun BubbleAiMessageComposable(
                                     2.dp
                                 }
                         ) {
-                            SelectionContainer {
+                            
                                 renderContent()
-                            }
+                            
                         }
                     }
                 }
