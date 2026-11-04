@@ -30,14 +30,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ai.assistance.operit.data.model.ChatMessage
-import com.ai.assistance.operit.ui.common.markdown.StreamMarkdownRenderer
-import com.ai.assistance.operit.ui.common.markdown.StreamMarkdownRendererState
 import com.ai.assistance.operit.ui.features.chat.components.ChatMessageHeightMemory
-import com.ai.assistance.operit.ui.features.chat.components.rememberRevisableTextStream
 import com.ai.assistance.operit.ui.features.chat.components.part.CustomXmlRenderer
 import com.ai.assistance.operit.ui.features.chat.components.part.ThinkToolsXmlNodeGrouper
 import com.ai.assistance.operit.ui.features.chat.components.LinkPreviewDialog
-import com.ai.assistance.operit.util.markdown.toCharStream
 import com.ai.assistance.operit.data.preferences.UserPreferencesManager
 import com.ai.assistance.operit.data.preferences.DisplayPreferencesManager
 import com.ai.assistance.operit.data.preferences.CharacterCardManager
@@ -165,7 +161,6 @@ fun BubbleAiMessageComposable(
     var linkToPreview by remember { mutableStateOf("") }
     
     // 创建并保存StreamMarkdownRenderer的状态，使用message.timestamp作为key确保同一条消息共享状态
-    val rendererState = remember(message.timestamp) { StreamMarkdownRendererState() }
 
     val xmlRenderer = remember(
         effectiveShowThinkingProcess,
@@ -370,47 +365,17 @@ fun BubbleAiMessageComposable(
                             .defaultMinSize(minHeight = 44.dp)
                     val renderContent: @Composable () -> Unit = {
                         key(message.timestamp) {
-                            val stream = rememberRevisableTextStream(message.contentStream)
-                            if (stream != null) {
-                                val charStream = remember(stream) { stream.toCharStream() }
-                                StreamMarkdownRenderer(
-                                    markdownStream = charStream,
-                                    textColor = textColor,
-                                    backgroundColor = backgroundColor,
-                                    onLinkClick = rememberedOnLinkClick,
-                                    xmlRenderer = xmlRenderer,
-                                    nodeGrouper = nodeGrouper,
-                                    enableDialogs = enableDialogs,
-                                    modifier =
-                                        Modifier.padding(
-                                            start = bubbleContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                    ),
-                                    state = rendererState,
-                                    fillMaxWidth = shouldUseExpandedBubbleLayout,
-                                )
-                            } else {
-                                StreamMarkdownRenderer(
-                                    content = message.content,
-                                    textColor = textColor,
-                                    backgroundColor = backgroundColor,
-                                    onLinkClick = rememberedOnLinkClick,
-                                    xmlRenderer = xmlRenderer,
-                                    nodeGrouper = nodeGrouper,
-                                    enableDialogs = enableDialogs,
-                                    modifier =
-                                        Modifier.padding(
-                                            start = bubbleContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                    ),
-                                    state = rendererState,
-                                    fillMaxWidth = shouldUseExpandedBubbleLayout,
-                                )
-                            }
+                            Text(
+                                text = message.content,
+                                color = textColor,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(
+                                    start = bubbleContentPaddingLeft.dp,
+                                    top = 12.dp,
+                                    end = bubbleContentPaddingRight.dp,
+                                    bottom = 12.dp,
+                                ),
+                            )
                         }
                     }
 
@@ -578,52 +543,18 @@ fun BubbleAiMessageComposable(
                             .widthIn(max = maxBubbleWidth)
                             .defaultMinSize(minHeight = 44.dp)
                     val renderContent: @Composable () -> Unit = {
-                        // 使用 message.timestamp 作为 key，确保在重组期间，
-                        // 只要是同一条消息，StreamMarkdownRenderer就不会被销毁和重建。
                         key(message.timestamp) {
-                            val stream = rememberRevisableTextStream(message.contentStream)
-                            if (stream != null) {
-                                val charStream = remember(stream) { stream.toCharStream() }
-                                StreamMarkdownRenderer(
-                                    markdownStream = charStream,
-                                    textColor = textColor,
-                                    backgroundColor = backgroundColor,
-                                    onLinkClick = rememberedOnLinkClick,
-                                    xmlRenderer = xmlRenderer,
-                                    nodeGrouper = nodeGrouper,
-                                    enableDialogs = enableDialogs,
-                                    modifier =
-                                        Modifier.padding(
-                                            start = bubbleContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                    ),
-                                    state = rendererState,
-                                    fillMaxWidth = shouldUseExpandedBubbleLayout,
-                                )
-                            } else {
-                                // 对于已完成的静态消息，使用 content 参数的渲染器以支持Markdown
-                                // 共享相同的state，避免重新计算nodes等状态
-                                StreamMarkdownRenderer(
-                                    content = message.content,
-                                    textColor = textColor,
-                                    backgroundColor = backgroundColor,
-                                    onLinkClick = rememberedOnLinkClick,
-                                    xmlRenderer = xmlRenderer,
-                                    nodeGrouper = nodeGrouper,
-                                    enableDialogs = enableDialogs,
-                                    modifier =
-                                        Modifier.padding(
-                                            start = bubbleContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                    ),
-                                    state = rendererState,
-                                    fillMaxWidth = shouldUseExpandedBubbleLayout,
-                                )
-                            }
+                            Text(
+                                text = message.content,
+                                color = textColor,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(
+                                    start = bubbleContentPaddingLeft.dp,
+                                    top = 12.dp,
+                                    end = bubbleContentPaddingRight.dp,
+                                    bottom = 12.dp,
+                                ),
+                            )
                         }
                     }
 
