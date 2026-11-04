@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -175,38 +176,40 @@ fun AiMessageComposable(
         // 使用 message.timestamp 作为 key，确保在重组期间，
         // 只要是同一条消息，StreamMarkdownRenderer就不会被销毁和重建。
         // 这可以防止流被不必要地取消，保证了渲染的连续性。
-        key(message.timestamp) {
-            val streamToRender = rememberRevisableTextStream(overrideStream ?: message.contentStream)
-            if (streamToRender != null) {
-                // 对于正在流式传输的消息，使用流式渲染器
-                // 将contentStream保存到本地变量以避免智能转换问题
-                val charStream = remember(streamToRender) { streamToRender.toCharStream() }
+        SelectionContainer {
+            key(message.timestamp) {
+                val streamToRender = rememberRevisableTextStream(overrideStream ?: message.contentStream)
+                if (streamToRender != null) {
+                    // 对于正在流式传输的消息，使用流式渲染器
+                    // 将contentStream保存到本地变量以避免智能转换问题
+                    val charStream = remember(streamToRender) { streamToRender.toCharStream() }
 
-                StreamMarkdownRenderer(
-                    markdownStream = charStream,
-                    textColor = textColor,
-                    backgroundColor = backgroundColor,
-                    onLinkClick = rememberedOnLinkClick,
-                    xmlRenderer = xmlRenderer,
-                    nodeGrouper = nodeGrouper,
-                    enableDialogs = enableDialogs,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    state = rendererState,
-                )
-            } else {
-                // 对于已完成的静态消息，使用新的字符串渲染器以提高性能
-                // 共享相同的state，避免重新计算nodes等状态
-                StreamMarkdownRenderer(
-                    content = message.content,
-                    textColor = textColor,
-                    backgroundColor = backgroundColor,
-                    onLinkClick = rememberedOnLinkClick,
-                    xmlRenderer = xmlRenderer,
-                    nodeGrouper = nodeGrouper,
-                    enableDialogs = enableDialogs,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    state = rendererState,
-                )
+                    StreamMarkdownRenderer(
+                        markdownStream = charStream,
+                        textColor = textColor,
+                        backgroundColor = backgroundColor,
+                        onLinkClick = rememberedOnLinkClick,
+                        xmlRenderer = xmlRenderer,
+                        nodeGrouper = nodeGrouper,
+                        enableDialogs = enableDialogs,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        state = rendererState,
+                    )
+                } else {
+                    // 对于已完成的静态消息，使用新的字符串渲染器以提高性能
+                    // 共享相同的state，避免重新计算nodes等状态
+                    StreamMarkdownRenderer(
+                        content = message.content,
+                        textColor = textColor,
+                        backgroundColor = backgroundColor,
+                        onLinkClick = rememberedOnLinkClick,
+                        xmlRenderer = xmlRenderer,
+                        nodeGrouper = nodeGrouper,
+                        enableDialogs = enableDialogs,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        state = rendererState,
+                    )
+                }
             }
         }
     }
