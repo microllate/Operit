@@ -6,7 +6,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -176,7 +175,7 @@ fun AiMessageComposable(
         // 使用 message.timestamp 作为 key，确保在重组期间，
         // 只要是同一条消息，StreamMarkdownRenderer就不会被销毁和重建。
         // 这可以防止流被不必要地取消，保证了渲染的连续性。
-        SelectionContainer {
+        
             key(message.timestamp) {
                 val streamToRender = rememberRevisableTextStream(overrideStream ?: message.contentStream)
                 if (streamToRender != null) {
@@ -211,7 +210,7 @@ fun AiMessageComposable(
                     )
                 }
             }
-        }
+        
     }
 
         // 链接预览弹窗 - 仅在启用弹窗时显示
