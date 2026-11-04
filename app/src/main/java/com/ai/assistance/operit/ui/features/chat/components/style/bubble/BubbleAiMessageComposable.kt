@@ -467,6 +467,7 @@ fun BubbleAiMessageComposable(
                     }
             }
         }
+        }
     } else {
     Row(
         modifier = Modifier
