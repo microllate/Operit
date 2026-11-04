@@ -266,6 +266,7 @@ fun BubbleAiMessageComposable(
 
     MaterialTheme(typography = bubbleTypography) {
         ProvideAiMarkdownTextLayoutSettings {
+            SelectionContainer {
         if (bubbleWideLayoutEnabled) {
         val headerVisible = bubbleShowAvatar || roleNameText.isNotEmpty() || metadataText.isNotEmpty()
         val avatarModifier = Modifier
@@ -415,8 +416,7 @@ fun BubbleAiMessageComposable(
                         }
                     }
 
-                    SelectionContainer {
-if (effectiveBubbleImageStyle != null) {
+                    if (effectiveBubbleImageStyle != null) {
                         BubbleImageBackgroundSurface(
                             imageStyle = effectiveBubbleImageStyle,
                             shape = bubbleShape,
@@ -625,8 +625,7 @@ if (effectiveBubbleImageStyle != null) {
                         }
                     }
 
-                    SelectionContainer {
-if (effectiveBubbleImageStyle != null) {
+                    if (effectiveBubbleImageStyle != null) {
                         BubbleImageBackgroundSurface(
                             imageStyle = effectiveBubbleImageStyle,
                             shape = bubbleShape,
@@ -677,8 +676,8 @@ if (effectiveBubbleImageStyle != null) {
                 }
             }
         }
+            }
         }
-    }
     }
     }
 
