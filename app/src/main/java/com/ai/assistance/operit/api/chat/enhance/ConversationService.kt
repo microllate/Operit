@@ -666,8 +666,8 @@ class ConversationService(
                     }
                 }
 
-                // Inject task-relevant historical failures and correction candidates
-                // into the initial system context, before the model chooses its first tool.
+                // Inject the complete historical failure list into the initial system context,
+                // before the model chooses its first tool.
                 if (promptFunctionType == PromptFunctionType.CHAT ||
                     promptFunctionType == PromptFunctionType.VOICE
                 ) {
@@ -690,7 +690,7 @@ class ConversationService(
                             }
                             AppLogger.d(
                                 TAG,
-                                "已注入全部工具经验: failures=${allExperiences.size}, corrections=${allCorrections.size}"
+                                "已注入全部工具失败记录: ${allExperiences.size}"
                             )
                         }
                     }.onFailure { error ->
