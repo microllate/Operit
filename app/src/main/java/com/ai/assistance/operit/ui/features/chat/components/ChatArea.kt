@@ -645,7 +645,6 @@ private fun MessageItem(
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
     val messageInteractionSource = remember { MutableInteractionSource() }
-    val density = LocalDensity.current
 
     // 只有用户和AI的消息才能被操作
     val isActionable = message.sender == "user" || message.sender == "ai"
@@ -849,7 +848,6 @@ private fun MessageItem(
                     onClick = {
                         copyMessageImmediately()
                         showContextMenu = false
-                        showQuickActions = false
                     },
                     leadingIcon = {
                         Icon(
