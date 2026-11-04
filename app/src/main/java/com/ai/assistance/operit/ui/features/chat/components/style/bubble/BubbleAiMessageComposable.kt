@@ -266,7 +266,6 @@ fun BubbleAiMessageComposable(
 
     MaterialTheme(typography = bubbleTypography) {
         ProvideAiMarkdownTextLayoutSettings {
-            SelectionContainer {
         if (bubbleWideLayoutEnabled) {
         val headerVisible = bubbleShowAvatar || roleNameText.isNotEmpty() || metadataText.isNotEmpty()
         val avatarModifier = Modifier
@@ -423,7 +422,9 @@ fun BubbleAiMessageComposable(
                             modifier = bubbleModifier,
                             contentPadding = PaddingValues(0.dp),
                         ) {
-                            renderContent()
+                            SelectionContainer {
+                                renderContent()
+                            }
                         }
                     } else {
                         Surface(
@@ -461,7 +462,9 @@ fun BubbleAiMessageComposable(
                                     2.dp
                                 },
                         ) {
-                            renderContent()
+                            SelectionContainer {
+                                renderContent()
+                            }
                         }
                     }
                 }
@@ -632,7 +635,9 @@ fun BubbleAiMessageComposable(
                             modifier = bubbleModifier,
                             contentPadding = PaddingValues(0.dp),
                         ) {
-                            renderContent()
+                            SelectionContainer {
+                                renderContent()
+                            }
                         }
                     } else {
                         Surface(
@@ -670,7 +675,9 @@ fun BubbleAiMessageComposable(
                                     2.dp
                                 }
                         ) {
-                            renderContent()
+                            SelectionContainer {
+                                renderContent()
+                            }
                         }
                     }
                 }
@@ -678,7 +685,6 @@ fun BubbleAiMessageComposable(
         }
             }
         }
-    }
     }
 
             }
