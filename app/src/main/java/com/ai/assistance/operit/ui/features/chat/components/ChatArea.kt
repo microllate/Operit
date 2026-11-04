@@ -32,6 +32,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.awaitPointerEvent
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -39,6 +44,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
@@ -52,6 +58,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,6 +80,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -668,13 +676,15 @@ private fun MessageItem(
     var showMessageInfoDialog by remember { mutableStateOf(false) }
     var showHiddenUserMessageDialog by remember { mutableStateOf(false) }
     var showDeleteMessageConfirmDialog by remember { mutableStateOf(false) }
-    var copyPreviewContent by remember { mutableStateOf<MessageCopyContent?>(null) }
+    var showQuickActions by remember { mutableStateOf(false) }
     var toolPkgDialogRequest by remember(currentChatId, message.timestamp) {
         mutableStateOf<ChatMessageMenuDialogRequest?>(null)
     }
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
     val messageInteractionSource = remember { MutableInteractionSource() }
+    val viewConfiguration = LocalViewConfiguration.current
 
     // 只有用户和AI的消息才能被操作
     val isActionable = message.sender == "user" || message.sender == "ai"
@@ -691,6 +701,24 @@ private fun MessageItem(
             message = message
         )
 
+    fun copyMessageImmediately() {
+        val markdownSource = cleanMessageContentForCopy(message.content)
+        coroutineScope.launch {
+            val plainText = withContext(Dispatchers.Default) {
+                markdownToPlainTextForCopy(markdownSource) { formulas ->
+                    LatexMathMlConverter.convertAll(context, formulas)
+                }
+            }
+            clipboardManager.setText(AnnotatedString(plainText))
+            onCopyMessage?.invoke(message)
+            Toast.makeText(
+                context,
+                context.getString(R.string.message_copied_to_clipboard),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     Box(
         modifier =
         Modifier
@@ -703,6 +731,37 @@ private fun MessageItem(
                     )
                 } else Modifier
             )
+            // Observe long-press in the Final pass without consuming it. The inner
+            // SelectionContainer can still start native text selection at the same time.
+            .pointerInput(message.timestamp, message.sender, isMultiSelectMode) {
+                if (message.sender == "ai" && !isMultiSelectMode) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Initial
+                        )
+                        val longPressReached = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Final)
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                    ?: return@withTimeoutOrNull false
+                                if (!change.pressed ||
+                                    (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                                ) {
+                                    return@withTimeoutOrNull false
+                                }
+                            }
+                            false
+                        } ?: true
+                        if (longPressReached) {
+                            showQuickActions = true
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Final)
+                            } while (event.changes.any { it.pressed })
+                        }
+                    }
+                }
+            }
             .combinedClickable(
                 interactionSource = messageInteractionSource,
                 indication = null,
@@ -713,26 +772,18 @@ private fun MessageItem(
                         showHiddenUserMessageDialog = true
                     }
                 },
-                // AI 消息正文需要把长按手势交给内部 SelectionContainer，
-                // 否则外层消息菜单会先消费长按，导致正文无法选择文字。
-                onLongClick =
-                    if (message.sender == "ai") {
-                        null
-                    } else {
-                        {
-                            if (!isMultiSelectMode && isActionable) {
-                                pluginMenuItems =
-                                    if (!isHiddenUserMessage) {
-                                        ChatMessageMenuItemRegistry.createMenuItems(
-                                            buildPluginMenuItemParams()
-                                        )
-                                    } else {
-                                        emptyList()
-                                    }
-                                showContextMenu = true
+                // AI 消息长按由上方非消费型观察器显示快捷栏，选择手势仍交给正文。
+                onLongClick = {
+                    if (!isMultiSelectMode && isActionable && message.sender != "ai") {
+                        pluginMenuItems =
+                            if (!isHiddenUserMessage) {
+                                ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
+                            } else {
+                                emptyList()
                             }
-                        }
-                    },
+                        showContextMenu = true
+                    }
+                },
             ),
     ) {
         Column {
@@ -816,6 +867,65 @@ private fun MessageItem(
             }
         }
 
+        if (showQuickActions && message.sender == "ai" && !isMultiSelectMode) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp,
+                shadowElevation = 6.dp,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                ) {
+                    TextButton(
+                        onClick = {
+                            copyMessageImmediately()
+                            showQuickActions = false
+                        },
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.copy_message), fontSize = 12.sp)
+                    }
+                    TextButton(
+                        onClick = {
+                            onInsertSummary?.invoke(message)
+                            showQuickActions = false
+                        },
+                    ) {
+                        Icon(Icons.Default.Summarize, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.insert_summary), fontSize = 12.sp)
+                    }
+                    TextButton(
+                        onClick = {
+                            showQuickActions = false
+                            showMessageInfoDialog = true
+                        },
+                    ) {
+                        Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.info), fontSize = 12.sp)
+                    }
+                    TextButton(
+                        onClick = {
+                            showQuickActions = false
+                            pluginMenuItems = ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
+                            showContextMenu = true
+                        },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Icon(Icons.Default.MoreHoriz, contentDescription = "More actions", modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+
         DropdownMenu(
             expanded = showContextMenu,
             onDismissRequest = { showContextMenu = false },
@@ -838,12 +948,9 @@ private fun MessageItem(
                         )
                     },
                     onClick = {
-                        copyPreviewContent = MessageCopyContent(
-                            markdownSource = cleanMessageContentForCopy(message.content),
-                            xmlSource = cleanMessageContentForXmlCopy(message.content),
-                        )
-                        onCopyMessage?.invoke(message)
+                        copyMessageImmediately()
                         showContextMenu = false
+                        showQuickActions = false
                     },
                     leadingIcon = {
                         Icon(
@@ -1253,147 +1360,11 @@ private fun MessageItem(
             )
         }
 
-        copyPreviewContent?.let { previewContent ->
-            MessageCopyPreviewBottomSheet(
-                content = previewContent,
-                onDismiss = { copyPreviewContent = null }
-            )
-        }
-
         toolPkgDialogRequest?.let { dialogRequest ->
             ToolPkgComposeDslDialogHost(
                 request = dialogRequest,
                 onDismiss = { toolPkgDialogRequest = null }
             )
-        }
-    }
-}
-
-private enum class MessageCopyMode {
-    PLAIN_TEXT,
-    MARKDOWN_SOURCE,
-    XML_SOURCE,
-}
-
-private const val COPY_PREVIEW_SHEET_HEIGHT_FRACTION = 0.7f
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-private fun MessageCopyPreviewBottomSheet(
-    content: MessageCopyContent,
-    onDismiss: () -> Unit,
-) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
-    val sheetMaxHeight =
-        remember(screenHeightDp) {
-            (screenHeightDp * COPY_PREVIEW_SHEET_HEIGHT_FRACTION).coerceIn(200.dp, 720.dp)
-        }
-    var copyMode by remember(content) { mutableStateOf(MessageCopyMode.PLAIN_TEXT) }
-    var plainText by remember(content.markdownSource) { mutableStateOf<String?>(null) }
-    LaunchedEffect(content.markdownSource, context) {
-        plainText =
-            withContext(Dispatchers.Default) {
-                markdownToPlainTextForCopy(content.markdownSource) { formulas ->
-                    LatexMathMlConverter.convertAll(context, formulas)
-                }
-            }
-    }
-    val displayedText = when (copyMode) {
-        MessageCopyMode.PLAIN_TEXT -> plainText.orEmpty()
-        MessageCopyMode.MARKDOWN_SOURCE -> content.markdownSource
-        MessageCopyMode.XML_SOURCE -> content.xmlSource
-    }
-    val copyButtonText = when (copyMode) {
-        MessageCopyMode.PLAIN_TEXT -> stringResource(R.string.copy_plain_text)
-        MessageCopyMode.MARKDOWN_SOURCE -> stringResource(R.string.copy_markdown_source)
-        MessageCopyMode.XML_SOURCE -> stringResource(R.string.copy_xml_source)
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = sheetMaxHeight)
-                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp)
-        ) {
-            Text(
-                text = stringResource(id = R.string.copy_message),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp)
-            ) {
-                FilterChip(
-                    selected = copyMode == MessageCopyMode.PLAIN_TEXT,
-                    onClick = { copyMode = MessageCopyMode.PLAIN_TEXT },
-                    label = { Text(stringResource(R.string.plain_text)) }
-                )
-                FilterChip(
-                    selected = copyMode == MessageCopyMode.MARKDOWN_SOURCE,
-                    onClick = { copyMode = MessageCopyMode.MARKDOWN_SOURCE },
-                    label = { Text(stringResource(R.string.markdown_source)) }
-                )
-                FilterChip(
-                    selected = copyMode == MessageCopyMode.XML_SOURCE,
-                    onClick = { copyMode = MessageCopyMode.XML_SOURCE },
-                    label = { Text(stringResource(R.string.xml_source)) }
-                )
-            }
-            if (copyMode == MessageCopyMode.PLAIN_TEXT && plainText == null) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .padding(bottom = 12.dp)
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                BasicTextField(
-                    value = displayedText,
-                    onValueChange = {},
-                    readOnly = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    // BasicTextField owns selection dragging, so it scrolls itself while a
-                    // handle is dragged past an edge and keeps the selection in sync.
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                TextButton(
-                    enabled = copyMode != MessageCopyMode.PLAIN_TEXT || plainText != null,
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(displayedText))
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.message_copied_to_clipboard),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                ) {
-                    Text(text = copyButtonText)
-                }
-            }
         }
     }
 }
