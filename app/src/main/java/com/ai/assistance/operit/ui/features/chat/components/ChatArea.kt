@@ -166,19 +166,6 @@ internal fun cleanMessageContentForCopy(content: String): String {
         .trim()
 }
 
-/** 保留结构化标记用于复制，同时移除供应商协议元数据。 */
-internal fun cleanMessageContentForXmlCopy(content: String): String {
-    return content
-        .let(ChatMarkupRegex::removeGeminiThoughtSignatureMeta)
-        .let(ChatMarkupRegex::removeOpenAiResponsesProtocolMeta)
-        .trim()
-}
-
-internal data class MessageCopyContent(
-    val markdownSource: String,
-    val xmlSource: String,
-)
-
 internal suspend fun buildSelectedMessagesPlainText(
     messages: List<ChatMessage>,
     markdownToPlainText: suspend (String) -> String,
