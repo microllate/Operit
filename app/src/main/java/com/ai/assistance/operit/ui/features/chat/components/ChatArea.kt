@@ -67,7 +67,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -245,8 +244,6 @@ fun ChatArea(
     showChatFloatingDotsAnimation: Boolean = true,
 ) {
     val context = LocalContext.current
-    val textToolbar = LocalTextToolbar.current
-    val viewConfiguration = LocalViewConfiguration.current
     val coroutineScope = rememberCoroutineScope()
     val themeSnapshot = LocalThemePreferenceSnapshot.current
     val showMessageTokenStats = themeSnapshot.showMessageTokenStats
