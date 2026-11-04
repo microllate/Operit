@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -84,6 +85,7 @@ import com.ai.assistance.operit.data.model.ChatMessageDisplayMode
 import com.ai.assistance.operit.data.model.ChatMessageLocatorPreview
 
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.Popup
 
 import androidx.compose.material.icons.filled.AutoFixHigh
 
@@ -651,6 +653,7 @@ private fun MessageItem(
     var showHiddenUserMessageDialog by remember { mutableStateOf(false) }
     var showDeleteMessageConfirmDialog by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
+    var quickActionOffset by remember { mutableStateOf(IntOffset.Zero) }
     var toolPkgDialogRequest by remember(currentChatId, message.timestamp) {
         mutableStateOf<ChatMessageMenuDialogRequest?>(null)
     }
@@ -659,6 +662,7 @@ private fun MessageItem(
     val coroutineScope = rememberCoroutineScope()
     val messageInteractionSource = remember { MutableInteractionSource() }
     val viewConfiguration = LocalViewConfiguration.current
+    val density = LocalDensity.current
 
     // 只有用户和AI的消息才能被操作
     val isActionable = message.sender == "user" || message.sender == "ai"
@@ -728,6 +732,12 @@ private fun MessageItem(
                             false
                         } ?: true
                         if (longPressReached) {
+                            // Position the toolbar at the actual long-press location,
+                            // slightly above the finger so it does not cover selected text.
+                            quickActionOffset = IntOffset(
+                                down.position.x.roundToInt(),
+                                (down.position.y - with(density) { 64.dp.toPx() }).roundToInt(),
+                            )
                             showQuickActions = true
                             do {
                                 val event = awaitPointerEvent(PointerEventPass.Final)
@@ -736,22 +746,33 @@ private fun MessageItem(
                     }
                 }
             }
-            .combinedClickable(
-                interactionSource = messageInteractionSource,
-                indication = null,
-                onClick = {
-                    if (isMultiSelectMode && isActionable) {
-                        onToggleSelection?.invoke()
-                    } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
-                        showHiddenUserMessageDialog = true
-                    }
-                },
-                // AI 消息不注册 combinedClickable 长按回调，避免消费正文的文字选择手势。
-                onLongClick =
-                    if (message.sender == "ai") {
-                        null
-                    } else {
-                        {
+            .then(
+                if (message.sender == "ai") {
+                    // AI 正文由 SelectionContainer 处理长按选区；这里只保留普通点击，
+                    // 不使用 combinedClickable，避免它的长按识别器抢占文字选择手势。
+                    Modifier.clickable(
+                        interactionSource = messageInteractionSource,
+                        indication = null,
+                        onClick = {
+                            if (isMultiSelectMode && isActionable) {
+                                onToggleSelection?.invoke()
+                            } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
+                                showHiddenUserMessageDialog = true
+                            }
+                        },
+                    )
+                } else {
+                    Modifier.combinedClickable(
+                        interactionSource = messageInteractionSource,
+                        indication = null,
+                        onClick = {
+                            if (isMultiSelectMode && isActionable) {
+                                onToggleSelection?.invoke()
+                            } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
+                                showHiddenUserMessageDialog = true
+                            }
+                        },
+                        onLongClick = {
                             if (!isMultiSelectMode && isActionable) {
                                 pluginMenuItems =
                                     if (!isHiddenUserMessage) {
@@ -761,8 +782,9 @@ private fun MessageItem(
                                     }
                                 showContextMenu = true
                             }
-                        }
-                    },
+                        },
+                    )
+                }
             ),
     ) {
         Column {
@@ -847,10 +869,12 @@ private fun MessageItem(
         }
 
         if (showQuickActions && message.sender == "ai" && !isMultiSelectMode) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(8.dp),
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = quickActionOffset,
+                onDismissRequest = { showQuickActions = false },
+            ) {
+                Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 8.dp,
@@ -900,6 +924,7 @@ private fun MessageItem(
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     ) {
                         Icon(Icons.Default.MoreHoriz, contentDescription = "More actions", modifier = Modifier.size(20.dp))
+                    }
                     }
                 }
             }
