@@ -161,6 +161,8 @@ fun BubbleAiMessageComposable(
         }
     }
 
+            }
+
     // 链接预览弹窗状态
     var showLinkDialog by remember { mutableStateOf(false) }
     var linkToPreview by remember { mutableStateOf("") }
