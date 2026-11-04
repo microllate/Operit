@@ -743,59 +743,65 @@ class ConversationService(
      * Present changed invocations that succeeded after a failure as correction candidates.
      * They are hints only; the model must still validate current tool schemas and outcomes.
      */
+    /**
+     * Present changed invocations that succeeded after a failure as unverified candidates.
+     * The model must consult these records before selecting a tool or invocation.
+     */
     private fun buildToolCorrectionPrompt(corrections: List<ToolExperience>): String {
         if (corrections.isEmpty()) return ""
         return buildString {
-            append("\n\n<tool_correction_candidates>\n")
-            append("Relevant historical tool corrections. Each correction followed an observed failure ")
-            append("with a changed invocation that returned tool-level success; the overall task was ")
-            append("not necessarily verified. Use these as warnings and candidate guidance, not guaranteed rules. ")
-            append("Before calling a tool, check its current schema and required parameters. ")
-            append("Do not repeat the recorded failed invocation when the same cause applies.\n")
+            append("\\n\\n<tool_correction_candidates>\\n")
+            append("MANDATORY PRE-CALL CHECK: Review this list before selecting or invoking any tool. ")
+            append("A changed invocation that returned tool-level success is only a candidate; it does not prove task completion. ")
+            append("Never repeat the listed failed invocation when its failure cause still applies. ")
+            append("Use the changed invocation only after checking the current tool schema and confirming it fits the present task.\\n")
             corrections.forEachIndexed { index, experience ->
-                append("\n")
-                append(index + 1).append(". Tool: ").append(experience.toolName).append("\n")
-                append("   Failed invocation: ").append(experience.invocation).append("\n")
-                append("   Observed error: ").append(experience.error).append("\n")
-                append("   Changed invocation that later returned success: ")
-                    .append(experience.solution.orEmpty()).append("\n")
+                append("\\n")
+                append(index + 1).append(". Tool: ").append(experience.toolName).append("\\n")
+                append("   Failed invocation: ").append(experience.invocation).append("\\n")
+                append("   Observed error: ").append(experience.error).append("\\n")
+                append("   Changed invocation that later returned tool-level success: ")
+                    .append(experience.solution.orEmpty()).append("\\n")
                 append("   Evidence status: ").append(experience.status)
-                    .append(" (not task-verified)\n")
+                    .append(" (not task-verified)\\n")
             }
             append("</tool_correction_candidates>")
         }
     }
 
     /**
-     * Inject only relevant historical tool observations. An observed failure is a warning,
-     * never an instruction that claims to be a verified fix.
+     * Inject the complete stored failure history as an explicit tool-selection risk list.
      */
     private fun buildToolExperiencePrompt(experiences: List<ToolExperience>): String {
         if (experiences.isEmpty()) return ""
         return buildString {
-            append("\n\n<tool_experience_observations>\n")
-            append("Historical tool observations relevant to the current task. ")
-            append("These records are not guaranteed solutions. Treat observed failures as warnings; ")
-            append("do not repeat the same failed approach without checking the cause. ")
-            append("A solution is reliable only when its status is VERIFIED_SOLUTION.\n")
+            append("\\n\\n<tool_experience_observations>\\n")
+            append("MANDATORY TOOL-SELECTION RISK CHECK — perform this check BEFORE choosing a tool or composing its arguments. ")
+            append("Compare the current task, intended tool, method, and parameters against every relevant record below. ")
+            append("If the same tool or method previously failed in a comparable situation, DO NOT choose that failed path again when a viable alternative exists. ")
+            append("Prefer an available alternative tool or method that avoids the recorded failure cause. ")
+            append("Do not repeat the same failed parameters, command pattern, or execution approach. ")
+            append("If no viable alternative exists, explain internally why the tool is still necessary, then change the specific failure-causing part and validate the current tool schema before retrying. ")
+            append("A historical failure is a risk signal, not proof that every future use of that tool must fail; judge whether the current situation has the same cause. ")
+            append("Only VERIFIED_SOLUTION records with verification evidence may be treated as verified fixes.\\n")
             experiences.forEachIndexed { index, experience ->
-                append("\n")
-                append(index + 1).append(". Tool: ").append(experience.toolName).append("\n")
-                append("   Status: ").append(experience.status).append("\n")
-                append("   Previous parameter names: ").append(experience.invocation).append("\n")
-                append("   Previous error: ").append(experience.error).append("\n")
+                append("\\n")
+                append(index + 1).append(". Tool: ").append(experience.toolName).append("\\n")
+                append("   Status: ").append(experience.status).append("\\n")
+                append("   Failed invocation / parameter pattern: ").append(experience.invocation).append("\\n")
+                append("   Observed error: ").append(experience.error).append("\\n")
                 if (!experience.solution.isNullOrBlank()) {
                     append("   ")
                     append(
                         if (experience.status == ToolExperience.STATUS_VERIFIED_SOLUTION) {
                             "Verified solution: "
                         } else {
-                            "Unverified solution candidate: "
+                            "Unverified retry candidate: "
                         }
                     )
-                    append(experience.solution).append("\n")
+                    append(experience.solution).append("\\n")
                 }
-                append("   Occurrences: ").append(experience.occurrences).append("\n")
+                append("   Occurrences: ").append(experience.occurrences).append("\\n")
             }
             append("</tool_experience_observations>")
         }
