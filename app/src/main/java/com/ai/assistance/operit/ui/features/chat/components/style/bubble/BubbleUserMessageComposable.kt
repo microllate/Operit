@@ -10,7 +10,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -432,13 +431,13 @@ fun BubbleUserMessageComposable(
                                     subtitleColor = effectiveTextColor.copy(alpha = 0.72f),
                                 )
                             } else {
-                                SelectionContainer {
+                                
 Text(
                                     text = textContent,
                                     color = effectiveTextColor,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
-}
+
                             }
                         }
                     } else {
@@ -493,7 +492,7 @@ Text(
                                     )
                                 }
                             } else {
-                                SelectionContainer {
+                                
 Text(
                                     text = textContent,
                                     modifier =
@@ -506,7 +505,7 @@ Text(
                                     color = effectiveTextColor,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
-}
+
                             }
                         }
                     }
@@ -577,13 +576,13 @@ Text(
                                     subtitleColor = effectiveTextColor.copy(alpha = 0.72f),
                                 )
                             } else {
-                                SelectionContainer {
+                                
 Text(
                                     text = textContent,
                                     color = effectiveTextColor,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
-}
+
                             }
                         }
                     } else {
@@ -638,7 +637,7 @@ Text(
                                     )
                                 }
                             } else {
-                                SelectionContainer {
+                                
 Text(
                                     text = textContent,
                                     modifier =
@@ -651,7 +650,7 @@ Text(
                                     color = effectiveTextColor,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
-}
+
                             }
                         }
                     }
