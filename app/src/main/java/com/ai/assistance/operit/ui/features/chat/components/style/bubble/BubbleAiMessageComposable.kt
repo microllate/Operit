@@ -370,7 +370,6 @@ fun BubbleAiMessageComposable(
                             .widthIn(max = maxBubbleWidth)
                             .defaultMinSize(minHeight = 44.dp)
                     val renderContent: @Composable () -> Unit = {
-                        SelectionContainer {
                         key(message.timestamp) {
                             val stream = rememberRevisableTextStream(message.contentStream)
                             if (stream != null) {
@@ -414,10 +413,10 @@ fun BubbleAiMessageComposable(
                                 )
                             }
                         }
-                        }
                     }
 
-                    if (effectiveBubbleImageStyle != null) {
+                    SelectionContainer {
+if (effectiveBubbleImageStyle != null) {
                         BubbleImageBackgroundSurface(
                             imageStyle = effectiveBubbleImageStyle,
                             shape = bubbleShape,
@@ -426,7 +425,8 @@ fun BubbleAiMessageComposable(
                         ) {
                             renderContent()
                         }
-                    } else {
+                    }
+} else {
                         Surface(
                             modifier =
                                 bubbleModifier
@@ -465,8 +465,8 @@ fun BubbleAiMessageComposable(
                             renderContent()
                         }
                     }
+                }
             }
-        }
         }
     } else {
     Row(
@@ -577,7 +577,6 @@ fun BubbleAiMessageComposable(
                             .widthIn(max = maxBubbleWidth)
                             .defaultMinSize(minHeight = 44.dp)
                     val renderContent: @Composable () -> Unit = {
-                        SelectionContainer {
                         // 使用 message.timestamp 作为 key，确保在重组期间，
                         // 只要是同一条消息，StreamMarkdownRenderer就不会被销毁和重建。
                         key(message.timestamp) {
@@ -625,10 +624,10 @@ fun BubbleAiMessageComposable(
                                 )
                             }
                         }
-                        }
                     }
 
-                    if (effectiveBubbleImageStyle != null) {
+                    SelectionContainer {
+if (effectiveBubbleImageStyle != null) {
                         BubbleImageBackgroundSurface(
                             imageStyle = effectiveBubbleImageStyle,
                             shape = bubbleShape,
@@ -637,7 +636,8 @@ fun BubbleAiMessageComposable(
                         ) {
                             renderContent()
                         }
-                    } else {
+                    }
+} else {
                         Surface(
                             modifier =
                                 bubbleModifier
@@ -676,6 +676,7 @@ fun BubbleAiMessageComposable(
                             renderContent()
                         }
                     }
+                }
             }
         }
         }
