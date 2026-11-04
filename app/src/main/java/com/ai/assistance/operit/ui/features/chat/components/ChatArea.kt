@@ -130,6 +130,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 清理复制文本中的内部标记，保留Markdown格式和纯文本内容
@@ -772,18 +773,23 @@ private fun MessageItem(
                         showHiddenUserMessageDialog = true
                     }
                 },
-                // AI 消息长按由上方非消费型观察器显示快捷栏，选择手势仍交给正文。
-                onLongClick = {
-                    if (!isMultiSelectMode && isActionable && message.sender != "ai") {
-                        pluginMenuItems =
-                            if (!isHiddenUserMessage) {
-                                ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
-                            } else {
-                                emptyList()
+                // AI 消息不注册 combinedClickable 长按回调，避免消费正文的文字选择手势。
+                onLongClick =
+                    if (message.sender == "ai") {
+                        null
+                    } else {
+                        {
+                            if (!isMultiSelectMode && isActionable) {
+                                pluginMenuItems =
+                                    if (!isHiddenUserMessage) {
+                                        ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
+                                    } else {
+                                        emptyList()
+                                    }
+                                showContextMenu = true
                             }
-                        showContextMenu = true
-                    }
-                },
+                        }
+                    },
             ),
     ) {
         Column {
