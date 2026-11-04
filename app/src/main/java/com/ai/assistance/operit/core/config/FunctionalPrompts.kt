@@ -158,14 +158,22 @@ object FunctionalPrompts {
         val integrityRules = if (useEnglish) {
             """
             
-            [Summary settings]
-            Use the user's "Custom Summary Rules" as the overall summary instructions. Use the summary structure settings for section enabled states, titles, order, and section-specific instructions. Do not invent facts or present unexecuted work as completed.
+            [Instruction priority]
+            1. The user's "Custom Summary Rules" take precedence over the generic summary requirements in this prompt. If they conflict, follow the custom rules.
+            2. The section names and default content in this prompt are only a default framework; they must not override the custom rules.
+            3. Section enabled states, titles, order, and section-specific instructions are controlled by the summary structure settings. Custom rules must not silently change those structural settings.
+            4. The previous summary is historical information to be updated using the current turn. Compressing, merging, or deleting historical content must follow the custom summary rules.
+            5. Do not invent facts or present unexecuted work as completed.
             """.trimIndent()
         } else {
             """
             
-            【设置规则】
-            总体总结要求以用户在“自定义总结规则”中填写的内容为准；栏目启用状态、标题、顺序和栏目说明以总结结构设置为准。不得编造事实，不得将未执行的工作描述为已完成。
+            【指令优先级】
+            1. 用户在“自定义总结规则”中填写的内容，优先于本提示词中的通用总结要求；两者不一致时，遵循自定义总结规则。
+            2. 本提示词中的栏目名称和默认内容仅作为默认框架，不得用默认要求覆盖自定义规则。
+            3. 栏目启用状态、标题、顺序和栏目专属说明，以总结结构设置为准；自定义规则不得擅自改变这些结构设置。
+            4. 上一次摘要是需要结合本轮更新的历史记录；是否压缩、合并或删除历史内容，按自定义总结规则执行。
+            5. 不得编造事实，不得将未执行的工作描述为已完成。
             """.trimIndent()
         }
         prompt += "\n\n" + integrityRules
