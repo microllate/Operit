@@ -425,8 +425,7 @@ if (effectiveBubbleImageStyle != null) {
                         ) {
                             renderContent()
                         }
-                    }
-} else {
+                    } else {
                         Surface(
                             modifier =
                                 bubbleModifier
@@ -636,8 +635,7 @@ if (effectiveBubbleImageStyle != null) {
                         ) {
                             renderContent()
                         }
-                    }
-} else {
+                    } else {
                         Surface(
                             modifier =
                                 bubbleModifier
