@@ -672,20 +672,16 @@ class ConversationService(
                     promptFunctionType == PromptFunctionType.VOICE
                 ) {
                     runCatching {
-                        val relevantExperiences = ToolExperienceRepository.findRelevant(
+                        val allExperiences = ToolExperienceRepository.findAllRelevant(
                             context = context,
-                            memorySpaceId = effectiveMemorySpaceId,
-                            query = processedInput,
-                            limit = 3
+                            memorySpaceId = effectiveMemorySpaceId
                         )
-                        val relevantCorrections = ToolExperienceRepository.findRelevantCorrections(
+                        val allCorrections = ToolExperienceRepository.findAllCorrections(
                             context = context,
-                            memorySpaceId = effectiveMemorySpaceId,
-                            query = processedInput,
-                            limit = 2
+                            memorySpaceId = effectiveMemorySpaceId
                         )
-                        val experiencePrompt = buildToolExperiencePrompt(relevantExperiences)
-                        val correctionPrompt = buildToolCorrectionPrompt(relevantCorrections)
+                        val experiencePrompt = buildToolExperiencePrompt(allExperiences)
+                        val correctionPrompt = buildToolCorrectionPrompt(allCorrections)
                         val combinedPrompt = experiencePrompt + correctionPrompt
                         if (combinedPrompt.isNotBlank()) {
                             val systemIndex = preparedHistory.indexOfFirst {
@@ -699,7 +695,7 @@ class ConversationService(
                             }
                             AppLogger.d(
                                 TAG,
-                                "已注入任务相关工具经验: failures=${relevantExperiences.size}, corrections=${relevantCorrections.size}"
+                                "已注入全部工具经验: failures=${allExperiences.size}, corrections=${allCorrections.size}"
                             )
                         }
                     }.onFailure { error ->
