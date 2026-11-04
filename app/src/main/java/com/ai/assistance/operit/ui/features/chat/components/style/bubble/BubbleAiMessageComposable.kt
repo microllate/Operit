@@ -60,15 +60,6 @@ import com.ai.assistance.operit.ui.theme.waterGlass
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 
-private val ExpandedBubbleLayoutNodeTypes =
-    setOf(
-        MarkdownProcessorType.CODE_BLOCK,
-        MarkdownProcessorType.TABLE,
-        MarkdownProcessorType.XML_BLOCK,
-        MarkdownProcessorType.IMAGE,
-        MarkdownProcessorType.BLOCK_LATEX,
-    )
-
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -217,8 +208,6 @@ fun BubbleAiMessageComposable(
             null
         }
     }
-    val shouldUseExpandedBubbleLayout =
-        rendererState.renderNodes.any { node -> node.type in ExpandedBubbleLayoutNodeTypes }
     val sizeTrackingModifier =
         if (isHidden) {
             Modifier
