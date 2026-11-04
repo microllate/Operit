@@ -666,6 +666,47 @@ class ConversationService(
                     }
                 }
 
+                // Inject task-relevant historical failures and correction candidates
+                // into the initial system context, before the model chooses its first tool.
+                if (promptFunctionType == PromptFunctionType.CHAT ||
+                    promptFunctionType == PromptFunctionType.VOICE
+                ) {
+                    runCatching {
+                        val relevantExperiences = ToolExperienceRepository.findRelevant(
+                            context = context,
+                            memorySpaceId = effectiveMemorySpaceId,
+                            query = processedInput,
+                            limit = 3
+                        )
+                        val relevantCorrections = ToolExperienceRepository.findRelevantCorrections(
+                            context = context,
+                            memorySpaceId = effectiveMemorySpaceId,
+                            query = processedInput,
+                            limit = 2
+                        )
+                        val experiencePrompt = buildToolExperiencePrompt(relevantExperiences)
+                        val correctionPrompt = buildToolCorrectionPrompt(relevantCorrections)
+                        val combinedPrompt = experiencePrompt + correctionPrompt
+                        if (combinedPrompt.isNotBlank()) {
+                            val systemIndex = preparedHistory.indexOfFirst {
+                                it.kind == PromptTurnKind.SYSTEM
+                            }
+                            if (systemIndex >= 0) {
+                                val systemTurn = preparedHistory[systemIndex]
+                                preparedHistory[systemIndex] = systemTurn.copy(
+                                    content = systemTurn.content + combinedPrompt
+                                )
+                            }
+                            AppLogger.d(
+                                TAG,
+                                "已注入任务相关工具经验: failures=${relevantExperiences.size}, corrections=${relevantCorrections.size}"
+                            )
+                        }
+                    }.onFailure { error ->
+                        AppLogger.e(TAG, "加载任务相关工具经验失败", error)
+                    }
+                }
+
             // Process each message in chat history
             effectiveChatHistory.forEachIndexed { index, message ->
                 val kind = message.kind
