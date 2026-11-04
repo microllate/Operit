@@ -442,6 +442,40 @@ object ToolExperienceRepository {
         }
     }
 
+    /** Load every stored failure and verified solution for the initial tool-risk briefing. */
+    suspend fun findAllRelevant(
+        context: Context,
+        memorySpaceId: String
+    ): List<ToolExperience> = withContext(Dispatchers.IO) {
+        val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
+        val lock = locks.getOrPut(file.absolutePath) { Mutex() }
+        lock.withLock {
+            readRecords(file)
+                .filter {
+                    it.status == ToolExperience.STATUS_OBSERVED_FAILURE ||
+                        (it.status == ToolExperience.STATUS_VERIFIED_SOLUTION && it.verifiedAt != null)
+                }
+                .sortedByDescending { it.updatedAt }
+        }
+    }
+
+    /** Load every successful retry candidate; these remain unverified guidance, not guaranteed fixes. */
+    suspend fun findAllCorrections(
+        context: Context,
+        memorySpaceId: String
+    ): List<ToolExperience> = withContext(Dispatchers.IO) {
+        val file = experienceFile(context, memorySpaceId.trim().ifBlank { "default" })
+        val lock = locks.getOrPut(file.absolutePath) { Mutex() }
+        lock.withLock {
+            readRecords(file)
+                .filter {
+                    it.status == ToolExperience.STATUS_SOLUTION_CANDIDATE &&
+                        it.solution.orEmpty().contains("Candidate successful retry invocation:")
+                }
+                .sortedByDescending { it.updatedAt }
+        }
+    }
+
     suspend fun findRelevant(
         context: Context,
         memorySpaceId: String,

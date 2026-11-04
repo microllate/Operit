@@ -643,7 +643,7 @@ class ConversationService(
                         val rules = ToolExperienceRepository.findCompactRules(
                             context = context,
                             memorySpaceId = effectiveMemorySpaceId,
-                            limit = 30
+                            limit = 200
                         )
                         if (rules.isNotEmpty()) {
                             val rulePrompt = buildString {
