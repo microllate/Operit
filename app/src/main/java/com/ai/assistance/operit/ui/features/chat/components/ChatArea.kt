@@ -11,7 +11,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -693,57 +693,30 @@ private fun MessageItem(
                     )
                 } else Modifier
             )
-            .then(
-                if (message.sender == "ai") {
-                    // AI 消息：单击保留多选/隐藏消息行为；双击打开原消息操作菜单。
-                    // 长按不在外层处理，交给内部 SelectionContainer 调用系统文字选择工具栏。
-                    Modifier.combinedClickable(
-                        interactionSource = messageInteractionSource,
-                        indication = null,
-                        onClick = {
-                            if (isMultiSelectMode && isActionable) {
-                                onToggleSelection?.invoke()
-                            } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
-                                showHiddenUserMessageDialog = true
-                            }
-                        },
-                        onDoubleClick = {
-                            if (!isMultiSelectMode && isActionable) {
-                                pluginMenuItems =
-                                    if (!isHiddenUserMessage) {
-                                        ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
-                                    } else {
-                                        emptyList()
-                                    }
-                                showContextMenu = true
-                            }
-                        },
-                    )
-                } else {
-                    Modifier.combinedClickable(
-                        interactionSource = messageInteractionSource,
-                        indication = null,
-                        onClick = {
-                            if (isMultiSelectMode && isActionable) {
-                                onToggleSelection?.invoke()
-                            } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
-                                showHiddenUserMessageDialog = true
-                            }
-                        },
-                        onLongClick = {
-                            if (!isMultiSelectMode && isActionable) {
-                                pluginMenuItems =
-                                    if (!isHiddenUserMessage) {
-                                        ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
-                                    } else {
-                                        emptyList()
-                                    }
-                                showContextMenu = true
-                            }
-                        },
-                    )
-                }
-            ),
+            .pointerInput(message.timestamp, message.sender, isMultiSelectMode) {
+                // 只识别双击来打开原有消息菜单；不注册长按手势。
+                // 长按完整交给消息正文内部的 SelectionContainer，避免外层手势抢占系统文字选择。
+                detectTapGestures(
+                    onTap = {
+                        if (isMultiSelectMode && isActionable) {
+                            onToggleSelection?.invoke()
+                        } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
+                            showHiddenUserMessageDialog = true
+                        }
+                    },
+                    onDoubleTap = {
+                        if (!isMultiSelectMode && isActionable) {
+                            pluginMenuItems =
+                                if (!isHiddenUserMessage) {
+                                    ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
+                                } else {
+                                    emptyList()
+                                }
+                            showContextMenu = true
+                        }
+                    },
+                )
+            },
     ) {
         Column {
             when (chatStyle) {
