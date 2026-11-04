@@ -750,17 +750,21 @@ private fun MessageItem(
                 if (message.sender == "ai") {
                     // AI 正文由 SelectionContainer 处理长按选区；这里只保留普通点击，
                     // 不使用 combinedClickable，避免它的长按识别器抢占文字选择手势。
-                    Modifier.clickable(
-                        interactionSource = messageInteractionSource,
-                        indication = null,
-                        onClick = {
-                            if (isMultiSelectMode && isActionable) {
-                                onToggleSelection?.invoke()
-                            } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
-                                showHiddenUserMessageDialog = true
-                            }
-                        },
-                    )
+                    if (isMultiSelectMode || (enableDialogs && isHiddenUserMessage)) {
+                        Modifier.clickable(
+                            interactionSource = messageInteractionSource,
+                            indication = null,
+                            onClick = {
+                                if (isMultiSelectMode && isActionable) {
+                                    onToggleSelection?.invoke()
+                                } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
+                                    showHiddenUserMessageDialog = true
+                                }
+                            },
+                        )
+                    } else {
+                        Modifier
+                    }
                 } else {
                     Modifier.combinedClickable(
                         interactionSource = messageInteractionSource,
