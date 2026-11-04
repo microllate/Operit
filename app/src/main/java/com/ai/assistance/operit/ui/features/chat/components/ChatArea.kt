@@ -28,11 +28,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -40,7 +35,6 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
@@ -49,8 +43,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,9 +61,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -85,7 +75,6 @@ import com.ai.assistance.operit.data.model.ChatMessageDisplayMode
 import com.ai.assistance.operit.data.model.ChatMessageLocatorPreview
 
 import androidx.compose.ui.window.PopupProperties
-import androidx.compose.ui.window.Popup
 
 import androidx.compose.material.icons.filled.AutoFixHigh
 
@@ -114,11 +103,9 @@ import com.ai.assistance.operit.util.LatexMathMlConverter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 清理复制文本中的内部标记，保留Markdown格式和纯文本内容
@@ -248,7 +235,6 @@ fun ChatArea(
     showChatFloatingDotsAnimation: Boolean = true,
 ) {
     val context = LocalContext.current
-    val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
     val themeSnapshot = LocalThemePreferenceSnapshot.current
     val showMessageTokenStats = themeSnapshot.showMessageTokenStats
@@ -652,8 +638,6 @@ private fun MessageItem(
     var showMessageInfoDialog by remember { mutableStateOf(false) }
     var showHiddenUserMessageDialog by remember { mutableStateOf(false) }
     var showDeleteMessageConfirmDialog by remember { mutableStateOf(false) }
-    var showQuickActions by remember { mutableStateOf(false) }
-    var quickActionOffset by remember { mutableStateOf(IntOffset.Zero) }
     var toolPkgDialogRequest by remember(currentChatId, message.timestamp) {
         mutableStateOf<ChatMessageMenuDialogRequest?>(null)
     }
@@ -661,7 +645,6 @@ private fun MessageItem(
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
     val messageInteractionSource = remember { MutableInteractionSource() }
-    val viewConfiguration = LocalViewConfiguration.current
     val density = LocalDensity.current
 
     // 只有用户和AI的消息才能被操作
@@ -709,62 +692,32 @@ private fun MessageItem(
                     )
                 } else Modifier
             )
-            // Observe long-press in the Final pass without consuming it. The inner
-            // SelectionContainer can still start native text selection at the same time.
-            .pointerInput(message.timestamp, message.sender, isMultiSelectMode) {
-                if (message.sender == "ai" && !isMultiSelectMode) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(
-                            requireUnconsumed = false,
-                            pass = PointerEventPass.Initial
-                        )
-                        val longPressReached = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Final)
-                                val change = event.changes.firstOrNull { it.id == down.id }
-                                    ?: return@withTimeoutOrNull false
-                                if (!change.pressed ||
-                                    (change.position - down.position).getDistance() > viewConfiguration.touchSlop
-                                ) {
-                                    return@withTimeoutOrNull false
-                                }
-                            }
-                            false
-                        } ?: true
-                        if (longPressReached) {
-                            // Position the toolbar at the actual long-press location,
-                            // slightly above the finger so it does not cover selected text.
-                            quickActionOffset = IntOffset(
-                                down.position.x.roundToInt(),
-                                (down.position.y - with(density) { 64.dp.toPx() }).roundToInt(),
-                            )
-                            showQuickActions = true
-                            do {
-                                val event = awaitPointerEvent(PointerEventPass.Final)
-                            } while (event.changes.any { it.pressed })
-                        }
-                    }
-                }
-            }
             .then(
                 if (message.sender == "ai") {
-                    // AI 正文由 SelectionContainer 处理长按选区；这里只保留普通点击，
-                    // 不使用 combinedClickable，避免它的长按识别器抢占文字选择手势。
-                    if (isMultiSelectMode || (enableDialogs && isHiddenUserMessage)) {
-                        Modifier.clickable(
-                            interactionSource = messageInteractionSource,
-                            indication = null,
-                            onClick = {
-                                if (isMultiSelectMode && isActionable) {
-                                    onToggleSelection?.invoke()
-                                } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
-                                    showHiddenUserMessageDialog = true
-                                }
-                            },
-                        )
-                    } else {
-                        Modifier
-                    }
+                    // AI 消息：单击保留多选/隐藏消息行为；双击打开原消息操作菜单。
+                    // 长按不在外层处理，交给内部 SelectionContainer 调用系统文字选择工具栏。
+                    Modifier.combinedClickable(
+                        interactionSource = messageInteractionSource,
+                        indication = null,
+                        onClick = {
+                            if (isMultiSelectMode && isActionable) {
+                                onToggleSelection?.invoke()
+                            } else if (!isMultiSelectMode && enableDialogs && isHiddenUserMessage) {
+                                showHiddenUserMessageDialog = true
+                            }
+                        },
+                        onDoubleClick = {
+                            if (!isMultiSelectMode && isActionable) {
+                                pluginMenuItems =
+                                    if (!isHiddenUserMessage) {
+                                        ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
+                                    } else {
+                                        emptyList()
+                                    }
+                                showContextMenu = true
+                            }
+                        },
+                    )
                 } else {
                     Modifier.combinedClickable(
                         interactionSource = messageInteractionSource,
@@ -869,73 +822,6 @@ private fun MessageItem(
                         onSwitchMessageVariant?.invoke(index, targetVariantIndex)
                     },
                 )
-            }
-        }
-
-        if (showQuickActions && message.sender == "ai" && !isMultiSelectMode) {
-            Popup(
-                alignment = Alignment.TopStart,
-                offset = quickActionOffset,
-                onDismissRequest = { showQuickActions = false },
-                properties = PopupProperties(
-                    focusable = true,
-                    dismissOnBackPress = true,
-                    dismissOnClickOutside = true,
-                ),
-            ) {
-                Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                shadowElevation = 6.dp,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    TextButton(
-                        onClick = {
-                            copyMessageImmediately()
-                            showQuickActions = false
-                        },
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.copy_message), fontSize = 12.sp)
-                    }
-                    TextButton(
-                        onClick = {
-                            onInsertSummary?.invoke(message)
-                            showQuickActions = false
-                        },
-                    ) {
-                        Icon(Icons.Default.Summarize, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.insert_summary), fontSize = 12.sp)
-                    }
-                    TextButton(
-                        onClick = {
-                            showQuickActions = false
-                            showMessageInfoDialog = true
-                        },
-                    ) {
-                        Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.info), fontSize = 12.sp)
-                    }
-                    TextButton(
-                        onClick = {
-                            showQuickActions = false
-                            pluginMenuItems = ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
-                            showContextMenu = true
-                        },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Icon(Icons.Default.MoreHoriz, contentDescription = "More actions", modifier = Modifier.size(20.dp))
-                    }
-                    }
-                }
             }
         }
 
