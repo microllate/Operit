@@ -979,8 +979,9 @@ private fun UnifiedCanvasRenderer(
                 )
             }
         ) {
+            Box(modifier = canvasModifier) {
             Canvas(
-                modifier = canvasModifier.pointerInput(layoutResult.instructions, onLinkClick) {
+                modifier = Modifier.fillMaxSize().pointerInput(layoutResult.instructions, onLinkClick) {
                     awaitEachGesture {
                         val down = awaitPointerEvent(PointerEventPass.Initial).changes.first()
                         val downTime = System.currentTimeMillis()
@@ -1180,6 +1181,28 @@ private fun UnifiedCanvasRenderer(
                         }
                     }
                 }
+            }
+            // Canvas 负责视觉排版；透明原生 TextView 提供 Android 系统文字选择能力。
+            // 文字保持透明，不改变原有 Markdown 外观。
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    TextView(context).apply {
+                        textIsSelectable = true
+                        setTextColor(android.graphics.Color.TRANSPARENT)
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                        gravity = Gravity.TOP or Gravity.START
+                        includeFontPadding = false
+                        setPadding(0, 0, 0, 0)
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    }
+                },
+                update = { view ->
+                    if (view.text.toString() != safeAccessibleText) {
+                        view.text = safeAccessibleText
+                    }
+                },
+            )
             }
         }
     }
