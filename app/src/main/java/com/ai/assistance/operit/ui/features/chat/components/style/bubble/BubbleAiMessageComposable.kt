@@ -414,6 +414,7 @@ fun BubbleAiMessageComposable(
                                 )
                             }
                         }
+                        }
                     }
 
                     if (effectiveBubbleImageStyle != null) {
@@ -464,8 +465,6 @@ fun BubbleAiMessageComposable(
                             renderContent()
                         }
                     }
-                
-                        }}
             }
         }
     } else {
@@ -625,6 +624,7 @@ fun BubbleAiMessageComposable(
                                 )
                             }
                         }
+                        }
                     }
 
                     if (effectiveBubbleImageStyle != null) {
@@ -675,8 +675,6 @@ fun BubbleAiMessageComposable(
                             renderContent()
                         }
                     }
-                
-                        }}
             }
         }
         }
