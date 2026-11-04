@@ -877,6 +877,11 @@ private fun MessageItem(
                 alignment = Alignment.TopStart,
                 offset = quickActionOffset,
                 onDismissRequest = { showQuickActions = false },
+                properties = PopupProperties(
+                    focusable = true,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = true,
+                ),
             ) {
                 Surface(
                 shape = RoundedCornerShape(24.dp),
