@@ -244,6 +244,7 @@ fun ChatArea(
     bubbleAiContentPaddingRight: Float = 12f,
     showChatFloatingDotsAnimation: Boolean = true,
 ) {
+    var selectionResetToken by remember { mutableStateOf(0) }
     val context = LocalContext.current
     val textToolbar = LocalTextToolbar.current
     val viewConfiguration = LocalViewConfiguration.current
@@ -367,6 +368,7 @@ fun ChatArea(
             showLoadingIndicator &&
             chatStyle == ChatStyle.BUBBLE &&
             lastMessage?.sender == "ai"
+    key(selectionResetToken) {
     SelectionContainer(
         modifier = modifier,
     ) {
@@ -387,6 +389,7 @@ fun ChatArea(
                         val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
                             ?: return@awaitEachGesture
                         if (up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) {
+                            selectionResetToken++
                             textToolbar.hide()
                         }
                     }
@@ -604,6 +607,7 @@ fun ChatArea(
                     .offset(y = (-56).dp)
                     .padding(end = 10.dp),
         )
+    }
     }
     }
 }
