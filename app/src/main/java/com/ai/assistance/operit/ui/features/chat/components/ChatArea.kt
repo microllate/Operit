@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.selection.Selection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -245,7 +244,6 @@ fun ChatArea(
     bubbleAiContentPaddingRight: Float = 12f,
     showChatFloatingDotsAnimation: Boolean = true,
 ) {
-    var chatTextSelection by remember { mutableStateOf<Selection?>(null) }
     val context = LocalContext.current
     val textToolbar = LocalTextToolbar.current
     val viewConfiguration = LocalViewConfiguration.current
@@ -370,8 +368,6 @@ fun ChatArea(
             chatStyle == ChatStyle.BUBBLE &&
             lastMessage?.sender == "ai"
     SelectionContainer(
-        selection = chatTextSelection,
-        onSelectionChange = { chatTextSelection = it },
         modifier = modifier,
     ) {
     Box(
@@ -391,7 +387,6 @@ fun ChatArea(
                         val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
                             ?: return@awaitEachGesture
                         if (up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) {
-                            chatTextSelection = null
                             textToolbar.hide()
                         }
                     }
