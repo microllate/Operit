@@ -713,19 +713,26 @@ private fun MessageItem(
                         showHiddenUserMessageDialog = true
                     }
                 },
-                onLongClick = { 
-                    if (!isMultiSelectMode && isActionable) {
-                        pluginMenuItems =
-                            if (!isHiddenUserMessage) {
-                                ChatMessageMenuItemRegistry.createMenuItems(
-                                    buildPluginMenuItemParams()
-                                )
-                            } else {
-                                emptyList()
+                // AI 消息正文需要把长按手势交给内部 SelectionContainer，
+                // 否则外层消息菜单会先消费长按，导致正文无法选择文字。
+                onLongClick =
+                    if (message.sender == "ai") {
+                        null
+                    } else {
+                        {
+                            if (!isMultiSelectMode && isActionable) {
+                                pluginMenuItems =
+                                    if (!isHiddenUserMessage) {
+                                        ChatMessageMenuItemRegistry.createMenuItems(
+                                            buildPluginMenuItemParams()
+                                        )
+                                    } else {
+                                        emptyList()
+                                    }
+                                showContextMenu = true
                             }
-                        showContextMenu = true
-                    }
-                },
+                        }
+                    },
             ),
     ) {
         Column {
