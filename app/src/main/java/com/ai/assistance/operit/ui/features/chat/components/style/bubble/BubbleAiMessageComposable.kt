@@ -161,8 +161,6 @@ fun BubbleAiMessageComposable(
         }
     }
 
-            }
-
     // 链接预览弹窗状态
     var showLinkDialog by remember { mutableStateOf(false) }
     var linkToPreview by remember { mutableStateOf("") }
@@ -682,6 +680,8 @@ fun BubbleAiMessageComposable(
         }
     }
     }
+
+            }
 
     // 链接预览弹窗
     if (showLinkDialog && linkToPreview.isNotEmpty() && enableDialogs) {
