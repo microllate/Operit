@@ -667,6 +667,7 @@ private fun MessageItem(
         mutableStateOf<ChatMessageMenuDialogRequest?>(null)
     }
     val context = LocalContext.current
+    val viewConfiguration = LocalViewConfiguration.current
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
 
