@@ -1790,7 +1790,7 @@ class MessageCoordinationDelegate(
                 val currentChat = chatHistoryDelegate.chatHistories.value.firstOrNull { it.id == originalChatId }
                 val isGroupChat = currentChat?.characterGroupId != null
 
-                val summaryConfig = readSummaryConfig()
+                val summaryConfig = readSummaryConfig(chatModelConfigIdOverride)
                 val summaryMessage = AIMessageManager.summarizeMemory(
                     enhancedAiService = service,
                     messages = snapshotMessages,
@@ -1923,7 +1923,7 @@ class MessageCoordinationDelegate(
                 summaryInsertReferenceMessages.getOrNull(insertPosition - 1)?.timestamp
             val afterTimestamp =
                 summaryInsertReferenceMessages.getOrNull(insertPosition)?.timestamp
-            val summaryConfig = readSummaryConfig()
+            val summaryConfig = readSummaryConfig(effectiveChatModelConfigIdOverride)
             val summaryMessage =
                 AIMessageManager.summarizeMemory(
                     service,
@@ -2045,15 +2045,17 @@ class MessageCoordinationDelegate(
         this.uiBridge = uiBridge
     }
 
-    /** 从当前聊天绑定的模型配置中读取总结配置。 */
-    suspend fun readSummaryConfig(): ConversationSummaryConfig {
+    /** 从本次聊天实际绑定的模型配置中读取总结配置；未指定覆盖配置时回退到全局 CHAT 配置。 */
+    suspend fun readSummaryConfig(chatModelConfigIdOverride: String? = null): ConversationSummaryConfig {
         return try {
             val functionalConfigManager = FunctionalConfigManager(context)
             val modelConfigManager = ModelConfigManager(context)
             val functionMappings = functionalConfigManager.functionConfigMappingWithIndexFlow.first()
             val chatMapping = functionMappings[FunctionType.CHAT] ?: FunctionConfigMapping()
-            if (chatMapping.configId.isNotBlank()) {
-                val config = modelConfigManager.getModelConfigFlow(chatMapping.configId).first()
+            val configId = chatModelConfigIdOverride?.takeIf { it.isNotBlank() }
+                ?: chatMapping.configId
+            if (configId.isNotBlank()) {
+                val config = modelConfigManager.getModelConfigFlow(configId).first()
                 ConversationSummaryConfig(
                     globalRules = config.summaryCustomRules.takeIf { it.isNotBlank() },
                     sectionOverrides = config.summarySectionOverrides,
