@@ -1188,7 +1188,7 @@ private fun UnifiedCanvasRenderer(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->
                     TextView(context).apply {
-                        textIsSelectable = true
+                        setTextIsSelectable(true)
                         setTextColor(android.graphics.Color.TRANSPARENT)
                         setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                         gravity = Gravity.TOP or Gravity.START
