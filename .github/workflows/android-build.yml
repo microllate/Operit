@@ -14,7 +14,7 @@ on:
           - ':app:assembleNightly'
           - ':app:assembleClone'
   push:
-    branches: [main, fix/task-completion-summary-context-auto]
+    branches: [main, fix/task-completion-summary-context-auto, port/tool-experience-memory-to-fix]
     paths:
       - .github/workflows/android-build.yml
       - .gitmodules
