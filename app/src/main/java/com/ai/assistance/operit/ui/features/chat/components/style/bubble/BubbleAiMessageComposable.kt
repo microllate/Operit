@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -365,17 +366,19 @@ fun BubbleAiMessageComposable(
                             .defaultMinSize(minHeight = 44.dp)
                     val renderContent: @Composable () -> Unit = {
                         key(message.timestamp) {
-                            Text(
-                                text = message.content,
-                                color = textColor,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(
-                                    start = bubbleContentPaddingLeft.dp,
-                                    top = 12.dp,
-                                    end = bubbleContentPaddingRight.dp,
-                                    bottom = 12.dp,
-                                ),
-                            )
+                            SelectionContainer {
+                                Text(
+                                    text = message.content,
+                                    color = textColor,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(
+                                        start = bubbleContentPaddingLeft.dp,
+                                        top = 12.dp,
+                                        end = bubbleContentPaddingRight.dp,
+                                        bottom = 12.dp,
+                                    ),
+                                )
+                            }
                         }
                     }
 
@@ -544,17 +547,19 @@ fun BubbleAiMessageComposable(
                             .defaultMinSize(minHeight = 44.dp)
                     val renderContent: @Composable () -> Unit = {
                         key(message.timestamp) {
-                            Text(
-                                text = message.content,
-                                color = textColor,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(
-                                    start = bubbleContentPaddingLeft.dp,
-                                    top = 12.dp,
-                                    end = bubbleContentPaddingRight.dp,
-                                    bottom = 12.dp,
-                                ),
-                            )
+                            SelectionContainer {
+                                Text(
+                                    text = message.content,
+                                    color = textColor,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(
+                                        start = bubbleContentPaddingLeft.dp,
+                                        top = 12.dp,
+                                        end = bubbleContentPaddingRight.dp,
+                                        bottom = 12.dp,
+                                    ),
+                                )
+                            }
                         }
                     }
 
