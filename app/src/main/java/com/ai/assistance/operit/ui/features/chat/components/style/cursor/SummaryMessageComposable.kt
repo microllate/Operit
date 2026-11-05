@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +40,7 @@ fun SummaryMessageComposable(
     onEdit: ((ChatMessage) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val summaryTextColorArgb = MaterialTheme.colorScheme.onSurface.toArgb()
     // 记住展开状态
     var showSummaryDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -143,21 +145,14 @@ fun SummaryMessageComposable(
                             factory = { viewContext ->
                                 TextView(viewContext).apply {
                                     textSize = 14f
-                                    setTextColor(MaterialTheme.colorScheme.onSurface.hashCode())
+                                    setTextColor(summaryTextColorArgb)
                                     setTextIsSelectable(true)
                                     setLineSpacing(0f, 1.2f)
                                 }
                             },
                             update = { textView ->
                                 textView.text = message.content
-                                textView.setTextColor(
-                                    android.graphics.Color.argb(
-                                        (MaterialTheme.colorScheme.onSurface.alpha * 255).toInt(),
-                                        (MaterialTheme.colorScheme.onSurface.red * 255).toInt(),
-                                        (MaterialTheme.colorScheme.onSurface.green * 255).toInt(),
-                                        (MaterialTheme.colorScheme.onSurface.blue * 255).toInt()
-                                    )
-                                )
+                                textView.setTextColor(summaryTextColorArgb)
                             }
                         )
                     }
