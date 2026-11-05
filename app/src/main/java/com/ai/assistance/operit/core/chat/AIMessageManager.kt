@@ -1098,39 +1098,44 @@ object AIMessageManager {
                     return null
                 }
 
-                // Persist the cumulative first three sections before creating a new summary message.
-                // If persistence fails, reject this summary so the old history is not replaced.
+                // Run an independent extraction over only the newly added conversation.
+                // The context-compression summary above is intentionally left unchanged.
                 if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                    // Locate all four sections first, so the third durable section
-                    // ends at the Next-Step section instead of absorbing it.
-                    val allSections = requiredSections.mapNotNull { section ->
-                        val headerCandidates = listOf("【${section.title}】", "[${section.title}]")
-                        val start = headerCandidates.map { summary.indexOf(it) }
-                            .filter { it >= 0 }.minOrNull() ?: return@mapNotNull null
-                        start to section
-                    }.sortedBy { it.first }
-
-                    val durableSections = allSections.take(3)
-                    if (allSections.size != 4 || durableSections.size != 3) {
-                        AppLogger.e(TAG, "无法从新摘要提取全部四个板块，拒绝保存")
+                    val extractedMemory = enhancedAiService.generateSummary(
+                        messages = conversationToSummarize,
+                        previousSummary = null,
+                        summaryConfig = summaryConfig,
+                        chatModelConfigIdOverride = chatModelConfigIdOverride,
+                        chatModelIndexOverride = chatModelIndexOverride
+                    )
+                    if (extractedMemory.isBlank()) {
+                        AppLogger.e(TAG, "独立长期记忆提取结果为空")
                         return null
                     }
-
-                    val durableContent = durableSections.mapIndexed { index, entry ->
-                        val start = entry.first
-                        val end = allSections.getOrNull(index + 1)?.first ?: summary.length
-                        summary.substring(start, end).trim()
+                    val memorySections = requiredSections.mapNotNull { section ->
+                        val headers = listOf("【${section.title}】", "[${section.title}]")
+                        val position = headers.map { extractedMemory.indexOf(it) }
+                            .filter { it >= 0 }.minOrNull() ?: return@mapNotNull null
+                        position to section
+                    }.sortedBy { it.first }
+                    if (memorySections.size != 4) {
+                        AppLogger.e(TAG, "独立长期记忆提取缺少必要板块")
+                        return null
+                    }
+                    val durableMemory = memorySections.take(3).mapIndexed { index, entry ->
+                        val from = entry.first
+                        val to = memorySections.getOrNull(index + 1)?.first ?: extractedMemory.length
+                        extractedMemory.substring(from, to).trim()
                     }.joinToString("\n\n").trim()
-
-                    val writeResult = summaryDocumentManager.write(
+                    val appendResult = summaryDocumentManager.append(
                         workspacePath = workspacePath,
                         workspaceEnv = workspaceEnv,
                         chatId = chatId,
                         expectedCurrentContent = storedSummaryDocument,
-                        newContent = durableContent
+                        newContent = durableMemory
                     )
-                    if (!writeResult.success) {
-                        AppLogger.e(TAG, "保存历史摘要文档失败，拒绝插入新摘要: ${writeResult.error}")
+                    if (!appendResult.success) {
+                        AppLogger.e(TAG, "追加长期记忆失败: ${appendResult.error}")
                         return null
                     }
                 }
