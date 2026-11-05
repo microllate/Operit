@@ -106,21 +106,34 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         if (existing != expectedCurrentContent) {
             return@withLock DocumentResult(false, error = "Summary document changed; refusing to append")
         }
-        // Skip duplicate content before adding a timestamp, so retries do not create
-        // timestamp-only entries when the memory body is already present.
-        val contentWithoutTimestamp = mergeAppendContent(existing, newContent)
-        if (contentWithoutTimestamp == existing) {
-            return@withLock DocumentResult(true, content = existing)
-        }
+        // Treat the three model-generated sections as one record. Never deduplicate
+        // individual headings or paragraph lines, because that can detach content from its section.
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             .format(Date())
-        // Keep the model's three section paragraphs intact; prefix each paragraph with the timestamp.
-        val sectionHeader = Regex("(?m)^(【[^】]+】|\\[[^\\]]+\\])\\s*$")
+        val sectionHeader = Regex("(?m)^(【[^】]+】|\\\\[[^\\\\]]+\\\\])\\\\s*$")
         val timestampedContent = sectionHeader.replace(newContent) { match ->
-            "${match.value}\n$timestamp "
+            "${match.value}\\n$timestamp "
+        }.trim()
+        if (timestampedContent.isBlank()) {
+            return@withLock DocumentResult(true, content = existing)
         }
-        val merged = mergeAppendContent(existing, timestampedContent)
-        val delta = merged.removePrefix(existing)
+        val normalizedIncoming = normalizeMemoryRecord(newContent)
+        val normalizedExisting = normalizeMemoryRecord(
+            existing.replace(
+                Regex("(?m)^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} "),
+                ""
+            )
+        )
+        if (normalizedIncoming.isNotBlank() && normalizedExisting.contains(normalizedIncoming)) {
+            return@withLock DocumentResult(true, content = existing)
+        }
+        val separator = when {
+            existing.isEmpty() -> ""
+            existing.endsWith("\\n\\n") -> ""
+            existing.endsWith("\\n") -> "\\n"
+            else -> "\\n\\n"
+        }
+        val delta = separator + timestampedContent + "\\n"
         val latest = read(workspacePath, workspaceEnv, chatId)
         if (!latest.success) return@withLock latest
         if (latest.content.orEmpty() != existing) {
@@ -236,6 +249,13 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         return "$root/$SUMMARY_DIRECTORY/$safeChatId/$SUMMARY_FILE_NAME"
     }
 }
+
+
+internal fun normalizeMemoryRecord(content: String): String = content
+    .replace("\\r\\n", "\\n")
+    .replace(Regex("(?m)^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} "), "")
+    .replace(Regex("\\\\s+"), " ")
+    .trim()
 
 internal fun mergeAppendContent(existing: String, incoming: String): String {
     if (incoming.isBlank()) return existing
