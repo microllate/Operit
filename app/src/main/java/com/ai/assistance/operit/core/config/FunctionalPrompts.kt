@@ -46,21 +46,17 @@ object FunctionalPrompts {
         ============================
 
         **格式要求：**
-        1. 必须使用上述固定格式，包括分隔线、标题标识符【】、列表符号等，不得更改。
-        2. 标题"对话摘要"必须放在第一行，前后用等号分隔。
-        3. 每个部分必须使用【】标识符作为标题，标题后换行。
-        4. 四个栏目均使用简短列表；没有记录的栏目写“无”；方括号内的说明只是示例，实际输出不得照抄。
-        5. 所有工程记录条目使用清晰的列表格式，便于后续模型恢复任务.
-        6. 结尾使用等号分隔线.
+        1. 保留摘要标题、四个板块标题及结尾分隔线，不得增删板块。
+        2. 每个板块标题后只输出一个自然段；不得使用编号、项目符号、列表或分行罗列。
+        3. 没有记录的板块写“无”；方括号内的说明只是规则，不得照抄。
 
         **内容要求：**
-        1. 语言风格：专业、清晰、客观，使用短句，不写叙事性过程回顾.
-        2. 页面摘要必须高度精简：四个固定栏目不得增删。用户目标用1句话；错误栏目每个独立错误最多1条短句；完成栏目每个独立成果最多1条短句；下一步策略只写1条最优先行动。每条原则上不超过40个汉字，整个摘要原则上控制在300字以内.
-        3. 历史完整性通过“短句化”保证，不通过删除事实保证：前三个栏目保留所有独立目标、错误和成果，但必须压缩表达；同一事项的新进展合并到原条目，不重复叙述排查过程、工具调用、日志和代码细节.
-        4. 只保留恢复任务所必需的信息。除非文件路径、提交号、关键参数或验证结果是下一步不可缺少的依据，否则不要列出；不引用大段输出、不粘贴代码、不复述完整执行过程.
-        5. 下一步策略只允许一个明确动作，可附带一个必要的验收条件；不得列出多个备选方案或重复历史背景.
-        6. 先处理最新对话中的进展，再继承旧记录。若新证据改变旧状态，只更新对应短句；没有新证据的旧记录保持原意.
-        7. 不要在四个栏目之外追加工具包介绍、执行日志、对话回顾或其他附录.
+        1. 语言专业、清晰、客观、精简，不写叙事性过程回顾。
+        2. 用户目标、错误历史、已完成项目分别压缩汇总为一个段落；多个事项用分号衔接，保留所有独立事实、关键结果和必要证据，不得逐条列举。
+        3. 下一步策略只采用最近聊天模型最后一条回复的最后一个自然段，作为一个段落；不得从历史待办或模型自己的推测中另行拼接。
+        4. 只保留恢复任务必需的信息；路径、提交号、参数和验证结果仅在后续执行确实需要时保留。
+        5. 不得在四个板块之外追加工具包介绍、执行日志、对话回顾或其他附录。
+
     """
 
     const val SUMMARY_PROMPT_EN = """
@@ -94,21 +90,17 @@ object FunctionalPrompts {
         =======================================
 
         **Formatting requirements:**
-        1. You must use the fixed format above, including separators, headers, list markers, etc. Do not change them.
-        2. The title "Conversation Summary" must be on the first line, surrounded by '='.
-        3. Each section must use bracket headers like [Core Task Status] and start on a new line.
-        4. Use concise lists in all four sections. Write “None” for an empty section. Bracketed descriptions are placeholders and must not be copied.
-        5. Use clear lists for engineering records and next actions.
-        6. End with the separator line.
+        1. Keep the summary title, exactly four section headers, and closing separator.
+        2. After each section header, write exactly one concise prose paragraph. Never use numbered lists, bullets, itemized lines, or one line per fact.
+        3. Write “None” for an empty section. Do not copy bracketed placeholder descriptions.
 
         **Content requirements:**
-        1. Style: professional, clear, objective, and terse. Use short factual sentences; do not narrate the conversation.
-        2. Keep the visible summary compact: retain exactly four sections. User Goals: one sentence. Errors: at most one short sentence per distinct error. Completed Work: at most one short sentence per distinct deliverable. Next-Step Strategy: exactly one highest-priority action. Each item should normally stay within 25 words; target 200 words total.
-        3. Preserve history by compressing wording, not by deleting facts. Keep every distinct goal, error, and completed item in the first three sections. Merge new status/evidence into its existing item instead of repeating the investigation, tool calls, logs, or code details.
-        4. Include only information required to resume the task. Omit file paths, commit IDs, parameters, and verification details unless they are essential to the next action. Never paste code, long outputs, or a chronological work log.
-        5. The next-step section may contain only one explicit action and, if necessary, one acceptance condition. Do not list alternatives or repeat historical context.
-        6. Process the latest progress first, then inherit prior records. Update an old item only when new evidence supports the change; otherwise preserve its meaning.
-        7. Do not append package descriptions, execution logs, conversation reviews, or any content outside the four sections.
+        1. Use professional, clear, objective, concise factual language; do not narrate the conversation.
+        2. Condense User Goals, Errors, and Completed Work into one paragraph each. Connect distinct facts with semicolons while preserving every important fact and necessary evidence; do not enumerate them.
+        3. For Next-Step Strategy, use only the final paragraph of the latest chat-model response in the recent conversation, condensing it only if necessary. Do not invent or combine other next steps.
+        4. Include only information required to resume the task; retain paths, commit IDs, parameters, and verification details only when essential.
+        5. Do not append package descriptions, execution logs, conversation reviews, or content outside the four sections.
+
     """
 
     fun summaryPrompt(useEnglish: Boolean): String {
@@ -219,7 +211,7 @@ object FunctionalPrompts {
         if (applicableOverrides.isNotEmpty()) {
             prompt = applySummarySectionOverrides(applicableOverrides, useEnglish)
         }
-        val integrityRules = if (useEnglish) "\n\n[Mandatory summary integrity rules]\nRegardless of custom section settings, use exactly four sections in this order: User Goals, Errors During Model Execution, Completed Work, Next-Step Strategy. The first three are cumulative history; the fourth is dynamic. Inherit all prior content in the first three sections before applying new evidence. Do not change goals unless the user explicitly does so. Never delete old errors; resolve them only with evidence. Never delete completed items; require execution evidence. If recent conversation does not affect one of the first three sections, preserve that section unchanged. Never turn assistant suggestions into user goals or plans/attempts into completed work." else "\n\n【摘要历史完整性强制规则】\n无论用户自定义摘要分段如何设置，都必须遵守以下规则：四个固定板块依次为“用户目标”“模型执行过程出现的错误”“模型已完成的项目”“下一步策略”；前三项是累积历史，第四项是动态状态。每次生成前先继承前三项全部旧内容，再合并新证据。旧目标除非用户明确修改不得改变；旧错误不得删除，解决状态须有证据；旧完成项目不得删除，完成状态须有执行证据。若新对话没有涉及前三项，则原样保留对应旧内容。不得把模型提出的方案写成用户目标，不得把计划/尝试写成完成。"
+        val integrityRules = if (useEnglish) "\n\n[Mandatory summary integrity and formatting rules]\nRegardless of custom section settings, use exactly four sections in this order: User Goals, Errors During Model Execution, Completed Work, Next-Step Strategy. Write each section as exactly one concise paragraph. Do not use numbered lists, bullets, separate item lines, or one sentence per item. Combine related facts naturally with semicolons while preserving distinct facts and evidence. The first three sections are cumulative history; inherit prior content and add only new evidence. Do not change goals unless the user explicitly does so. Never delete old errors or completed work. Never turn assistant suggestions into user goals or plans/attempts into completed work. For Next-Step Strategy, do not invent or independently generate a plan: take the final paragraph of the latest chat model response in the recent conversation, condense it only if needed, and use that as the sole next step. If there is no clear final paragraph proposing a next step, write None." else "\n\n【摘要历史完整性与格式强制规则】\n无论用户自定义摘要分段如何设置，都必须使用四个固定板块，顺序不变。每个板块只能输出一个简洁、连贯的自然段；严禁编号列表、项目符号、逐项换行或每个事项单独成句。多个事实用分号自然衔接，但不得丢失独立事实和证据。前三项是累积历史，必须继承旧内容，只补充本轮新证据；不得擅自修改用户目标，不得删除旧错误或已完成事项，不得把模型建议写成用户目标，不得把计划或尝试写成完成。下一步策略不得自行推演或另行制定，必须提取最近对话中聊天模型最后一条回复的最后一个自然段，必要时仅做精简，作为唯一下一步；若该段没有明确下一步行动，则写“无”。"
         prompt += "\n\n" + integrityRules
         val promptWithPreviousSummary = appendPreviousSummary(prompt, previousSummary, useEnglish)
         return summaryConfig.globalRules?.trim()?.takeIf { it.isNotBlank() }?.let { rules ->
