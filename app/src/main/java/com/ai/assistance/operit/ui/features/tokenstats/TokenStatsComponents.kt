@@ -948,16 +948,10 @@ private fun ModelFilterDropdown(
             DropdownMenuItem(
                 text = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (checked) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        } else {
-                            Spacer(Modifier.size(24.dp))
-                        }
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = null,
+                        )
                         Text(
                             displayName,
                             modifier = Modifier.padding(start = 4.dp),
