@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - port/tool-experience-memory-to-fix
+      - fix/task-completion-summary-context-auto
     paths:
       - .github/workflows/android-compile-check.yml
       - .gitmodules
