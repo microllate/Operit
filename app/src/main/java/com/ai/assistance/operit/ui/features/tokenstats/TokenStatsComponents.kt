@@ -948,11 +948,16 @@ private fun ModelFilterDropdown(
             DropdownMenuItem(
                 text = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = checked,
-                            // 由外层 DropdownMenuItem 统一处理点击，避免点击 Checkbox 时触发两次切换。
-                            onCheckedChange = null,
-                        )
+                        if (checked) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            Spacer(Modifier.size(24.dp))
+                        }
                         Text(
                             displayName,
                             modifier = Modifier.padding(start = 4.dp),
