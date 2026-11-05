@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
@@ -19,6 +18,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.TextView
 import androidx.compose.ui.window.Dialog
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.data.model.ChatMessage
@@ -103,9 +104,6 @@ fun SummaryMessageComposable(
     // 显示详细内容的对话框 - 仅在启用弹窗时显示
     if (showSummaryDialog && enableDialog) {
         Dialog(onDismissRequest = { showSummaryDialog = false }) {
-            // Dialog 使用独立窗口层级，不能复用 ChatArea 外层的 SelectionContainer。
-            // 在弹窗内部建立独立选择上下文，避免长按时跨层级计算坐标导致崩溃。
-            SelectionContainer {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -140,10 +138,27 @@ fun SummaryMessageComposable(
                                 .heightIn(max = 400.dp)
                                 .verticalScroll(scrollState)
                     ) {
-                        Text(
-                            text = message.content,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            style = MaterialTheme.typography.bodyMedium
+                        AndroidView(
+                            modifier = Modifier.fillMaxWidth(),
+                            factory = { viewContext ->
+                                TextView(viewContext).apply {
+                                    textSize = 14f
+                                    setTextColor(MaterialTheme.colorScheme.onSurface.hashCode())
+                                    setTextIsSelectable(true)
+                                    setLineSpacing(0f, 1.2f)
+                                }
+                            },
+                            update = { textView ->
+                                textView.text = message.content
+                                textView.setTextColor(
+                                    android.graphics.Color.argb(
+                                        (MaterialTheme.colorScheme.onSurface.alpha * 255).toInt(),
+                                        (MaterialTheme.colorScheme.onSurface.red * 255).toInt(),
+                                        (MaterialTheme.colorScheme.onSurface.green * 255).toInt(),
+                                        (MaterialTheme.colorScheme.onSurface.blue * 255).toInt()
+                                    )
+                                )
+                            }
                         )
                     }
 
@@ -176,7 +191,6 @@ fun SummaryMessageComposable(
                         ) { Text(context.getString(R.string.close)) }
                     }
                 }
-            }
             }
         }
     }
