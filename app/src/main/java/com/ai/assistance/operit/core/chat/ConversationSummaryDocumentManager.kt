@@ -114,7 +114,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         }
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             .format(Date())
-        val timestampedContent = "## $timestamp\\n\\n$newContent"
+        val timestampedContent = "## $timestamp\n\n$newContent"
         val merged = mergeAppendContent(existing, timestampedContent)
         val delta = merged.removePrefix(existing)
         val latest = read(workspacePath, workspaceEnv, chatId)
