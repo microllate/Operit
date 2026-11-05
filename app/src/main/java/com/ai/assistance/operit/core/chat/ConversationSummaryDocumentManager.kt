@@ -8,6 +8,9 @@ import com.ai.assistance.operit.data.model.ToolParameter
 import com.ai.assistance.operit.util.AppLogger
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Persists the durable, cumulative part of a conversation summary in its workspace.
@@ -103,8 +106,16 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         if (existing != expectedCurrentContent) {
             return@withLock DocumentResult(false, error = "Summary document changed; refusing to append")
         }
-        val merged = mergeAppendContent(existing, newContent)
-        if (merged == existing) return@withLock DocumentResult(true, content = existing)
+        // Skip duplicate content before adding a timestamp, so retries do not create
+        // timestamp-only entries when the memory body is already present.
+        val contentWithoutTimestamp = mergeAppendContent(existing, newContent)
+        if (contentWithoutTimestamp == existing) {
+            return@withLock DocumentResult(true, content = existing)
+        }
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            .format(Date())
+        val timestampedContent = "## $timestamp\\n\\n$newContent"
+        val merged = mergeAppendContent(existing, timestampedContent)
         val delta = merged.removePrefix(existing)
         val latest = read(workspacePath, workspaceEnv, chatId)
         if (!latest.success) return@withLock latest
