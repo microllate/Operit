@@ -353,8 +353,10 @@ class TokenUsageStatisticsViewModel(
     fun selectAllModels() {
         modeRangeJob?.cancel()
         _state.update { it.copy(selectedModels = emptySet()) }
-        viewModelScope.launch(dispatcher) { settings.saveSelectedModels(emptySet()) }
-        load()
+        viewModelScope.launch(dispatcher) {
+            settings.saveSelectedModels(emptySet())
+            load()
+        }
     }
 
     fun setTargetCurrency(currency: PricingCurrency) {
