@@ -110,30 +110,25 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         // individual headings or paragraph lines, because that can detach content from its section.
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             .format(Date())
-        val sectionHeader = Regex("(?m)^(【[^】]+】|\\\\[[^\\\\]]+\\\\])\\\\s*$")
+        val sectionHeader = Regex("(?m)^(【[^】]+】|\\[[^\\]]+\\])\\s*$")
         val timestampedContent = sectionHeader.replace(newContent) { match ->
-            "${match.value}\\n$timestamp "
+            "\${match.value}\n$timestamp "
         }.trim()
         if (timestampedContent.isBlank()) {
             return@withLock DocumentResult(true, content = existing)
         }
         val normalizedIncoming = normalizeMemoryRecord(newContent)
-        val normalizedExisting = normalizeMemoryRecord(
-            existing.replace(
-                Regex("(?m)^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} "),
-                ""
-            )
-        )
+        val normalizedExisting = normalizeMemoryRecord(existing)
         if (normalizedIncoming.isNotBlank() && normalizedExisting.contains(normalizedIncoming)) {
             return@withLock DocumentResult(true, content = existing)
         }
         val separator = when {
             existing.isEmpty() -> ""
-            existing.endsWith("\\n\\n") -> ""
-            existing.endsWith("\\n") -> "\\n"
-            else -> "\\n\\n"
+            existing.endsWith("\n\n") -> ""
+            existing.endsWith("\n") -> "\n"
+            else -> "\n\n"
         }
-        val delta = separator + timestampedContent + "\\n"
+        val delta = separator + timestampedContent + "\n"
         val latest = read(workspacePath, workspaceEnv, chatId)
         if (!latest.success) return@withLock latest
         if (latest.content.orEmpty() != existing) {
@@ -252,9 +247,9 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
 
 
 internal fun normalizeMemoryRecord(content: String): String = content
-    .replace("\\r\\n", "\\n")
-    .replace(Regex("(?m)^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} "), "")
-    .replace(Regex("\\\\s+"), " ")
+    .replace("\r\n", "\n")
+    .replace(Regex("(?m)^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} "), "")
+    .replace(Regex("\\s+"), " ")
     .trim()
 
 internal fun mergeAppendContent(existing: String, incoming: String): String {
