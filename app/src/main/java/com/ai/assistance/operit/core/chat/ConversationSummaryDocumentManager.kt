@@ -257,7 +257,7 @@ internal fun mergeTimestampedMemorySections(
         val index = updated.indexOfFirst { it.header == incomingSection.header }
         val oldBody = if (index >= 0) updated[index].body else ""
         if (normalize(oldBody).contains(normalize(incomingSection.body))) return@forEach
-        val addition = "$timestamp\n\${incomingSection.body.trim()}"
+        val addition = "$timestamp\n${incomingSection.body.trim()}"
         if (index >= 0) {
             updated[index] = updated[index].copy(
                 body = listOf(oldBody, addition).filter { it.isNotBlank() }.joinToString("\n\n")
