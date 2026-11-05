@@ -91,6 +91,7 @@ class TokenUsageStatisticsViewModel(
     private var loadGeneration = 0
     private var loadJob: Job? = null
     private var modeRangeJob: Job? = null
+    private var selectedModelsLoaded = false
     private val knownModelNames = linkedMapOf<String, String>()
     private val knownModelProviderModels = linkedMapOf<String, Set<String>>()
 
@@ -157,8 +158,11 @@ class TokenUsageStatisticsViewModel(
         val generation = ++loadGeneration
         loadJob = viewModelScope.launch(dispatcher) {
             try {
-                val persistedSelectedModels = settings.loadSelectedModels()
-                _state.update { it.copy(selectedModels = persistedSelectedModels) }
+                if (!selectedModelsLoaded) {
+                    val persistedSelectedModels = settings.loadSelectedModels()
+                    _state.update { it.copy(selectedModels = persistedSelectedModels) }
+                    selectedModelsLoaded = true
+                }
                 val rateInfo = settings.loadRateWithEstimate()
                 val currency = settings.loadTargetCurrency()
                 val tokenDisplayUnit = settings.loadTokenDisplayUnit()
@@ -190,15 +194,9 @@ class TokenUsageStatisticsViewModel(
                     }
                     val lifetime = lifetimeDeferred.await()
                     rememberModelNames(lifetime.displayModels)
-                    val validModelIds = lifetime.displayModels.map { it.displayModelId }.toSet()
-                    val selectedModels = persistedSelectedModels.intersect(validModelIds)
-                    if (selectedModels != persistedSelectedModels) {
-                        settings.saveSelectedModels(selectedModels)
-                    }
-                    _state.update { it.copy(selectedModels = selectedModels) }
-                    val selectedProviderModels = providerModelsFor(
-                        _state.value.copy(selectedModels = selectedModels),
-                    )
+                    // Lifetime results are not a whitelist: models without lifetime
+                    // records must not erase the user's persisted selection.
+                    val selectedProviderModels = providerModelsFor(_state.value)
                     val rangeParams = TokenStatsQueryParams(
                         targetCurrency = currency,
                         manualRate = rateInfo.first,
