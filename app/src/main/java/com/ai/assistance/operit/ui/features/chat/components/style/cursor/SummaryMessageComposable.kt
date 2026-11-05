@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
@@ -102,6 +103,9 @@ fun SummaryMessageComposable(
     // 显示详细内容的对话框 - 仅在启用弹窗时显示
     if (showSummaryDialog && enableDialog) {
         Dialog(onDismissRequest = { showSummaryDialog = false }) {
+            // Dialog 使用独立窗口层级，不能复用 ChatArea 外层的 SelectionContainer。
+            // 在弹窗内部建立独立选择上下文，避免长按时跨层级计算坐标导致崩溃。
+            SelectionContainer {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -172,6 +176,7 @@ fun SummaryMessageComposable(
                         ) { Text(context.getString(R.string.close)) }
                     }
                 }
+            }
             }
         }
     }
