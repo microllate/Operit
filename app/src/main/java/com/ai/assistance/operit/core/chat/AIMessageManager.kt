@@ -695,9 +695,8 @@ object AIMessageManager {
         chatId: String? = null
     ): ChatMessage? {
         val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
-        val messagePreviousSummary = if (lastSummaryIndex != -1) messages[lastSummaryIndex].content.trim() else null
 
-        // The workspace document is the durable source for cumulative history.
+        // The workspace document is read only for append consistency; it is not sent to the summary model.
         // The chat message remains the fallback for chats without a workspace document.
         val summaryDocumentManager = ConversationSummaryDocumentManager.getInstance(context)
         val storedSummaryDocument = if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
@@ -710,7 +709,7 @@ object AIMessageManager {
         } else {
             ""
         }
-        val previousSummary = storedSummaryDocument.takeIf { it.isNotBlank() } ?: messagePreviousSummary
+        // Summarize only newly added conversation turns to avoid mixing old history into new content.
 
         val messagesToSummarize = when {
             lastSummaryIndex == -1 -> messages.filter { it.sender == "user" || it.sender == "ai" }
@@ -1066,7 +1065,7 @@ object AIMessageManager {
             val summary =
                 enhancedAiService.generateSummary(
                     conversationToSummarize,
-                    previousSummary,
+                    null,
                     summaryConfig,
                     chatModelConfigIdOverride = chatModelConfigIdOverride,
                     chatModelIndexOverride = chatModelIndexOverride
