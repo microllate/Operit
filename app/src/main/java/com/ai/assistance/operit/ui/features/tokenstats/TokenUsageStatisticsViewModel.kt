@@ -179,13 +179,16 @@ class TokenUsageStatisticsViewModel(
 
                 val result = coroutineScope {
                     val pricesDeferred = async(Dispatchers.IO) { manager.allPriceSettings() }
-                    val lifetime = TokenStatsQueryService.lifetimeOverview(
-                        appContext,
-                        TokenStatsQueryParams(
-                            targetCurrency = currency,
-                            manualRate = rateInfo.first,
-                        ),
-                    )
+                    val lifetimeDeferred = async(Dispatchers.IO) {
+                        TokenStatsQueryService.lifetimeOverview(
+                            appContext,
+                            TokenStatsQueryParams(
+                                targetCurrency = currency,
+                                manualRate = rateInfo.first,
+                            ),
+                        )
+                    }
+                    val lifetime = lifetimeDeferred.await()
                     rememberModelNames(lifetime.displayModels)
                     val validModelIds = lifetime.displayModels.map { it.displayModelId }.toSet()
                     val selectedModels = persistedSelectedModels.intersect(validModelIds)
@@ -347,7 +350,11 @@ class TokenUsageStatisticsViewModel(
             if (!selected.add(displayModelId)) selected.remove(displayModelId)
             state.copy(selectedModels = selected)
         }
-        load()
+        val selected = _state.value.selectedModels
+        viewModelScope.launch(dispatcher) {
+            settings.saveSelectedModels(selected)
+            load()
+        }
     }
 
     fun selectAllModels() {
