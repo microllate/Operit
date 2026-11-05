@@ -112,7 +112,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
             .format(Date())
         val sectionHeader = Regex("(?m)^(【[^】]+】|\\[[^\\]]+\\])\\s*$")
         val timestampedContent = sectionHeader.replace(newContent) { match ->
-            "\${match.value}\n$timestamp "
+            "${match.value}\n$timestamp "
         }.trim()
         if (timestampedContent.isBlank()) {
             return@withLock DocumentResult(true, content = existing)
