@@ -1,0 +1,132 @@
+name: Android Compile Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - port/tool-experience-memory-to-fix
+    paths:
+      - .github/workflows/android-compile-check.yml
+      - .gitmodules
+      - app/**
+      - build.gradle.kts
+      - ci/script/download_android_dependencies.sh
+      - ci/script/prepare_android_dependencies.py
+      - gradle/**
+      - gradle.properties
+      - gradlew
+      - settings.gradle.kts
+      - terminal
+      - terminal/**
+      - '**/*.kt'
+      - '**/*.java'
+
+concurrency:
+  group: android-compile-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: '21'
+  ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
+  MANUAL_DEPS_DIR: manual-deps
+
+jobs:
+  compile:
+    name: Compile Android source (no APK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+
+      - name: Initialize terminal submodule
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule sync -- terminal
+          git submodule update --init --recursive --depth 1 terminal
+          git submodule status -- terminal
+
+      - name: Set up JDK
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        with:
+          packages: ''
+
+      - name: Install compile SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;$ANDROID_BUILD_TOOLS_VERSION"
+
+      - name: Restore Android JVM dependency cache
+        id: cache-jvm-deps
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.MANUAL_DEPS_DIR }}
+          key: android-jvm-deps-${{ runner.os }}-${{ hashFiles('ci/script/download_android_dependencies.sh', 'ci/script/prepare_android_dependencies.py') }}
+
+      - name: Download Android JVM dependencies
+        if: steps.cache-jvm-deps.outputs.cache-hit != 'true'
+        run: bash ci/script/download_android_dependencies.sh jvm "$MANUAL_DEPS_DIR"
+
+      - name: Prepare Android JVM dependencies
+        run: |
+          python3 ci/script/prepare_android_dependencies.py \
+            --profile jvm \
+            --archives "$MANUAL_DEPS_DIR" \
+            --repository "$GITHUB_WORKSPACE"
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x ./gradlew
+
+      - name: Compile Release Kotlin and Java sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew \
+            :app:compileReleaseKotlin \
+            :app:compileReleaseJavaWithJavac \
+            -x :app:verifyExternallyBuiltNativeLibraries \
+            -x :app:syncMainAssets \
+            -x :app:syncSttModelAssets \
+            --stacktrace \
+            --no-daemon
+
+      - name: Upload compile reports
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: operit-compile-reports-${{ github.run_number }}
+          path: |
+            app/build/reports/**
+            build/reports/**
+          if-no-files-found: ignore
+          retention-days: 7
