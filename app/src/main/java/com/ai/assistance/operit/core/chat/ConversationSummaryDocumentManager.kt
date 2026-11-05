@@ -114,7 +114,11 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         }
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             .format(Date())
-        val timestampedContent = "## $timestamp\n\n$newContent"
+        // Keep the model's three section paragraphs intact; prefix each paragraph with the timestamp.
+        val sectionHeader = Regex("(?m)^(【[^】]+】|\\[[^\\]]+\\])\\s*$")
+        val timestampedContent = sectionHeader.replace(newContent) { match ->
+            "${match.value}\n$timestamp "
+        }
         val merged = mergeAppendContent(existing, timestampedContent)
         val delta = merged.removePrefix(existing)
         val latest = read(workspacePath, workspaceEnv, chatId)
