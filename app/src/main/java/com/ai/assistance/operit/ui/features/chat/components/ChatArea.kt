@@ -1354,16 +1354,17 @@ private fun MessageCopyPreviewBottomSheet(
                     CircularProgressIndicator()
                 }
             } else {
-                SelectionContainer {
+                SelectionContainer(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 12.dp)
+                ) {
                     Text(
                         text = displayedText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = false)
-                            .verticalScroll(rememberScrollState())
-                            .padding(bottom = 12.dp)
                     )
                 }
             }
