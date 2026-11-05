@@ -697,7 +697,6 @@ object AIMessageManager {
         val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
 
         // The workspace document is read only for append consistency; it is not sent to the summary model.
-        // The chat message remains the fallback for chats without a workspace document.
         val summaryDocumentManager = ConversationSummaryDocumentManager.getInstance(context)
         val storedSummaryDocument = if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
             val result = summaryDocumentManager.read(workspacePath, workspaceEnv, chatId)
