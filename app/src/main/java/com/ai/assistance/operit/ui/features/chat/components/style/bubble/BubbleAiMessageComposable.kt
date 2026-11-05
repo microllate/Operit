@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +31,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ai.assistance.operit.data.model.ChatMessage
 import com.ai.assistance.operit.ui.features.chat.components.ChatMessageHeightMemory
+import com.ai.assistance.operit.ui.common.markdown.StreamMarkdownRenderer
+import com.ai.assistance.operit.ui.common.markdown.StreamMarkdownRendererState
+import com.ai.assistance.operit.ui.features.chat.components.rememberRevisableTextStream
+import com.ai.assistance.operit.util.markdown.toCharStream
 import com.ai.assistance.operit.ui.features.chat.components.part.CustomXmlRenderer
 import com.ai.assistance.operit.ui.features.chat.components.part.ThinkToolsXmlNodeGrouper
 import com.ai.assistance.operit.ui.features.chat.components.LinkPreviewDialog
@@ -151,6 +154,10 @@ fun BubbleAiMessageComposable(
     // 链接预览弹窗状态
     var showLinkDialog by remember { mutableStateOf(false) }
     var linkToPreview by remember { mutableStateOf("") }
+    // 与命令框模式共用同一套流式/静态 Markdown 与 XML 解析状态。
+    val rendererState = remember(message.timestamp) { StreamMarkdownRendererState() }
+    val streamToRender = rememberRevisableTextStream(message.contentStream)
+    val charStream = remember(streamToRender) { streamToRender?.toCharStream() }
     
     // 创建并保存StreamMarkdownRenderer的状态，使用message.timestamp作为key确保同一条消息共享状态
 
@@ -355,17 +362,37 @@ fun BubbleAiMessageComposable(
                             .defaultMinSize(minHeight = 44.dp)
                     val renderContent: @Composable () -> Unit = {
                         key(message.timestamp) {
-                            SelectionContainer {
-                                Text(
-                                    text = message.content,
-                                    color = textColor,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(
-                                        start = bubbleContentPaddingLeft.dp,
-                                        top = 12.dp,
-                                        end = bubbleContentPaddingRight.dp,
-                                        bottom = 12.dp,
-                                    ),
+                            val contentModifier = Modifier.padding(
+                                start = bubbleContentPaddingLeft.dp,
+                                top = 12.dp,
+                                end = bubbleContentPaddingRight.dp,
+                                bottom = 12.dp,
+                            )
+                            if (charStream != null) {
+                                StreamMarkdownRenderer(
+                                    markdownStream = charStream,
+                                    textColor = textColor,
+                                    backgroundColor = backgroundColor,
+                                    onLinkClick = rememberedOnLinkClick,
+                                    xmlRenderer = xmlRenderer,
+                                    nodeGrouper = nodeGrouper,
+                                    enableDialogs = enableDialogs,
+                                    modifier = contentModifier,
+                                    state = rendererState,
+                                    fillMaxWidth = false,
+                                )
+                            } else {
+                                StreamMarkdownRenderer(
+                                    content = message.content,
+                                    textColor = textColor,
+                                    backgroundColor = backgroundColor,
+                                    onLinkClick = rememberedOnLinkClick,
+                                    xmlRenderer = xmlRenderer,
+                                    nodeGrouper = nodeGrouper,
+                                    enableDialogs = enableDialogs,
+                                    modifier = contentModifier,
+                                    state = rendererState,
+                                    fillMaxWidth = false,
                                 )
                             }
                         }
@@ -536,17 +563,37 @@ fun BubbleAiMessageComposable(
                             .defaultMinSize(minHeight = 44.dp)
                     val renderContent: @Composable () -> Unit = {
                         key(message.timestamp) {
-                            SelectionContainer {
-                                Text(
-                                    text = message.content,
-                                    color = textColor,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(
-                                        start = bubbleContentPaddingLeft.dp,
-                                        top = 12.dp,
-                                        end = bubbleContentPaddingRight.dp,
-                                        bottom = 12.dp,
-                                    ),
+                            val contentModifier = Modifier.padding(
+                                start = bubbleContentPaddingLeft.dp,
+                                top = 12.dp,
+                                end = bubbleContentPaddingRight.dp,
+                                bottom = 12.dp,
+                            )
+                            if (charStream != null) {
+                                StreamMarkdownRenderer(
+                                    markdownStream = charStream,
+                                    textColor = textColor,
+                                    backgroundColor = backgroundColor,
+                                    onLinkClick = rememberedOnLinkClick,
+                                    xmlRenderer = xmlRenderer,
+                                    nodeGrouper = nodeGrouper,
+                                    enableDialogs = enableDialogs,
+                                    modifier = contentModifier,
+                                    state = rendererState,
+                                    fillMaxWidth = false,
+                                )
+                            } else {
+                                StreamMarkdownRenderer(
+                                    content = message.content,
+                                    textColor = textColor,
+                                    backgroundColor = backgroundColor,
+                                    onLinkClick = rememberedOnLinkClick,
+                                    xmlRenderer = xmlRenderer,
+                                    nodeGrouper = nodeGrouper,
+                                    enableDialogs = enableDialogs,
+                                    modifier = contentModifier,
+                                    state = rendererState,
+                                    fillMaxWidth = false,
                                 )
                             }
                         }
