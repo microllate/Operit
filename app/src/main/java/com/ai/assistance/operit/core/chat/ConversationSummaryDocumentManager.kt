@@ -6,6 +6,8 @@ import com.ai.assistance.operit.core.tools.FileContentData
 import com.ai.assistance.operit.data.model.AITool
 import com.ai.assistance.operit.data.model.ToolParameter
 import com.ai.assistance.operit.util.AppLogger
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Persists the durable, cumulative part of a conversation summary in its workspace.
@@ -31,6 +33,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
     }
 
     private val toolHandler = AIToolHandler.getInstance(context)
+    private val appendMutex = Mutex()
 
     data class DocumentResult(
         val success: Boolean,
@@ -83,6 +86,57 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
         }
     }
 
+    /**
+     * Appends new durable memory without replacing existing document content.
+     * The document is checked before writing and verified after read-back.
+     */
+    suspend fun append(
+        workspacePath: String?,
+        workspaceEnv: String?,
+        chatId: String,
+        expectedCurrentContent: String,
+        newContent: String
+    ): DocumentResult = appendMutex.withLock {
+        val current = read(workspacePath, workspaceEnv, chatId)
+        if (!current.success) return@withLock current
+        val existing = current.content.orEmpty()
+        if (existing != expectedCurrentContent) {
+            return@withLock DocumentResult(false, error = "Summary document changed; refusing to append")
+        }
+        val merged = mergeAppendContent(existing, newContent)
+        if (merged == existing) return@withLock DocumentResult(true, content = existing)
+        val delta = merged.removePrefix(existing)
+        val latest = read(workspacePath, workspaceEnv, chatId)
+        if (!latest.success) return@withLock latest
+        if (latest.content.orEmpty() != existing) {
+            return@withLock DocumentResult(false, error = "Summary document changed before append")
+        }
+        val path = resolveDocumentPath(workspacePath, chatId)
+            ?: return@withLock DocumentResult(false, error = "Workspace path is empty")
+        try {
+            val mkdir = execute("make_directory", listOf(
+                ToolParameter("path", path.substringBeforeLast("/")),
+                ToolParameter("create_parents", "true")
+            ), workspaceEnv)
+            if (!mkdir.success) return@withLock DocumentResult(false, error = "Unable to create summary directory")
+            val write = execute("write_file", listOf(
+                ToolParameter("path", path),
+                ToolParameter("content", delta),
+                ToolParameter("append", "true")
+            ), workspaceEnv)
+            if (!write.success) return@withLock DocumentResult(false, error = "Unable to append summary document")
+            val verified = read(workspacePath, workspaceEnv, chatId)
+            if (!verified.success) return@withLock verified
+            val actual = verified.content.orEmpty()
+            if (!actual.startsWith(existing) || !actual.contains(delta.trim())) {
+                return@withLock DocumentResult(false, error = "Append verification failed")
+            }
+            DocumentResult(true, content = actual)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to append summary document", e)
+            DocumentResult(false, error = e.message ?: "Unknown append error")
+        }
+    }
     /**
      * Writes a complete replacement only if the document still matches the content
      * previously read by the caller. The write is accepted only after read-back
@@ -166,4 +220,24 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
             .ifBlank { "__default__" }
         return "$root/$SUMMARY_DIRECTORY/$safeChatId/$SUMMARY_FILE_NAME"
     }
+}
+
+internal fun mergeAppendContent(existing: String, incoming: String): String {
+    if (incoming.isBlank()) return existing
+    val known = existing.lineSequence()
+        .map { it.replace(Regex("\\s+"), " ").trim() }
+        .filter { it.isNotEmpty() }
+        .toMutableSet()
+    val additions = incoming.lineSequence().filter { line ->
+        val normalized = line.replace(Regex("\\s+"), " ").trim()
+        normalized.isNotEmpty() && known.add(normalized)
+    }.toList()
+    if (additions.isEmpty()) return existing
+    val separator = when {
+        existing.isEmpty() -> ""
+        existing.endsWith("\n\n") -> ""
+        existing.endsWith("\n") -> "\n"
+        else -> "\n\n"
+    }
+    return existing + separator + additions.joinToString("\n")
 }
