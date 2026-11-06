@@ -81,8 +81,11 @@ import com.ai.assistance.operit.R
 import com.ai.assistance.operit.core.config.FunctionalPrompts
 import com.ai.assistance.operit.data.model.FunctionType
 import com.ai.assistance.operit.data.model.ModelConfigData
+import com.ai.assistance.operit.data.model.ApiProviderType
+import com.ai.assistance.operit.data.model.getModelByIndex
 import com.ai.assistance.operit.data.model.resolveKnownModelContextLengthK
 import com.ai.assistance.operit.data.model.SummarySectionConfig
+import com.ai.assistance.operit.api.chat.llmprovider.ModelListFetcher
 import com.ai.assistance.operit.data.preferences.ApiPreferences
 import com.ai.assistance.operit.data.preferences.FunctionConfigMapping
 import com.ai.assistance.operit.data.preferences.FunctionalConfigManager
@@ -154,11 +157,46 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
     }
     var contextError by remember { mutableStateOf<String?>(null) }
 
-    // 仅在能够识别模型上下文容量时自动更新；未知模型保留用户原有配置。
-    LaunchedEffect(currentConfig?.id, currentConfig?.modelName) {
+    // 官方 OpenAI：先通过 /v1/models 确认当前 Key 可见的模型 ID，再匹配官方规格。
+    // /v1/models 不返回上下文窗口，因此容量仍由本地维护的官方规格映射提供。
+    LaunchedEffect(
+        currentConfig?.id,
+        currentConfig?.modelName,
+        currentConfig?.apiEndpoint,
+        currentConfig?.apiKey,
+        currentChatConfigMapping.modelIndex
+    ) {
         val config = currentConfig ?: return@LaunchedEffect
+        val selectedModelId =
+            getModelByIndex(config.modelName, currentChatConfigMapping.modelIndex)
+        if (selectedModelId.isBlank()) return@LaunchedEffect
+
+        val isOfficialOpenAi =
+            config.apiProviderType == ApiProviderType.OPENAI &&
+                config.apiEndpoint.contains("api.openai.com", ignoreCase = true)
+        if (!isOfficialOpenAi || config.apiKey.isBlank()) return@LaunchedEffect
+
+        val modelListResult = ModelListFetcher.getModelsList(
+            context = context,
+            apiKey = config.apiKey,
+            apiEndpoint = config.apiEndpoint,
+            apiProviderType = config.apiProviderType
+        )
+        val visibleModelIds = modelListResult.getOrElse {
+            AppLogger.w("ContextSummarySettings", "向 OpenAI 查询模型列表失败，保留当前上下文配置", it)
+            return@LaunchedEffect
+        }.map { it.id }
+
+        if (visibleModelIds.none { it.equals(selectedModelId, ignoreCase = true) }) {
+            AppLogger.w(
+                "ContextSummarySettings",
+                "OpenAI 模型列表未返回当前模型 $selectedModelId，保留当前上下文配置"
+            )
+            return@LaunchedEffect
+        }
+
         val detectedContextK =
-            resolveKnownModelContextLengthK(config.modelName) ?: return@LaunchedEffect
+            resolveKnownModelContextLengthK(selectedModelId) ?: return@LaunchedEffect
         if (config.contextLength != detectedContextK ||
             config.maxContextLength != detectedContextK ||
             !config.enableMaxContextMode
