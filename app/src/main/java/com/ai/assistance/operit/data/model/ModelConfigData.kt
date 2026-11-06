@@ -225,6 +225,7 @@ fun resolveKnownModelContextLengthK(modelName: String): Float? {
     if (ids.isEmpty()) return null
 
     fun resolveOne(id: String): Float? = when {
+        id.contains("gpt-5.6") -> 1050f
         id.contains("gpt-4.1") -> 1024f
         id.contains("gpt-4o") || id.contains("gpt-4-turbo") -> 128f
         id.matches(Regex(".*\\b(o1|o3|o4)(-.*)?")) || id.contains("o3-mini") || id.contains("o4-mini") -> 200f
