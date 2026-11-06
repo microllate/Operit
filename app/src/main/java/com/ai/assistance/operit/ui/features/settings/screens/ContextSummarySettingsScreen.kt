@@ -172,7 +172,8 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
         if (selectedModelId.isBlank()) return@LaunchedEffect
 
         val isOfficialOpenAi =
-            config.apiProviderType == ApiProviderType.OPENAI &&
+            (config.apiProviderType == ApiProviderType.OPENAI ||
+                config.apiProviderType == ApiProviderType.OPENAI_RESPONSES) &&
                 config.apiEndpoint.contains("api.openai.com", ignoreCase = true)
         if (!isOfficialOpenAi || config.apiKey.isBlank()) return@LaunchedEffect
 
@@ -376,7 +377,10 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
 
                 RenderContextSummaryConfigSections(
                     componentBackgroundColor = componentBackgroundColor,
-                    modelName = currentConfig?.modelName.orEmpty(),
+                    modelName = getModelByIndex(
+                        currentConfig?.modelName.orEmpty(),
+                        currentChatConfigMapping.modelIndex
+                    ),
                     contextLengthInput = contextLengthInput,
                     onContextLengthInputChange = {
                         contextLengthInput = it
