@@ -211,8 +211,8 @@ object FunctionalPrompts {
         if (applicableOverrides.isNotEmpty()) {
             prompt = applySummarySectionOverrides(applicableOverrides, useEnglish)
         }
-        val integrityRules = if (useEnglish) "\n\n[Mandatory summary integrity and formatting rules]\nRegardless of custom section settings, use exactly four sections in this order: User Goals, Errors During Model Execution, Completed Work, Next-Step Strategy. Write each section as exactly one concise paragraph. Do not use numbered lists, bullets, separate item lines, or one sentence per item. Combine related facts naturally with semicolons while preserving distinct facts and evidence. The first three sections are cumulative history; inherit prior content and add only new evidence. Do not change goals unless the user explicitly does so. Never delete old errors or completed work. Never turn assistant suggestions into user goals or plans/attempts into completed work. For Next-Step Strategy, do not invent or independently generate a plan: take the final paragraph of the latest chat model response in the recent conversation, condense it only if needed, and use that as the sole next step. If there is no clear final paragraph proposing a next step, write None." else "\n\n【摘要历史完整性与格式强制规则】\n无论用户自定义摘要分段如何设置，都必须使用四个固定板块，顺序不变。每个板块只能输出一个简洁、连贯的自然段；严禁编号列表、项目符号、逐项换行或每个事项单独成句。多个事实用分号自然衔接，但不得丢失独立事实和证据。前三项是累积历史，必须继承旧内容，只补充本轮新证据；不得擅自修改用户目标，不得删除旧错误或已完成事项，不得把模型建议写成用户目标，不得把计划或尝试写成完成。下一步策略不得自行推演或另行制定，必须提取最近对话中聊天模型最后一条回复的最后一个自然段，必要时仅做精简，作为唯一下一步；若该段没有明确下一步行动，则写“无”。"
-        prompt += "\n\n" + integrityRules
+        val integrityRules = ""
+        prompt += integrityRules
         val promptWithPreviousSummary = appendPreviousSummary(prompt, previousSummary, useEnglish)
         return summaryConfig.globalRules?.trim()?.takeIf { it.isNotBlank() }?.let { rules ->
             "$promptWithPreviousSummary\n\n$rules"
