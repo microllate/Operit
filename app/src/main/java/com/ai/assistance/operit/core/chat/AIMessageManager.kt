@@ -696,18 +696,6 @@ object AIMessageManager {
     ): ChatMessage? {
         val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
 
-        // The workspace document is read only for append consistency; it is not sent to the summary model.
-        val summaryDocumentManager = ConversationSummaryDocumentManager.getInstance(context)
-        val storedSummaryDocument = if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
-            val result = summaryDocumentManager.read(workspacePath, workspaceEnv, chatId)
-            if (!result.success) {
-                AppLogger.e(TAG, "读取历史摘要文档失败，终止本次总结: ${result.error}")
-                return null
-            }
-            result.content.orEmpty()
-        } else {
-            ""
-        }
         // Summarize only newly added conversation turns to avoid mixing old history into new content.
 
         val messagesToSummarize = when {
@@ -1096,44 +1084,27 @@ object AIMessageManager {
                     return null
                 }
 
-                // Run an independent extraction over only the newly added conversation.
-                // The context-compression summary above is intentionally left unchanged.
+                // Reuse this summary for durable memory; do not make a second model request.
                 if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                    val extractedMemory = enhancedAiService.generateSummary(
-                        messages = conversationToSummarize,
-                        previousSummary = null,
-                        summaryConfig = summaryConfig,
-                        chatModelConfigIdOverride = chatModelConfigIdOverride,
-                        chatModelIndexOverride = chatModelIndexOverride
-                    )
-                    if (extractedMemory.isBlank()) {
-                        AppLogger.e(TAG, "独立长期记忆提取结果为空")
-                        return null
-                    }
                     val memorySections = requiredSections.mapNotNull { section ->
                         val headers = listOf("【${section.title}】", "[${section.title}]")
-                        val position = headers.map { extractedMemory.indexOf(it) }
+                        val position = headers.map { summary.indexOf(it) }
                             .filter { it >= 0 }.minOrNull() ?: return@mapNotNull null
                         position to section
                     }.sortedBy { it.first }
-                    if (memorySections.size != 4) {
-                        AppLogger.e(TAG, "独立长期记忆提取缺少必要板块")
-                        return null
-                    }
                     val durableMemory = memorySections.take(3).mapIndexed { index, entry ->
                         val from = entry.first
-                        val to = memorySections.getOrNull(index + 1)?.first ?: extractedMemory.length
-                        extractedMemory.substring(from, to).trim()
+                        val to = memorySections.getOrNull(index + 1)?.first ?: summary.length
+                        summary.substring(from, to).trim()
                     }.joinToString("\n\n").trim()
-                    val appendResult = summaryDocumentManager.append(
+                    val writeResult = ConversationSummaryDocumentManager.getInstance(context).write(
                         workspacePath = workspacePath,
                         workspaceEnv = workspaceEnv,
                         chatId = chatId,
-                        expectedCurrentContent = storedSummaryDocument,
                         newContent = durableMemory
                     )
-                    if (!appendResult.success) {
-                        AppLogger.e(TAG, "追加长期记忆失败: ${appendResult.error}")
+                    if (!writeResult.success) {
+                        AppLogger.e(TAG, "写入长期记忆失败: ${writeResult.error}")
                         return null
                     }
                 }
