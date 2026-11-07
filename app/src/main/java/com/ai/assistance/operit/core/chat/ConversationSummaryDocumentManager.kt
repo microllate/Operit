@@ -109,11 +109,11 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
 
             val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                 .format(Date())
-            val merged = mergeTimestampedMemorySections(
-                current.content.orEmpty(),
-                newContent,
-                timestamp
-            )
+            val existing = current.content.orEmpty().trimEnd()
+            val merged = listOf(
+                existing,
+                "$timestamp\\n$newContent"
+            ).filter { it.isNotBlank() }.joinToString("\\n\\n") + "\\n"
             val mkdir = execute(
                 "make_directory",
                 listOf(
