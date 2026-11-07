@@ -90,111 +90,55 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
     }
 
     /**
-     * Appends new durable memory without replacing existing document content.
-     * The document is checked before writing and verified after read-back.
-     */
-    suspend fun append(
-        workspacePath: String?,
-        workspaceEnv: String?,
-        chatId: String,
-        expectedCurrentContent: String,
-        newContent: String
-    ): DocumentResult = appendMutex.withLock {
-        val current = read(workspacePath, workspaceEnv, chatId)
-        if (!current.success) return@withLock current
-        val existing = current.content.orEmpty()
-        if (existing != expectedCurrentContent) {
-            return@withLock DocumentResult(false, error = "Summary document changed; refusing to append")
-        }
-        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-            .format(Date())
-        val merged = mergeTimestampedMemorySections(existing, newContent, timestamp)
-        if (merged == existing) return@withLock DocumentResult(true, content = existing)
-        val latest = read(workspacePath, workspaceEnv, chatId)
-        if (!latest.success) return@withLock latest
-        if (latest.content.orEmpty() != existing) {
-            return@withLock DocumentResult(false, error = "Summary document changed before append")
-        }
-        val path = resolveDocumentPath(workspacePath, chatId)
-            ?: return@withLock DocumentResult(false, error = "Workspace path is empty")
-        try {
-            val mkdir = execute("make_directory", listOf(
-                ToolParameter("path", path.substringBeforeLast("/")),
-                ToolParameter("create_parents", "true")
-            ), workspaceEnv)
-            if (!mkdir.success) return@withLock DocumentResult(false, error = "Unable to create summary directory")
-            val write = execute("write_file", listOf(
-                ToolParameter("path", path),
-                ToolParameter("content", merged),
-                ToolParameter("append", "false")
-            ), workspaceEnv)
-            if (!write.success) return@withLock DocumentResult(false, error = "Unable to update summary document")
-            val verified = read(workspacePath, workspaceEnv, chatId)
-            if (!verified.success) return@withLock verified
-            val actual = verified.content.orEmpty()
-            if (actual != merged) return@withLock DocumentResult(false, error = "Summary document update verification failed")
-            DocumentResult(true, content = actual)
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to append summary document", e)
-            DocumentResult(false, error = e.message ?: "Unknown append error")
-        }
-    }
-    /**
-     * Writes a complete replacement only if the document still matches the content
-     * previously read by the caller. The write is accepted only after read-back
-     * verification succeeds.
+     * Writes newly extracted memory into the cumulative workspace document.
+     * Read once to preserve previous content, then write the merged document once.
      */
     suspend fun write(
         workspacePath: String?,
         workspaceEnv: String?,
         chatId: String,
-        expectedCurrentContent: String,
         newContent: String
-    ): DocumentResult {
+    ): DocumentResult = appendMutex.withLock {
         val path = resolveDocumentPath(workspacePath, chatId)
-            ?: return DocumentResult(false, error = "Workspace path is empty")
-        if (newContent.isBlank()) {
-            return DocumentResult(false, error = "Refusing to write an empty summary")
-        }
+            ?: return@withLock DocumentResult(false, error = "Workspace path is empty")
+        if (newContent.isBlank()) return@withLock DocumentResult(true)
 
-        return try {
+        try {
             val current = read(workspacePath, workspaceEnv, chatId)
-            if (!current.success) return current
-            if (current.content.orEmpty() != expectedCurrentContent) {
-                return DocumentResult(false, error = "Summary document changed; refusing to overwrite newer content")
-            }
+            if (!current.success) return@withLock current
 
-            val directory = path.substringBeforeLast('/')
+            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                .format(Date())
+            val merged = mergeTimestampedMemorySections(
+                current.content.orEmpty(),
+                newContent,
+                timestamp
+            )
             val mkdir = execute(
                 "make_directory",
                 listOf(
-                    ToolParameter("path", directory),
+                    ToolParameter("path", path.substringBeforeLast("/")),
                     ToolParameter("create_parents", "true")
                 ),
                 workspaceEnv
             )
             if (!mkdir.success) {
-                return DocumentResult(false, error = "Unable to create summary directory")
+                return@withLock DocumentResult(false, error = "Unable to create summary directory")
             }
 
             val write = execute(
                 "write_file",
                 listOf(
                     ToolParameter("path", path),
-                    ToolParameter("content", newContent),
+                    ToolParameter("content", merged),
                     ToolParameter("append", "false")
                 ),
                 workspaceEnv
             )
             if (!write.success) {
-                return DocumentResult(false, error = "Unable to write summary document")
+                return@withLock DocumentResult(false, error = "Unable to write summary document")
             }
-
-            val verified = read(workspacePath, workspaceEnv, chatId)
-            if (!verified.success || verified.content != newContent) {
-                return DocumentResult(false, error = "Summary document read-back verification failed")
-            }
-            DocumentResult(true, content = verified.content)
+            DocumentResult(true, content = merged)
         } catch (e: Exception) {
             AppLogger.e(TAG, "Failed to write summary document", e)
             DocumentResult(false, error = e.message ?: "Unknown write error")
