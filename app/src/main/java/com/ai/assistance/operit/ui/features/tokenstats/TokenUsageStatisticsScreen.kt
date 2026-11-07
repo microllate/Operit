@@ -259,7 +259,15 @@ private fun TokenStatsPageContent(
             )
         }
 
-        // 6. 模型累计：使用当前周期、当前筛选后的动态模型列表，避免展示与筛选脱节。
+        // 6. 费用构成：使用同一套价格计算输入、缓存命中、缓存写入和输出费用。
+        item {
+            TokenStatsCostCompositionCard(
+                summary = range?.summary,
+                currency = state.targetCurrency,
+            )
+        }
+
+        // 7. 模型累计：使用当前周期、当前筛选后的动态模型列表，避免展示与筛选脱节。
         if (!range?.displayModels.isNullOrEmpty()) {
             item {
                 TokenStatsModelRankSection(

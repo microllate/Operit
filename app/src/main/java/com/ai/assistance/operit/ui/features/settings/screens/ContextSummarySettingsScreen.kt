@@ -81,7 +81,11 @@ import com.ai.assistance.operit.R
 import com.ai.assistance.operit.core.config.FunctionalPrompts
 import com.ai.assistance.operit.data.model.FunctionType
 import com.ai.assistance.operit.data.model.ModelConfigData
+import com.ai.assistance.operit.data.model.ApiProviderType
+import com.ai.assistance.operit.data.model.getModelByIndex
+import com.ai.assistance.operit.data.model.resolveKnownModelContextLengthK
 import com.ai.assistance.operit.data.model.SummarySectionConfig
+import com.ai.assistance.operit.api.chat.llmprovider.ModelListFetcher
 import com.ai.assistance.operit.data.preferences.ApiPreferences
 import com.ai.assistance.operit.data.preferences.FunctionConfigMapping
 import com.ai.assistance.operit.data.preferences.FunctionalConfigManager
@@ -152,6 +156,64 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
         mutableStateOf(formatFloatValue(currentConfig?.maxContextLength))
     }
     var contextError by remember { mutableStateOf<String?>(null) }
+
+    // 官方 OpenAI：先通过 /v1/models 确认当前 Key 可见的模型 ID，再匹配官方规格。
+    // /v1/models 不返回上下文窗口，因此容量仍由本地维护的官方规格映射提供。
+    LaunchedEffect(
+        currentConfig?.id,
+        currentConfig?.modelName,
+        currentConfig?.apiEndpoint,
+        currentConfig?.apiKey,
+        currentChatConfigMapping.modelIndex
+    ) {
+        val config = currentConfig ?: return@LaunchedEffect
+        val selectedModelId =
+            getModelByIndex(config.modelName, currentChatConfigMapping.modelIndex)
+        if (selectedModelId.isBlank()) return@LaunchedEffect
+
+        val isOfficialOpenAi =
+            (config.apiProviderType == ApiProviderType.OPENAI ||
+                config.apiProviderType == ApiProviderType.OPENAI_RESPONSES) &&
+                config.apiEndpoint.contains("api.openai.com", ignoreCase = true)
+        if (!isOfficialOpenAi || config.apiKey.isBlank()) return@LaunchedEffect
+
+        val modelListResult = ModelListFetcher.getModelsList(
+            context = context,
+            apiKey = config.apiKey,
+            apiEndpoint = config.apiEndpoint,
+            apiProviderType = config.apiProviderType
+        )
+        val visibleModelIds = modelListResult.getOrElse {
+            AppLogger.w("ContextSummarySettings", "向 OpenAI 查询模型列表失败，保留当前上下文配置", it)
+            return@LaunchedEffect
+        }.map { it.id }
+
+        if (visibleModelIds.none { it.equals(selectedModelId, ignoreCase = true) }) {
+            AppLogger.w(
+                "ContextSummarySettings",
+                "OpenAI 模型列表未返回当前模型 $selectedModelId，保留当前上下文配置"
+            )
+            return@LaunchedEffect
+        }
+
+        val detectedContextK =
+            resolveKnownModelContextLengthK(selectedModelId) ?: return@LaunchedEffect
+        if (config.contextLength != detectedContextK ||
+            config.maxContextLength != detectedContextK ||
+            !config.enableMaxContextMode
+        ) {
+            runCatching {
+                modelConfigManager.updateContextSettings(
+                    configId = config.id,
+                    contextLength = detectedContextK,
+                    maxContextLength = detectedContextK,
+                    enableMaxContextMode = true
+                )
+            }.onFailure {
+                AppLogger.w("ContextSummarySettings", "自动更新模型上下文容量失败", it)
+            }
+        }
+    }
 
     var enableSummary by remember(currentConfig?.id) {
         mutableStateOf(currentConfig?.enableSummary ?: false)
@@ -315,6 +377,10 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
 
                 RenderContextSummaryConfigSections(
                     componentBackgroundColor = componentBackgroundColor,
+                    modelName = getModelByIndex(
+                        currentConfig?.modelName.orEmpty(),
+                        currentChatConfigMapping.modelIndex
+                    ),
                     contextLengthInput = contextLengthInput,
                     onContextLengthInputChange = {
                         contextLengthInput = it
@@ -684,6 +750,7 @@ private fun ContextSummaryDialogueReviewAutoSaveEffect(
 @Composable
 private fun RenderContextSummaryConfigSections(
     componentBackgroundColor: Color,
+    modelName: String,
     contextLengthInput: String,
     onContextLengthInputChange: (String) -> Unit,
     maxContextLengthInput: String,
@@ -716,36 +783,17 @@ private fun RenderContextSummaryConfigSections(
         text = stringResource(id = R.string.settings_context_card_content),
         backgroundColor = componentBackgroundColor
     )
-    SettingsInputField(
-        title = stringResource(id = R.string.settings_context_length),
-        subtitle = stringResource(id = R.string.settings_context_length_subtitle),
-        value = contextLengthInput,
-        onValueChange = onContextLengthInputChange,
-        unitText = "K",
-        backgroundColor = componentBackgroundColor,
-        allowDecimal = true,
-        keyboardOptions =
-            KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next)
+    val detectedContextK = resolveKnownModelContextLengthK(modelName)
+    Text(
+        text = if (detectedContextK != null) {
+            "当前模型上下文容量：约 ${detectedContextK.toInt()}K tokens（按模型名称识别）"
+        } else {
+            "当前模型上下文容量：暂未识别，保留当前配置"
+        },
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
     )
-    SettingsInputField(
-        title = stringResource(id = R.string.settings_max_context_length),
-        subtitle = stringResource(id = R.string.settings_max_context_length_subtitle),
-        value = maxContextLengthInput,
-        onValueChange = onMaxContextLengthInputChange,
-        unitText = "K",
-        backgroundColor = componentBackgroundColor,
-        allowDecimal = true,
-        keyboardOptions =
-            KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done)
-    )
-    contextError?.let {
-        Text(
-            text = it,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-    }
 
     Spacer(modifier = Modifier.size(8.dp))
     SectionTitle(
@@ -770,23 +818,7 @@ private fun RenderContextSummaryConfigSections(
         keyboardOptions =
             KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next)
     )
-    SettingsSwitchRow(
-        title = stringResource(id = R.string.settings_enable_summary_by_message_count),
-        subtitle = stringResource(id = R.string.settings_enable_summary_by_message_count_desc),
-        checked = enableSummaryByMessageCount,
-        onCheckedChange = onEnableSummaryByMessageCountChange,
-        backgroundColor = componentBackgroundColor,
-        enabled = enableSummary
-    )
-    SettingsInputField(
-        title = stringResource(id = R.string.settings_summary_message_count_threshold),
-        subtitle = stringResource(id = R.string.settings_summary_message_count_threshold_subtitle),
-        value = summaryMessageCountThresholdInput,
-        onValueChange = onSummaryMessageCountThresholdInputChange,
-        unitText = stringResource(id = R.string.model_config_unit_items),
-        backgroundColor = componentBackgroundColor,
-        enabled = enableSummary && enableSummaryByMessageCount
-    )
+    // 消息条数不再触发自动总结，避免任务执行期间因计数达到阈值而插入总结。
     summaryError?.let {
         Text(
             text = it,

@@ -21,6 +21,7 @@ object TokenStatsQueryService {
             val requestRows = dao.aggregateModelsForLifetime(
                 providerModels = params.providerModels.queryValues(),
                 allModels = params.providerModels == null,
+                holidayDates = OfficialModelPricingCache.getChineseHolidayDates(context).ifEmpty { listOf("0000-00-00") },
             )
             val prices = dao.getAllStatsModels().toPriceSnapshot()
             TokenStatsLifetimeOverview(
@@ -44,7 +45,8 @@ object TokenStatsQueryService {
                 endMs = range.endMs,
                 providerModels = params.providerModels.queryValues(),
                 allModels = params.providerModels == null,
-            )
+                    holidayDates = OfficialModelPricingCache.getChineseHolidayDates(context).ifEmpty { listOf("0000-00-00") },
+                )
             val displayModels = buildDisplayModels(modelRows, prices, params)
             val summary = combineTotals(displayModels.map(TokenStatsDisplayModelBreakdown::totals), params)
             val granularity = TokenStatsTimeRanges.granularityFor(range)
@@ -59,6 +61,7 @@ object TokenStatsQueryService {
                     endMs = bucketEnd,
                     providerModels = params.providerModels.queryValues(),
                     allModels = params.providerModels == null,
+                    holidayDates = OfficialModelPricingCache.getChineseHolidayDates(context).ifEmpty { listOf("0000-00-00") },
                 )
                 val models = buildDisplayModels(bucketRows, prices, params)
                 TokenStatsTrendBucket(
@@ -199,6 +202,10 @@ object TokenStatsQueryService {
                 rateUsed = params.manualRate,
                 originalCurrencyAmounts = values
                     .flatMap { it.cost.originalCurrencyAmounts.entries }
+                    .groupBy({ it.key }, { it.value })
+                    .mapValues { (_, amounts) -> amounts.sum() },
+                breakdown = values
+                    .flatMap { it.cost.breakdown.entries }
                     .groupBy({ it.key }, { it.value })
                     .mapValues { (_, amounts) -> amounts.sum() },
             ),

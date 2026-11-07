@@ -2586,12 +2586,16 @@ class EnhancedAIService private constructor(private val context: Context) {
             previousSummary: String?,
             summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig(),
             recordTokenUsage: Boolean = true,
+            chatModelConfigIdOverride: String? = null,
+            chatModelIndexOverride: Int? = null,
     ): String {
         return generateSummaryFromPromptTurns(
             messages.toPromptTurns(),
             previousSummary,
             summaryConfig,
             recordTokenUsage,
+            chatModelConfigIdOverride,
+            chatModelIndexOverride,
         )
     }
 
@@ -2600,14 +2604,18 @@ class EnhancedAIService private constructor(private val context: Context) {
             previousSummary: String?,
             summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig(),
             recordTokenUsage: Boolean = true,
+            chatModelConfigIdOverride: String? = null,
+            chatModelIndexOverride: Int? = null,
     ): String {
-        // 调用ConversationService中的方法
+        // 总结默认沿用当前聊天的模型配置和模型索引。
         return conversationService.generateSummaryFromPromptTurns(
             messages,
             previousSummary,
             multiServiceManager,
             summaryConfig,
             recordTokenUsage,
+            chatModelConfigIdOverride,
+            chatModelIndexOverride,
         )
     }
 

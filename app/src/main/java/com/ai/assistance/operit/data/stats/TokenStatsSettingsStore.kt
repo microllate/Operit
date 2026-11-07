@@ -23,6 +23,10 @@ interface TokenStatsSettingsStore {
     suspend fun loadTimeRange(): TokenStatsTimeRange?
 
     suspend fun saveTimeRange(range: TokenStatsTimeRange?)
+
+    suspend fun loadSelectedModels(): Set<String>
+
+    suspend fun saveSelectedModels(models: Set<String>)
 }
 
 /** Statistics-only Preferences implementation; structured data remains in Room. */
@@ -67,5 +71,13 @@ class TokenStatsPreferencesStore(context: Context) : TokenStatsSettingsStore {
 
     override suspend fun saveTimeRange(range: TokenStatsTimeRange?) {
         preferences.saveTimeRange(range)
+    }
+
+    override suspend fun loadSelectedModels(): Set<String> {
+        return preferences.loadSelectedModels()
+    }
+
+    override suspend fun saveSelectedModels(models: Set<String>) {
+        preferences.saveSelectedModels(models)
     }
 }

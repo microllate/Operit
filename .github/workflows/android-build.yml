@@ -6,15 +6,15 @@ on:
       gradle_task:
         description: Gradle task to run
         required: true
-        default: assembleDebug
+        default: ':app:assembleRelease'
         type: choice
         options:
+          - ':app:assembleRelease'
           - assembleDebug
           - ':app:assembleNightly'
           - ':app:assembleClone'
-          - ':app:bundleRelease'
   push:
-    branches: [main]
+    branches: [main, fix/task-completion-summary-context-auto]
     paths:
       - .github/workflows/android-build.yml
       - .gitmodules

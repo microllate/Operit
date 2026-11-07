@@ -671,51 +671,14 @@ class MessageCoordinationDelegate(
             currentMemorySpaceIdOverride = resolvedMemorySpaceIdOverride
         }
 
-        // 当前请求使用的Token使用率阈值，默认使用配置值
-        var tokenUsageThresholdForSend = chatContextSettings.summaryTokenThreshold.toDouble()
+        // 自动总结不再在发送前按 Token 阈值触发。总结由任务完成回调统一执行，
+        // 避免发送新请求或执行工具时被异步总结抢占上下文。
+        val tokenUsageThresholdForSend = Double.MAX_VALUE
         val maxTokensForSend =
             (chatContextSettings.effectiveContextLength * 1024)
                 .toLong()
                 .coerceIn(0L, Int.MAX_VALUE.toLong())
                 .toInt()
-
-        // 如果不是续写，检查是否需要总结
-        if (turnOptions.persistTurn && !isBackgroundSend && !isContinuation && !skipSummaryCheck) {
-            val currentMessages = runBlocking { chatHistoryDelegate.getCurrentRuntimeChatHistorySnapshot() }
-            val currentTokens = tokenStatsDelegate.currentWindowSizeFlow.value
-
-            val isShouldGenerateSummary = AIMessageManager.shouldGenerateSummary(
-                messages = currentMessages,
-                currentTokens = currentTokens,
-                maxTokens = maxTokensForSend,
-                tokenUsageThreshold = tokenUsageThresholdForSend,
-                enableSummary = chatContextSettings.enableSummary,
-                enableSummaryByMessageCount = chatContextSettings.enableSummaryByMessageCount,
-                summaryMessageCountThreshold = chatContextSettings.summaryMessageCountThreshold
-            )
-
-            if (isShouldGenerateSummary) {
-                val snapshotMessages = currentMessages.toList()
-                val insertPosition = chatHistoryDelegate.findProperSummaryPosition(snapshotMessages)
-                val beforeTimestamp = snapshotMessages.getOrNull(insertPosition - 1)?.timestamp
-                val afterTimestamp = snapshotMessages.getOrNull(insertPosition)?.timestamp
-
-                // 异步生成总结，不阻塞当前消息发送
-                launchAsyncSummaryForSend(
-                    snapshotMessages = snapshotMessages,
-                    beforeTimestamp = beforeTimestamp,
-                    afterTimestamp = afterTimestamp,
-                    originalChatId = chatId,
-                    roleCardId = roleCardId,
-                    chatModelConfigIdOverride = resolvedChatModelConfigIdOverride,
-                    chatModelIndexOverride = resolvedChatModelIndexOverride,
-                    memorySpaceIdOverride = resolvedMemorySpaceIdOverride
-                )
-
-                // 本次请求的Token阈值在原基础上增加 0.5
-                tokenUsageThresholdForSend += 0.5
-            }
-        }
 
         val proxySenderName = proxySenderNameOverride?.takeIf { it.isNotBlank() }
 
@@ -1613,6 +1576,49 @@ class MessageCoordinationDelegate(
     }
 
     /**
+     * 在助手本轮响应及工具调用链全部结束后压缩历史，不自动续写当前任务。
+     */
+    fun summarizeAfterTaskCompletion(chatId: String?) {
+        if (chatId.isNullOrBlank()) return
+        coroutineScope.launch {
+            try {
+                val settings = resolveChatContextSettingsForRequest(currentChatModelConfigIdOverride)
+                if (!settings.enableSummary) return@launch
+
+                val messages = chatHistoryDelegate.getRuntimeChatHistory(chatId)
+                val maxTokens = (settings.effectiveContextLength * 1024)
+                    .toLong()
+                    .coerceIn(0L, Int.MAX_VALUE.toLong())
+                    .toInt()
+                val currentTokens = tokenStatsDelegate.getLastCurrentWindowSize(chatId)
+                val shouldSummarize = AIMessageManager.shouldGenerateSummary(
+                    messages = messages,
+                    currentTokens = currentTokens,
+                    maxTokens = maxTokens,
+                    tokenUsageThreshold = settings.summaryTokenThreshold.toDouble(),
+                    enableSummary = settings.enableSummary,
+                    enableSummaryByMessageCount = false,
+                    summaryMessageCountThreshold = settings.summaryMessageCountThreshold
+                )
+                if (!shouldSummarize) {
+                    AppLogger.d(TAG, "任务完成，但上下文未达到总结阈值，跳过自动总结: chatId=$chatId")
+                    return@launch
+                }
+                summarizeHistory(
+                    autoContinue = false,
+                    chatIdOverride = chatId,
+                    roleCardIdOverride = null,
+                    isGroupChat = isGroupChatSession(chatId)
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "任务完成后自动总结失败", e)
+            }
+        }
+    }
+
+    /**
      * 处理Token超限的情况，触发一次历史总结并继续。
      */
     fun handleTokenLimitExceeded(
@@ -1790,7 +1796,12 @@ class MessageCoordinationDelegate(
                     messages = snapshotMessages,
                     autoContinue = false,
                     isGroupChat = isGroupChat,
-                    summaryConfig = summaryConfig
+                    summaryConfig = summaryConfig,
+                    chatModelConfigIdOverride = chatModelConfigIdOverride,
+                    chatModelIndexOverride = chatModelIndexOverride,
+                    workspacePath = currentChat?.workspace,
+                    workspaceEnv = currentChat?.workspaceEnv,
+                    chatId = originalChatId
                 ) ?: return@launch
 
                 val currentChatId = chatHistoryDelegate.currentChatId.value
@@ -1896,6 +1907,8 @@ class MessageCoordinationDelegate(
                 return false
             }
 
+            val currentChat =
+                currentChatId?.let { id -> chatHistoryDelegate.chatHistories.value.firstOrNull { it.id == id } }
             val currentMessages =
                 currentChatId?.let { chatHistoryDelegate.getRuntimeChatHistory(it) }.orEmpty()
             if (currentMessages.isEmpty()) {
@@ -1917,7 +1930,12 @@ class MessageCoordinationDelegate(
                     currentMessages,
                     autoContinue,
                     effectiveIsGroupChat,
-                    summaryConfig
+                    summaryConfig,
+                    chatModelConfigIdOverride = effectiveChatModelConfigIdOverride,
+                    chatModelIndexOverride = effectiveChatModelIndexOverride,
+                    workspacePath = currentChat?.workspace,
+                    workspaceEnv = currentChat?.workspaceEnv,
+                    chatId = currentChatId
                 )
 
             if (summaryMessage != null) {
