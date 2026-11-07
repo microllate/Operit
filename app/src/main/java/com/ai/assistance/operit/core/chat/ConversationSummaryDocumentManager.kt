@@ -112,8 +112,8 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
             val existing = current.content.orEmpty().trimEnd()
             val merged = listOf(
                 existing,
-                "$timestamp\\n$newContent"
-            ).filter { it.isNotBlank() }.joinToString("\\n\\n") + "\\n"
+                "$timestamp\n$newContent"
+            ).filter { it.isNotBlank() }.joinToString("\n\n") + "\n"
             val mkdir = execute(
                 "make_directory",
                 listOf(
