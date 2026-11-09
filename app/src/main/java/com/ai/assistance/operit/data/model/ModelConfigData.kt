@@ -147,7 +147,6 @@ data class ModelConfigData(
         val maxContextLength: Float = ModelConfigDefaults.DEFAULT_MAX_CONTEXT_LENGTH,
         val enableMaxContextMode: Boolean = ModelConfigDefaults.DEFAULT_ENABLE_MAX_CONTEXT_MODE,
         val summaryTokenThreshold: Float = ModelConfigDefaults.DEFAULT_SUMMARY_TOKEN_THRESHOLD,
-        val summaryTokenThresholdMax: Float = 1.0f,
         val enableSummary: Boolean = ModelConfigDefaults.DEFAULT_ENABLE_SUMMARY,
         val enableSummaryByMessageCount: Boolean =
                 ModelConfigDefaults.DEFAULT_ENABLE_SUMMARY_BY_MESSAGE_COUNT,
