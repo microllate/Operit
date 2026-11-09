@@ -1362,7 +1362,6 @@ class MessageCoordinationDelegate(
             currentTokens = currentTokens,
             maxTokens = maxTokens,
             tokenUsageThreshold = chatContextSettings.summaryTokenThreshold.toDouble(),
-            tokenUsageThresholdMax = chatContextSettings.summaryTokenThresholdMax.toDouble(),
             enableSummary = chatContextSettings.enableSummary,
             enableSummaryByMessageCount = chatContextSettings.enableSummaryByMessageCount,
             summaryMessageCountThreshold = chatContextSettings.summaryMessageCountThreshold
@@ -1597,7 +1596,6 @@ class MessageCoordinationDelegate(
                     currentTokens = currentTokens,
                     maxTokens = maxTokens,
                     tokenUsageThreshold = settings.summaryTokenThreshold.toDouble(),
-                    tokenUsageThresholdMax = settings.summaryTokenThresholdMax.toDouble(),
                     enableSummary = settings.enableSummary,
                     enableSummaryByMessageCount = false,
                     summaryMessageCountThreshold = settings.summaryMessageCountThreshold
