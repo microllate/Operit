@@ -276,6 +276,7 @@ object AIServiceFactory {
             delegate = rawService,
             context = context,
             configId = config.id,
+            blockDeepSeekPeakHours = config.apiProviderType == ApiProviderType.DEEPSEEK && config.blockDeepSeekPeakHours,
         )
     }
     private fun buildService(
