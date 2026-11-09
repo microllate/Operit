@@ -1345,7 +1345,6 @@ object AIMessageManager {
         currentTokens: Long,
         maxTokens: Int,
         tokenUsageThreshold: Double,
-        tokenUsageThresholdMax: Double = 1.0,
         enableSummary: Boolean,
         enableSummaryByMessageCount: Boolean,
         summaryMessageCountThreshold: Int
@@ -1358,7 +1357,7 @@ object AIMessageManager {
         // 检查Token阈值
         if (maxTokens > 0) {
             val usageRatio = currentTokens.toDouble() / maxTokens.toDouble()
-            if (usageRatio >= tokenUsageThreshold && usageRatio <= tokenUsageThresholdMax) {
+            if (usageRatio >= tokenUsageThreshold) {
                 AppLogger.d(TAG, "Token usage ($usageRatio) exceeds threshold ($tokenUsageThreshold). Triggering summary.")
                 return true
             }
