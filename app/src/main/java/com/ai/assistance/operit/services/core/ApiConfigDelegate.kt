@@ -37,7 +37,6 @@ data class ChatContextSettings(
     val enableMaxContextMode: Boolean,
     val effectiveContextLength: Float,
     val summaryTokenThreshold: Float,
-    val summaryTokenThresholdMax: Float,
     val enableSummary: Boolean,
     val enableSummaryByMessageCount: Boolean,
     val summaryMessageCountThreshold: Int
@@ -399,7 +398,6 @@ class ApiConfigDelegate(
             enableMaxContextMode = config.enableMaxContextMode,
             effectiveContextLength = effectiveContextLength,
             summaryTokenThreshold = config.summaryTokenThreshold,
-            summaryTokenThresholdMax = config.summaryTokenThresholdMax,
             enableSummary = config.enableSummary,
             enableSummaryByMessageCount = config.enableSummaryByMessageCount,
             summaryMessageCountThreshold = config.summaryMessageCountThreshold
