@@ -225,6 +225,9 @@ fun ModelApiSettingsSection(
     var enableDeepSeekWebSearchInput by remember(config.id) {
         mutableStateOf(config.enableDeepSeekWebSearch)
     }
+    var blockDeepSeekPeakHoursInput by remember(config.id) {
+        mutableStateOf(config.blockDeepSeekPeakHours)
+    }
 
     var enableCodexWebSearchInput by remember(config.id) {
         mutableStateOf(config.enableCodexWebSearch)
@@ -263,6 +266,7 @@ fun ModelApiSettingsSection(
         val enableDirectVideoProcessing: Boolean,
         val enableGoogleSearch: Boolean,
         val enableDeepSeekWebSearch: Boolean,
+        val blockDeepSeekPeakHours: Boolean,
         val enableCodexWebSearch: Boolean,
         val enableClaude1hPromptCache: Boolean,
         val enableToolCall: Boolean,
@@ -289,6 +293,7 @@ fun ModelApiSettingsSection(
                     enableDirectVideoProcessing = state.enableDirectVideoProcessing,
                     enableGoogleSearch = state.enableGoogleSearch,
                     enableDeepSeekWebSearch = state.enableDeepSeekWebSearch,
+                    blockDeepSeekPeakHours = state.blockDeepSeekPeakHours,
                     enableCodexWebSearch = state.enableCodexWebSearch,
                     enableClaude1hPromptCache = state.enableClaude1hPromptCache,
                     enableToolCall = state.enableToolCall,
@@ -318,6 +323,7 @@ fun ModelApiSettingsSection(
             enableDirectVideoProcessing = enableDirectVideoProcessingInput,
             enableGoogleSearch = enableGoogleSearchInput,
             enableDeepSeekWebSearch = enableDeepSeekWebSearchInput,
+            blockDeepSeekPeakHours = blockDeepSeekPeakHoursInput,
             enableCodexWebSearch = enableCodexWebSearchInput,
             enableClaude1hPromptCache = enableClaude1hPromptCacheInput,
             enableToolCall = enableToolCallInput,
@@ -911,6 +917,12 @@ fun ModelApiSettingsSection(
                     subtitle = stringResource(R.string.enable_deepseek_web_search_desc),
                     checked = enableDeepSeekWebSearchInput,
                     onCheckedChange = { enableDeepSeekWebSearchInput = it }
+                )
+                SettingsSwitchRow(
+                    title = "高峰期禁止调用 DeepSeek",
+                    subtitle = "北京时间工作日 09:00–12:00、14:00–18:00 禁止发起新请求；节假日安排需另行维护",
+                    checked = blockDeepSeekPeakHoursInput,
+                    onCheckedChange = { blockDeepSeekPeakHoursInput = it }
                 )
             }
 
