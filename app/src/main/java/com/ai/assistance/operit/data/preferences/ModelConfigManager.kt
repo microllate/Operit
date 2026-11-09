@@ -730,6 +730,7 @@ class ModelConfigManager(
             enableDirectVideoProcessing: Boolean,
             enableGoogleSearch: Boolean,
             enableDeepSeekWebSearch: Boolean,
+            blockDeepSeekPeakHours: Boolean = false,
             enableCodexWebSearch: Boolean,
             enableClaude1hPromptCache: Boolean,
             enableToolCall: Boolean
@@ -753,6 +754,7 @@ class ModelConfigManager(
                     enableDirectVideoProcessing = enableDirectVideoProcessing,
                     enableGoogleSearch = enableGoogleSearch,
                     enableDeepSeekWebSearch = enableDeepSeekWebSearch,
+                    blockDeepSeekPeakHours = blockDeepSeekPeakHours,
                     enableCodexWebSearch = enableCodexWebSearch,
                     enableClaude1hPromptCache = enableClaude1hPromptCache,
                     enableToolCall = enableToolCall
