@@ -29,8 +29,17 @@ class TokenTrackingAIService(
     private val delegate: AIService,
     context: Context,
     private val configId: String,
+    private val blockDeepSeekPeakHours: Boolean = false,
 ) : AIService {
     private val repository = TokenUsageRepository.getInstance(context.applicationContext)
+
+    private fun isDeepSeekPeakHour(): Boolean {
+        val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Shanghai"))
+        val day = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+        if (day == java.util.Calendar.SATURDAY || day == java.util.Calendar.SUNDAY) return false
+        val minutes = calendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 + calendar.get(java.util.Calendar.MINUTE)
+        return minutes in 540 until 720 || minutes in 840 until 1080
+    }
     private val activeRequests = ConcurrentHashMap.newKeySet<RequestTracker>()
     private val cancellationLock = Any()
     private var cancellationEpoch = 0L
@@ -73,6 +82,9 @@ class TokenTrackingAIService(
         recordTokenUsage: Boolean,
         onUsageFinalized: (suspend (attempt: Int?) -> Unit)?,
     ): Stream<String> {
+        if (blockDeepSeekPeakHours && isDeepSeekPeakHour()) {
+            throw IllegalStateException("当前处于 DeepSeek 高峰时段（北京时间），已禁止发送 API 请求")
+        }
         val request = RequestTracker(configId = configId, providerModel = providerModel)
         val requestEpoch = synchronized(cancellationLock) { cancellationEpoch }
         val onStarted: () -> Unit = {
