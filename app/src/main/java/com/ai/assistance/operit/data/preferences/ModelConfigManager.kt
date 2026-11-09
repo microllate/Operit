@@ -942,12 +942,14 @@ class ModelConfigManager(
             enableSummaryByMessageCount: Boolean,
             summaryMessageCountThreshold: Int,
             summaryCustomRules: String? = null,
-            summarySectionOverrides: List<SummarySectionOverride>? = null
+            summarySectionOverrides: List<SummarySectionOverride>? = null,
+            summaryTokenThresholdMax: Float? = null
     ): ModelConfigData {
         return updateConfigInternal(configId) { current ->
             current.copy(
                     enableSummary = enableSummary,
                     summaryTokenThreshold = summaryTokenThreshold,
+                    summaryTokenThresholdMax = summaryTokenThresholdMax ?: current.summaryTokenThresholdMax,
                     enableSummaryByMessageCount = enableSummaryByMessageCount,
                     summaryMessageCountThreshold = summaryMessageCountThreshold,
                     summaryCustomRules = summaryCustomRules ?: current.summaryCustomRules,
