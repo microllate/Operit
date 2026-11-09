@@ -221,9 +221,6 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
     var summaryTokenThresholdInput by remember(currentConfig?.id) {
         mutableStateOf(formatFloatValue(currentConfig?.summaryTokenThreshold))
     }
-    var summaryTokenThresholdMaxInput by remember(currentConfig?.id) {
-        mutableStateOf(formatFloatValue(currentConfig?.summaryTokenThresholdMax ?: 1.0f))
-    }
     var enableSummaryByMessageCount by remember(currentConfig?.id) {
         mutableStateOf(currentConfig?.enableSummaryByMessageCount ?: false)
     }
@@ -259,9 +256,6 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
     }
     LaunchedEffect(currentConfig?.id, currentConfig?.summaryTokenThreshold) {
         summaryTokenThresholdInput = formatFloatValue(currentConfig?.summaryTokenThreshold)
-    }
-    LaunchedEffect(currentConfig?.id, currentConfig?.summaryTokenThresholdMax) {
-        summaryTokenThresholdMaxInput = formatFloatValue(currentConfig?.summaryTokenThresholdMax ?: 1.0f)
     }
     LaunchedEffect(currentConfig?.id, currentConfig?.enableSummaryByMessageCount) {
         enableSummaryByMessageCount = currentConfig?.enableSummaryByMessageCount ?: false
@@ -309,8 +303,7 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
                 enableSummary,
                 summaryTokenThresholdInput,
                 enableSummaryByMessageCount,
-                summaryMessageCountThresholdInput,
-                summaryTokenThresholdMaxInput
+                summaryMessageCountThresholdInput
             )
         },
         modelConfigManager = modelConfigManager,
@@ -402,11 +395,6 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
                     enableSummary = enableSummary,
                     onEnableSummaryChange = { enableSummary = it },
                     summaryTokenThresholdInput = summaryTokenThresholdInput,
-                    summaryTokenThresholdMaxInput = summaryTokenThresholdMaxInput,
-                    onSummaryTokenThresholdMaxInputChange = {
-                        summaryTokenThresholdMaxInput = it
-                        summaryError = null
-                    },
                     onSummaryTokenThresholdInputChange = {
                         summaryTokenThresholdInput = it
                         summaryError = null
@@ -543,7 +531,6 @@ private fun ContextSummaryAutoSaveEffects(
                 val summaryTokenThresholdInput = it[1] as String
                 val enableSummaryByMessageCount = it[2] as Boolean
                 val summaryMessageCountThresholdInput = it[3] as String
-                val summaryTokenThresholdMaxInput = it[4] as String
 
                 if (!enableSummary) {
                     if (current.enableSummary) {
@@ -564,11 +551,9 @@ private fun ContextSummaryAutoSaveEffects(
                 }
 
                 val threshold = summaryTokenThresholdInput.toFloatOrNull()
-                val thresholdMax = summaryTokenThresholdMaxInput.toFloatOrNull()
                 val messageCount = summaryMessageCountThresholdInput.toIntOrNull()
                 when {
-                    threshold == null || threshold <= 0f || threshold >= 1f ||
-                        thresholdMax == null || thresholdMax < threshold || thresholdMax > 1f ->
+                    threshold == null || threshold <= 0f || threshold >= 1f ->
                         onSummaryErrorChange(errorSummaryThresholdRange)
                     enableSummaryByMessageCount && (messageCount == null || messageCount <= 0) ->
                         onSummaryErrorChange(errorValidMessageCount)
@@ -582,7 +567,6 @@ private fun ContextSummaryAutoSaveEffects(
                         val isNoOp =
                             current.enableSummary == enableSummary &&
                                 current.summaryTokenThreshold == threshold &&
-                                current.summaryTokenThresholdMax == thresholdMax &&
                                 current.enableSummaryByMessageCount == enableSummaryByMessageCount &&
                                 current.summaryMessageCountThreshold == nextMessageCount
                         if (isNoOp) {
@@ -594,7 +578,6 @@ private fun ContextSummaryAutoSaveEffects(
                                 configId = current.id,
                                 enableSummary = enableSummary,
                                 summaryTokenThreshold = threshold,
-                                summaryTokenThresholdMax = thresholdMax,
                                 enableSummaryByMessageCount = enableSummaryByMessageCount,
                                 summaryMessageCountThreshold = nextMessageCount
                             )
@@ -776,8 +759,6 @@ private fun RenderContextSummaryConfigSections(
     enableSummary: Boolean,
     onEnableSummaryChange: (Boolean) -> Unit,
     summaryTokenThresholdInput: String,
-    summaryTokenThresholdMaxInput: String,
-    onSummaryTokenThresholdMaxInputChange: (String) -> Unit,
     onSummaryTokenThresholdInputChange: (String) -> Unit,
     enableSummaryByMessageCount: Boolean,
     onEnableSummaryByMessageCountChange: (Boolean) -> Unit,
@@ -836,16 +817,6 @@ private fun RenderContextSummaryConfigSections(
         allowDecimal = true,
         keyboardOptions =
             KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next)
-    )
-    SettingsInputField(
-        title = "上下文使用比例上限",
-        subtitle = "达到设定范围时触发总结（上限不小于下限，最大为1.0）",
-        value = summaryTokenThresholdMaxInput,
-        onValueChange = onSummaryTokenThresholdMaxInputChange,
-        backgroundColor = componentBackgroundColor,
-        enabled = enableSummary,
-        allowDecimal = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next)
     )
     // 消息条数不再触发自动总结，避免任务执行期间因计数达到阈值而插入总结。
     summaryError?.let {
