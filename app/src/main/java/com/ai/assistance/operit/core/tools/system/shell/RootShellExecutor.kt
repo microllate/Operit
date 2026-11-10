@@ -30,6 +30,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlinx.coroutines.Dispatchers as CoroutineDispatchers
 
 /** 基于Root权限的Shell命令执行器 实现ROOT权限级别的命令执行 */
@@ -297,60 +298,60 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
      * @param command 要执行的命令
      * @return 命令执行结果
      */
-    private suspend fun executeCommandWithExec(command: String): ShellExecutor.CommandResult {
-        return withContext(Dispatchers.IO) {
-            try {
-                AppLogger.d(TAG, "使用exec执行Root命令: $command")
+    private fun runSuProcess(command: String): ShellExecutor.CommandResult {
+        val process = Runtime.getRuntime().exec(buildSuExecCommand(command))
+        val stdout = StringBuilder()
+        val stderr = StringBuilder()
+        val outThread = thread(name = "root-stdout", isDaemon = true) {
+            process.inputStream.bufferedReader().use { reader ->
+                val buffer = CharArray(4096)
+                while (true) {
+                    val count = reader.read(buffer)
+                    if (count < 0) break
+                    stdout.append(buffer, 0, count)
+                }
+            }
+        }
+        val errThread = thread(name = "root-stderr", isDaemon = true) {
+            process.errorStream.bufferedReader().use { reader ->
+                val buffer = CharArray(4096)
+                while (true) {
+                    val count = reader.read(buffer)
+                    if (count < 0) break
+                    stderr.append(buffer, 0, count)
+                }
+            }
+        }
+        try {
+            if (!process.waitFor(120, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                process.waitFor(2, TimeUnit.SECONDS)
+                return ShellExecutor.CommandResult(false, "", "Root command timed out after 120 seconds", -1)
+            }
+            outThread.join(2000)
+            errThread.join(2000)
+            return ShellExecutor.CommandResult(
+                process.exitValue() == 0,
+                stdout.toString().trimEnd(),
+                stderr.toString().trimEnd(),
+                process.exitValue()
+            )
+        } finally {
+            if (process.isAlive) process.destroyForcibly()
+        }
+    }
 
-                // 执行su -c命令
-                val process = Runtime.getRuntime().exec(buildSuExecCommand(command))
-                
-                // 读取标准输出
-                val stdoutReader = BufferedReader(InputStreamReader(process.inputStream))
-                val stdout = StringBuilder()
-                var line: String?
-                while (stdoutReader.readLine().also { line = it } != null) {
-                    stdout.append(line).append("\n")
-                }
-                
-                // 读取标准错误
-                val stderrReader = BufferedReader(InputStreamReader(process.errorStream))
-                val stderr = StringBuilder()
-                while (stderrReader.readLine().also { line = it } != null) {
-                    stderr.append(line).append("\n")
-                }
-                
-                // 等待进程完成并获取退出码
-                val exitCode = process.waitFor()
-                
-                val stdoutStr = stdout.toString().trimEnd()
-                val stderrStr = stderr.toString().trimEnd()
-                
-                AppLogger.d(TAG, "exec执行完成，退出码: $exitCode")
-                if (stdoutStr.isNotEmpty()) {
-                    AppLogger.v(TAG, "标准输出: $stdoutStr")
-                }
-                if (stderrStr.isNotEmpty()) {
-                    AppLogger.v(TAG, "标准错误: $stderrStr")
-                }
-                
-                return@withContext ShellExecutor.CommandResult(
-                    exitCode == 0,
-                    stdoutStr,
-                    stderrStr,
-                    exitCode
-                )
+    private suspend fun executeCommandWithExec(command: String): ShellExecutor.CommandResult =
+        withContext(Dispatchers.IO) {
+            try {
+                runSuProcess(command)
             } catch (e: Exception) {
                 AppLogger.e(TAG, "使用exec执行Root命令时出错", e)
-                return@withContext ShellExecutor.CommandResult(
-                    false,
-                    "",
-                    context.getString(R.string.root_shell_error, e.message ?: ""),
-                    -1
+                ShellExecutor.CommandResult(
+                    false, "", context.getString(R.string.root_shell_error, e.message ?: ""), -1
                 )
             }
         }
-    }
 
     override suspend fun executeCommand(
         command: String,
@@ -382,40 +383,7 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
                             } else {
                                 if (useExecMode) {
                                     val fullCmd = "$launcherPath $actualCommand"
-                                    val process = Runtime.getRuntime().exec(buildSuExecCommand(fullCmd))
-
-                                    val stdoutReader = BufferedReader(InputStreamReader(process.inputStream))
-                                    val stdout = StringBuilder()
-                                    var line: String?
-                                    while (stdoutReader.readLine().also { line = it } != null) {
-                                        stdout.append(line).append("\n")
-                                    }
-
-                                    val stderrReader = BufferedReader(InputStreamReader(process.errorStream))
-                                    val stderr = StringBuilder()
-                                    while (stderrReader.readLine().also { line = it } != null) {
-                                        stderr.append(line).append("\n")
-                                    }
-
-                                    val exitCode = process.waitFor()
-
-                                    val stdoutStr = stdout.toString().trimEnd()
-                                    val stderrStr = stderr.toString().trimEnd()
-
-                                    AppLogger.d(TAG, "shell launcher命令(exec)执行完成，退出码: $exitCode")
-                                    if (stdoutStr.isNotEmpty()) {
-                                        AppLogger.v(TAG, "标准输出: $stdoutStr")
-                                    }
-                                    if (stderrStr.isNotEmpty()) {
-                                        AppLogger.v(TAG, "标准错误: $stderrStr")
-                                    }
-
-                                    ShellExecutor.CommandResult(
-                                        exitCode == 0,
-                                        stdoutStr,
-                                        stderrStr,
-                                        exitCode
-                                    )
+                                    runSuProcess(fullCmd)
                                 } else {
                                     val shellCommand = "$launcherPath $actualCommand"
                                     val shellResult = Shell.cmd(shellCommand).exec()
