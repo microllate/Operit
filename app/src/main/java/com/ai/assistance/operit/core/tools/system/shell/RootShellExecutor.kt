@@ -305,8 +305,8 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
             val result = future.get(120, TimeUnit.SECONDS)
             ShellExecutor.CommandResult(
                 result.code == 0,
-                result.out.joinToString("\\n"),
-                result.err.joinToString("\\n"),
+                result.out.joinToString("\n"),
+                result.err.joinToString("\n"),
                 result.code
             )
         } catch (e: TimeoutException) {
