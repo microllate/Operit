@@ -238,7 +238,7 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
         mutableStateOf(currentConfig?.summaryDialogueReviewTitle.orEmpty())
     }
     val useEnglish = !LocaleUtils.usesChineseContent(context)
-    var summarySectionsInput by remember(currentConfig?.id) {
+    var summarySectionsInput by remember {
         mutableStateOf(emptyList<SummarySectionConfig>())
     }
     var fullscreenTextEditor by remember(currentConfig?.id) {
@@ -275,10 +275,9 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
         dialogueReviewTitleInput = currentConfig?.summaryDialogueReviewTitle.orEmpty()
     }
     var globalSummarySectionOverrides by remember { mutableStateOf<List<SummarySectionOverride>?>(null) }
-    LaunchedEffect(currentConfig?.id) {
-        globalSummarySectionOverrides = null
-        val config = currentConfig ?: return@LaunchedEffect
-        globalSummarySectionOverrides = modelConfigManager.getGlobalSummarySectionOverrides(config.summarySectionOverrides)
+    LaunchedEffect(Unit) {
+        // 全局总结结构与当前聊天模型无关，模型切换不应清空编辑器。
+        globalSummarySectionOverrides = modelConfigManager.getGlobalSummarySectionOverrides()
     }
     LaunchedEffect(globalSummarySectionOverrides, useEnglish) {
         globalSummarySectionOverrides?.let { overrides ->
@@ -333,7 +332,6 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
         onHistoryErrorChange = { historyError = it }
     )
     ContextSummarySectionsAutoSaveEffect(
-        currentConfig = currentConfig,
         globalOverrides = globalSummarySectionOverrides,
         summarySectionsInputProvider = { summarySectionsInput },
         useEnglish = useEnglish,
@@ -676,7 +674,6 @@ private fun ContextSummaryCustomRulesAutoSaveEffect(
 
 @Composable
 private fun ContextSummarySectionsAutoSaveEffect(
-    currentConfig: ModelConfigData?,
     globalOverrides: List<SummarySectionOverride>?, 
     summarySectionsInputProvider: () -> List<SummarySectionConfig>,
     useEnglish: Boolean,
@@ -684,8 +681,8 @@ private fun ContextSummarySectionsAutoSaveEffect(
     errorSaveFailed: String,
     onSummaryErrorChange: (String?) -> Unit
 ) {
-    LaunchedEffect(currentConfig?.id, globalOverrides != null) {
-        if (currentConfig == null || globalOverrides == null) return@LaunchedEffect
+    LaunchedEffect(globalOverrides != null) {
+        if (globalOverrides == null) return@LaunchedEffect
         snapshotFlow { summarySectionsInputProvider() }
             .drop(1)
             .debounce(700)
@@ -852,7 +849,7 @@ private fun RenderContextSummaryConfigSections(
                 )
             },
             backgroundColor = componentBackgroundColor,
-            enabled = enableSummary,
+            enabled = true,
             onOpenFullscreenEditor = onOpenFullscreenEditor
         )
     }
