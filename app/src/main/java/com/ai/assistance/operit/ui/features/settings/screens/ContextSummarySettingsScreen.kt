@@ -273,11 +273,16 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
     LaunchedEffect(currentConfig?.id, currentConfig?.summaryDialogueReviewTitle) {
         dialogueReviewTitleInput = currentConfig?.summaryDialogueReviewTitle.orEmpty()
     }
-    LaunchedEffect(currentConfig?.id, currentConfig?.summarySectionOverrides, useEnglish) {
-        summarySectionsInput = FunctionalPrompts.resolveSummarySections(
-            currentConfig?.summarySectionOverrides.orEmpty(),
-            useEnglish
-        )
+    var globalSummarySectionOverrides by remember { mutableStateOf<List<SummarySectionOverride>?>(null) }
+    LaunchedEffect(currentConfig?.id) {
+        globalSummarySectionOverrides = null
+        val config = currentConfig ?: return@LaunchedEffect
+        globalSummarySectionOverrides = modelConfigManager.getGlobalSummarySectionOverrides(config.summarySectionOverrides)
+    }
+    LaunchedEffect(globalSummarySectionOverrides, useEnglish) {
+        globalSummarySectionOverrides?.let { overrides ->
+            summarySectionsInput = FunctionalPrompts.resolveSummarySections(overrides, useEnglish)
+        }
     }
 
     val errorValidContextLength = stringResource(id = R.string.model_config_error_valid_context_length)
@@ -328,6 +333,7 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
     )
     ContextSummarySectionsAutoSaveEffect(
         currentConfig = currentConfig,
+        globalOverrides = globalSummarySectionOverrides,
         summarySectionsInputProvider = { summarySectionsInput },
         useEnglish = useEnglish,
         modelConfigManager = modelConfigManager,
@@ -670,35 +676,25 @@ private fun ContextSummaryCustomRulesAutoSaveEffect(
 @Composable
 private fun ContextSummarySectionsAutoSaveEffect(
     currentConfig: ModelConfigData?,
+    globalOverrides: List<SummarySectionOverride>?, 
     summarySectionsInputProvider: () -> List<SummarySectionConfig>,
     useEnglish: Boolean,
     modelConfigManager: ModelConfigManager,
     errorSaveFailed: String,
     onSummaryErrorChange: (String?) -> Unit
 ) {
-    val latestConfig by rememberUpdatedState(currentConfig)
-
-    LaunchedEffect(currentConfig?.id) {
-        val configId = currentConfig?.id ?: return@LaunchedEffect
+    LaunchedEffect(currentConfig?.id, globalOverrides != null) {
+        if (currentConfig == null || globalOverrides == null) return@LaunchedEffect
         snapshotFlow { summarySectionsInputProvider() }
             .drop(1)
             .debounce(700)
             .distinctUntilChanged()
             .collectLatest { sections ->
-                val current = latestConfig ?: return@collectLatest
-                if (current.id != configId) return@collectLatest
                 val overrides =
                     FunctionalPrompts.buildSummarySectionOverrides(sections, useEnglish)
-                if (current.summarySectionOverrides == overrides) return@collectLatest
+                if (modelConfigManager.getGlobalSummarySectionOverrides() == overrides) return@collectLatest
                 try {
-                    modelConfigManager.updateSummarySettings(
-                        configId = current.id,
-                        enableSummary = current.enableSummary,
-                        summaryTokenThreshold = current.summaryTokenThreshold,
-                        enableSummaryByMessageCount = current.enableSummaryByMessageCount,
-                        summaryMessageCountThreshold = current.summaryMessageCountThreshold,
-                        summarySectionOverrides = overrides
-                    )
+                    modelConfigManager.updateGlobalSummarySectionOverrides(overrides)
                     onSummaryErrorChange(null)
                 } catch (e: Exception) {
                     onSummaryErrorChange(e.message ?: errorSaveFailed)
