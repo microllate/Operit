@@ -42,22 +42,111 @@ object SystemToolPrompts {
     val basicTools = SystemToolPromptCategory(
         categoryName = "Available tools",
         tools = listOf(
+            ToolPrompt(
+                name = "execute_hidden_terminal_command",
+                description = "Execute Linux commands in the built-in background terminal without activating a package. Use for file operations and literal code search.",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "command", type = "string", description = "Command to execute", required = true),
+                    ToolParameterSchema(name = "executor_key", type = "string", description = "Optional terminal context key", required = false, default = "default"),
+                    ToolParameterSchema(name = "timeout_ms", type = "integer", description = "Timeout in milliseconds", required = false, default = "120000")
+                )
+            ),
+            ToolPrompt(
+                name = "use_package",
+                description = "Activate a package for use in the current session.",
+                parametersStructured = listOf(
+                    ToolParameterSchema(
+                        name = "package_name",
+                        type = "string",
+                        description = "name of the package to activate",
+                        required = true
+                    )
+                )
+            )
+        )
     )
     
     val basicToolsCn = SystemToolPromptCategory(
         categoryName = "可用工具",
         tools = listOf(
+            ToolPrompt(
+                name = "execute_hidden_terminal_command",
+                description = "直接使用内置 Linux 后台终端执行命令，无需激活工具包。用于文件操作和代码关键词搜索。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "command", type = "string", description = "执行命令", required = true),
+                    ToolParameterSchema(name = "executor_key", type = "string", description = "Optional terminal context key", required = false, default = "default"),
+                    ToolParameterSchema(name = "timeout_ms", type = "integer", description = "Timeout in milliseconds", required = false, default = "120000")
+                )
+            ),
+            ToolPrompt(
+                name = "use_package",
+                description = "在当前会话中激活包。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "package_name", type = "string", description = "要激活的包名", required = true)
+                )
+            )
+        )
     )
     
     // ==================== 文件系统工具 ====================
     val fileSystemTools = SystemToolPromptCategory(
         categoryName = "File System Tools",
         tools = listOf(
+            ToolPrompt(
+                name = "grep_context",
+                description = "Search for relevant content based on intent/context understanding. Supports two modes: 1) Directory mode: when path is a directory, finds most relevant files. 2) File mode: when path is a file, finds most relevant code segments within that file. Uses semantic relevance scoring.",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "path", type = "string", description = "directory or file path", required = true),
+                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
+                    ToolParameterSchema(name = "intent", type = "string", description = "intent or context description string", required = true),
+                    ToolParameterSchema(name = "file_pattern", type = "string", description = "file filter for directory mode", required = false, default = "\"*\""),
+                    ToolParameterSchema(name = "max_results", type = "integer", description = "maximum items to return", required = false, default = "10")
+                )
+            ),
+            ToolPrompt(
+                name = "download_file",
+                description = "Download a file from the internet. Two modes: (1) Provide `url` + `destination`. (2) Provide `visit_key` + (`link_number` or `image_number`) + `destination` to download an item by index from a previous `visit_web` result.",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "url", type = "string", description = "optional, file URL. If omitted, use visit_key + link_number/image_number to download from a previous visit_web result", required = false),
+                    ToolParameterSchema(name = "visit_key", type = "string", description = "optional, visitKey from a previous visit_web result", required = false),
+                    ToolParameterSchema(name = "link_number", type = "integer", description = "optional, 1-based link index from Results (use with visit_key)", required = false),
+                    ToolParameterSchema(name = "image_number", type = "integer", description = "optional, 1-based image index from Images (use with visit_key)", required = false),
+                    ToolParameterSchema(name = "destination", type = "string", description = "save path", required = true),
+                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
+                    ToolParameterSchema(name = "headers", type = "string", description = "optional HTTP headers as JSON object string, e.g. {\"Referer\":\"...\"}", required = false)
+                )
+            )
+        )
     )
     
     val fileSystemToolsCn = SystemToolPromptCategory(
         categoryName = "文件系统工具",
         tools = listOf(
+            ToolPrompt(
+                name = "grep_context",
+                description = "基于意图/上下文理解搜索相关内容。支持两种模式：1) 目录模式：当path是目录时，找出最相关的文件。2) 文件模式：当path是文件时，找出该文件内最相关的代码段。使用语义相关性评分。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "path", type = "string", description = "目录或文件路径", required = true),
+                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
+                    ToolParameterSchema(name = "intent", type = "string", description = "意图或上下文描述字符串", required = true),
+                    ToolParameterSchema(name = "file_pattern", type = "string", description = "目录模式下的文件过滤", required = false, default = "\"*\""),
+                    ToolParameterSchema(name = "max_results", type = "integer", description = "返回的最大项数", required = false, default = "10")
+                )
+            ),
+            ToolPrompt(
+                name = "download_file",
+                description = "从互联网下载文件。有两种用法：1）提供 `url` + `destination` 直接下载。2）提供 `visit_key` +（`link_number` 或 `image_number`）+ `destination`，从上一次 `visit_web` 的 Results/Images 编号中按序号下载。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "url", type = "string", description = "可选, 文件URL。不传时可使用 visit_key + link_number/image_number 从上一次 visit_web 结果按编号下载", required = false),
+                    ToolParameterSchema(name = "visit_key", type = "string", description = "可选, 上一次 visit_web 返回的 visitKey", required = false),
+                    ToolParameterSchema(name = "link_number", type = "integer", description = "可选, 整数, Results 中的链接编号（从1开始，需要配合 visit_key）", required = false),
+                    ToolParameterSchema(name = "image_number", type = "integer", description = "可选, 整数, Images 中的图片编号（从1开始，需要配合 visit_key）", required = false),
+                    ToolParameterSchema(name = "destination", type = "string", description = "保存路径", required = true),
+                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
+                    ToolParameterSchema(name = "headers", type = "string", description = "可选：HTTP请求头，JSON对象字符串，例如{\"Referer\":\"...\"}", required = false)
+                )
+            )
+        )
     )
     
     // ==================== HTTP工具 ====================
@@ -680,22 +769,4 @@ object SystemToolPrompts {
         return afterContext.toolPrompt
             ?: renderToolPromptFromAvailableTools(afterContext.availableTools)
     }
-}            ToolPrompt(
-                name = "execute_hidden_terminal_command",
-                description = "Run a Linux command directly in the built-in hidden terminal, without activating super_admin. Use this for file operations and code search. Root commands require separate permissions.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "command", type = "string", description = "Command to execute", required = true),
-                    ToolParameterSchema(name = "executor_key", type = "string", description = "Optional background terminal context key", required = false, default = "default"),
-                    ToolParameterSchema(name = "timeout_ms", type = "integer", description = "Timeout in milliseconds", required = false, default = "120000")
-                )
-            ),
-            ToolPrompt(
-                name = "execute_hidden_terminal_command",
-                description = "直接在内置 Linux 后台终端执行命令，无需激活 super_admin。文件操作和代码关键词搜索优先使用此工具；Root 权限需单独获取。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "command", type = "string", description = "要执行的命令", required = true),
-                    ToolParameterSchema(name = "executor_key", type = "string", description = "Optional background terminal context key", required = false, default = "default"),
-                    ToolParameterSchema(name = "timeout_ms", type = "integer", description = "Timeout in milliseconds", required = false, default = "120000")
-                )
-            ),
-
+}
