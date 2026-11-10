@@ -30,6 +30,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
 import kotlinx.coroutines.Dispatchers as CoroutineDispatchers
 
@@ -298,6 +299,22 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
      * @param command 要执行的命令
      * @return 命令执行结果
      */
+    private fun runLibSuCommand(command: String): ShellExecutor.CommandResult {
+        val future = Shell.cmd(command).enqueue()
+        return try {
+            val result = future.get(120, TimeUnit.SECONDS)
+            ShellExecutor.CommandResult(
+                result.code == 0,
+                result.out.joinToString("\\n"),
+                result.err.joinToString("\\n"),
+                result.code
+            )
+        } catch (e: TimeoutException) {
+            future.cancel(true)
+            ShellExecutor.CommandResult(false, "", "Root libsu command timed out after 120 seconds", -1)
+        }
+    }
+
     private fun runSuProcess(command: String): ShellExecutor.CommandResult {
         val process = Runtime.getRuntime().exec(buildSuExecCommand(command))
         val stdout = StringBuilder()
@@ -386,26 +403,7 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
                                     runSuProcess(fullCmd)
                                 } else {
                                     val shellCommand = "$launcherPath $actualCommand"
-                                    val shellResult = Shell.cmd(shellCommand).exec()
-
-                                    val stdout = shellResult.out.joinToString("\n")
-                                    val stderr = shellResult.err.joinToString("\n")
-                                    val exitCode = shellResult.code
-
-                                    AppLogger.d(TAG, "shell launcher命令(libsu)执行完成，退出码: $exitCode")
-                                    if (stdout.isNotEmpty()) {
-                                        AppLogger.v(TAG, "标准输出: $stdout")
-                                    }
-                                    if (stderr.isNotEmpty()) {
-                                        AppLogger.v(TAG, "标准错误: $stderr")
-                                    }
-
-                                    ShellExecutor.CommandResult(
-                                        exitCode == 0,
-                                        stdout,
-                                        stderr,
-                                        exitCode
-                                    )
+                                    runLibSuCommand(shellCommand)
                                 }
                             }
                         }
@@ -415,18 +413,7 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
                                 executeCommandWithExec(actualCommand)
                             } else {
                                 AppLogger.d(TAG, "执行Root命令: $actualCommand (原始命令: $command)")
-                                val shellResult = Shell.cmd(actualCommand).exec()
-
-                                val stdout = shellResult.out.joinToString("\n")
-                                val stderr = shellResult.err.joinToString("\n")
-                                val exitCode = shellResult.code
-
-                                ShellExecutor.CommandResult(
-                                    exitCode == 0,
-                                    stdout,
-                                    stderr,
-                                    exitCode
-                                )
+                                runLibSuCommand(actualCommand)
                             }
                         }
                     }
