@@ -209,7 +209,7 @@ class DeepseekProvider(
         val sanitizedLogJson = sanitizeImageDataForLogging(logJson)
         logLargeString("DeepseekProvider", sanitizedLogJson.toString(4), "Final DeepSeek reasoning mode request body: ")
 
-        return createJsonRequestBody(jsonObject.toString())
+        return createJsonRequestBody(jsonObject.toString(), context)
     }
 
     /**
