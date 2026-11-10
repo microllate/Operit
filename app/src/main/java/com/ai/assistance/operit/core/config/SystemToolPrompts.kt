@@ -268,42 +268,9 @@ object SystemToolPrompts {
         chatModelHasDirectVideo: Boolean = false,
         safBookmarkNames: List<String> = emptyList()
     ): List<SystemToolPromptCategory> {
-        val shouldExposeIntent =
-            (hasBackendImageRecognition && !chatModelHasDirectImage) ||
-                (hasBackendAudioRecognition && !chatModelHasDirectAudio) ||
-                (hasBackendVideoRecognition && !chatModelHasDirectVideo)
-
-        val adjustedFileSystemTools = fileSystemTools.copy(
-            tools = fileSystemTools.tools.map { tool ->
-                if (tool.name != "read_file") return@map tool
-
-                val filteredParams = (tool.parametersStructured ?: emptyList()).filter { param ->
-                    when (param.name) {
-                        "direct_image" -> false
-                        "direct_audio" -> false
-                        "direct_video" -> false
-                        "intent" -> shouldExposeIntent
-                        else -> true
-                    }
-                }
-
-                val adjustedDescription =
-                    if (shouldExposeIntent) {
-                        "Read the content of a file. For media files, you can also provide an 'intent' parameter to use a backend recognition model for analysis."
-                    } else {
-                        tool.description
-                    }
-
-                tool.copy(
-                    description = adjustedDescription + buildSafBookmarksSectionEn(safBookmarkNames),
-                    parametersStructured = filteredParams
-                )
-            }
-        )
-
         return listOf(
             basicTools,
-            adjustedFileSystemTools,
+            fileSystemTools,
             httpTools,
             memoryTools
         )
@@ -343,42 +310,9 @@ object SystemToolPrompts {
         chatModelHasDirectVideo: Boolean = false,
         safBookmarkNames: List<String> = emptyList()
     ): List<SystemToolPromptCategory> {
-        val shouldExposeIntent =
-            (hasBackendImageRecognition && !chatModelHasDirectImage) ||
-                (hasBackendAudioRecognition && !chatModelHasDirectAudio) ||
-                (hasBackendVideoRecognition && !chatModelHasDirectVideo)
-
-        val adjustedFileSystemTools = fileSystemToolsCn.copy(
-            tools = fileSystemToolsCn.tools.map { tool ->
-                if (tool.name != "read_file") return@map tool
-
-                val filteredParams = (tool.parametersStructured ?: emptyList()).filter { param ->
-                    when (param.name) {
-                        "direct_image" -> false
-                        "direct_audio" -> false
-                        "direct_video" -> false
-                        "intent" -> shouldExposeIntent
-                        else -> true
-                    }
-                }
-
-                val adjustedDescription =
-                    if (shouldExposeIntent) {
-                        "读取文件内容。对于媒体文件，你也可以提供 intent 参数，使用后端识别模型进行分析。"
-                    } else {
-                        tool.description
-                    }
-
-                tool.copy(
-                    description = adjustedDescription + buildSafBookmarksSectionCn(safBookmarkNames),
-                    parametersStructured = filteredParams
-                )
-            }
-        )
-
         return listOf(
             basicToolsCn,
-            adjustedFileSystemTools,
+            fileSystemToolsCn,
             httpToolsCn,
             memoryToolsCn
         )
