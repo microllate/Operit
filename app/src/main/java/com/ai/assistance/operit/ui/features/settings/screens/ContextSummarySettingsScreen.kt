@@ -275,9 +275,12 @@ fun ContextSummarySettingsScreen(onBackPressed: () -> Unit) {
         dialogueReviewTitleInput = currentConfig?.summaryDialogueReviewTitle.orEmpty()
     }
     var globalSummarySectionOverrides by remember { mutableStateOf<List<SummarySectionOverride>?>(null) }
-    LaunchedEffect(Unit) {
-        // 全局总结结构与当前聊天模型无关，模型切换不应清空编辑器。
-        globalSummarySectionOverrides = modelConfigManager.getGlobalSummarySectionOverrides()
+    LaunchedEffect(currentConfig?.id) {
+        if (currentConfig == null) return@LaunchedEffect
+        // 当前模型加载完成后迁移旧结构；已经保存的全局结构保持不变。
+        globalSummarySectionOverrides = modelConfigManager.getGlobalSummarySectionOverrides(
+            currentConfig?.summarySectionOverrides ?: emptyList()
+        )
     }
     LaunchedEffect(globalSummarySectionOverrides, useEnglish) {
         globalSummarySectionOverrides?.let { overrides ->

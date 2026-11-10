@@ -2061,7 +2061,9 @@ class MessageCoordinationDelegate(
                     dialogueReviewTitle = config.summaryDialogueReviewTitle
                 )
             } else {
-                ConversationSummaryConfig()
+                ConversationSummaryConfig(
+                    sectionOverrides = modelConfigManager.getGlobalSummarySectionOverrides()
+                )
             }
         } catch (e: Exception) {
             AppLogger.w(TAG, "读取总结配置失败", e)
