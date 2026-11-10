@@ -164,16 +164,15 @@ class RootShellExecutor(private val context: Context) : ShellExecutor {
     private fun checkExecSuAvailable(): Boolean {
         try {
             val process = Runtime.getRuntime().exec(buildSuExecCommand("id"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = StringBuilder()
-            var line: String?
-            
-            while (reader.readLine().also { line = it } != null) {
-                output.append(line)
+            // Check process completion before reading streams so a stalled su prompt
+            // cannot block permission detection indefinitely.
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                AppLogger.w(TAG, "exec su availability check timed out")
+                return false
             }
-            
-            val exitCode = process.waitFor()
-            val result = output.toString().trim()
+            val exitCode = process.exitValue()
+            val result = process.inputStream.bufferedReader().use { it.readText() }.trim()
             
             val available = exitCode == 0 && result.contains("uid=0")
             AppLogger.d(TAG, "exec su可用性检查: $available (结果: $result, 退出码: $exitCode)")
