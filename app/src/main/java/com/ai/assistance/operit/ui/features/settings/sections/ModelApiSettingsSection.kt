@@ -46,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.VisualTransformation
 import com.ai.assistance.operit.R
+import com.ai.assistance.operit.api.chat.llmprovider.FirstRequestCapture
 import com.ai.assistance.operit.api.chat.llmprovider.EndpointCompleter
 import com.ai.assistance.operit.api.chat.EnhancedAIService
 import com.ai.assistance.operit.api.chat.llmprovider.AIServiceFactory
@@ -137,6 +138,7 @@ fun ModelApiSettingsSection(
         navigateToMnnModelDownload: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    var captureNextRequest by remember { mutableStateOf(FirstRequestCapture.isArmed(context)) }
     val scope = rememberCoroutineScope()
     val codexAuthManager = remember { CodexAuthManager.getInstance(context) }
     val codexAuthState by codexAuthManager.authState.collectAsState()
@@ -937,6 +939,16 @@ fun ModelApiSettingsSection(
                     )
             }
             
+            SettingsSwitchRow(
+                title = "抓取下一次请求 JSON（一次性）",
+                subtitle = "开启后保存下一次 OpenAI/DeepSeek 请求到 Download/Operit/post_summary_request.json；保存成功后自动关闭。文件可能包含完整对话内容。",
+                checked = captureNextRequest,
+                onCheckedChange = {
+                    FirstRequestCapture.setArmed(context, it)
+                    captureNextRequest = FirstRequestCapture.isArmed(context)
+                }
+            )
+
             // Tool Call 开关
             SettingsSwitchRow(
                 title = stringResource(R.string.enable_tool_call),
