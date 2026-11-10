@@ -42,346 +42,22 @@ object SystemToolPrompts {
     val basicTools = SystemToolPromptCategory(
         categoryName = "Available tools",
         tools = listOf(
-            ToolPrompt(
-                name = "sleep",
-                description = "Demonstration tool that pauses briefly.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "duration_ms", type = "integer", description = "milliseconds, default 1000, >= 0", required = false, default = "1000")
-                )
-            ),
-            ToolPrompt(
-                name = "use_package",
-                description = "Activate a package for use in the current session.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(
-                        name = "package_name",
-                        type = "string",
-                        description = "name of the package to activate",
-                        required = true
-                    )
-                )
-            )
-        )
     )
     
     val basicToolsCn = SystemToolPromptCategory(
         categoryName = "可用工具",
         tools = listOf(
-            ToolPrompt(
-                name = "sleep",
-                description = "演示工具，短暂暂停。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "duration_ms", type = "integer", description = "毫秒，默认1000，>= 0", required = false, default = "1000")
-                )
-            ),
-            ToolPrompt(
-                name = "use_package",
-                description = "在当前会话中激活包。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "package_name", type = "string", description = "要激活的包名", required = true)
-                )
-            )
-        )
     )
     
     // ==================== 文件系统工具 ====================
     val fileSystemTools = SystemToolPromptCategory(
         categoryName = "File System Tools",
         tools = listOf(
-            ToolPrompt(
-                name = "list_files",
-                description = "List files in a directory.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "e.g. \"/sdcard/Download\"", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false)
-                )
-            ),
-            ToolPrompt(
-                name = "read_file",
-                description = "Read the content of a file. For image files (jpg, jpeg, png, gif, bmp), it automatically extracts text using OCR.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(
-                        name = "path",
-                        type = "string",
-                        description = "file path",
-                        required = true
-                    ),
-                    ToolParameterSchema(
-                        name = "environment",
-                        type = "string",
-                        description = "optional, execution environment. Values: \"android\" (default, Android file system) | \"linux\" (local Ubuntu 24 terminal environment via proot; Linux paths like /home/... /etc/hosts) | \"repo:<repositoryName>\" (attached local storage repository)",
-                        required = false
-                    ),
-                    ToolParameterSchema(
-                        name = "intent",
-                        type = "string",
-                        description = "optional, your question about the media/file (used for backend recognition)",
-                        required = false
-                    ),
-                    ToolParameterSchema(
-                        name = "direct_image",
-                        type = "boolean",
-                        description = "optional, when true: return an <link type=\"image\"> tag for models that support vision",
-                        required = false
-                    ),
-                    ToolParameterSchema(
-                        name = "direct_audio",
-                        type = "boolean",
-                        description = "optional, when true: return an <link type=\"audio\"> tag for models that support audio",
-                        required = false
-                    ),
-                    ToolParameterSchema(
-                        name = "direct_video",
-                        type = "boolean",
-                        description = "optional, when true: return an <link type=\"video\"> tag for models that support video",
-                        required = false
-                    )
-                )
-            ),
-            ToolPrompt(
-                name = "read_file_part",
-                description = "Read file content by line range.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "file path", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
-                    ToolParameterSchema(name = "start_line", type = "integer", description = "starting line number, 1-indexed", required = false, default = "1"),
-                    ToolParameterSchema(name = "end_line", type = "integer", description = "ending line number, 1-indexed, inclusive, optional", required = false, default = "start_line + 99")
-                )
-            ),
-            ToolPrompt(
-                name = "create_file",
-                description = "Create a new file by delegating to apply_file with type=create.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "file path", required = true),
-                    ToolParameterSchema(name = "new", type = "string", description = "full file content for the new file", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false)
-                )
-            ),
-            ToolPrompt(
-                name = "edit_file",
-                description = "Edit an existing file by delegating to apply_file with type=replace.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "file path", required = true),
-                    ToolParameterSchema(name = "old", type = "string", description = "the exact content to be matched and replaced", required = true),
-                    ToolParameterSchema(name = "new", type = "string", description = "the new content to insert", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false)
-                )
-            ),
-            ToolPrompt(
-                name = "delete_file",
-                description = "Delete a file or directory.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "target path", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
-                    ToolParameterSchema(name = "recursive", type = "boolean", description = "boolean", required = false, default = "false")
-                )
-            ),
-            ToolPrompt(
-                name = "make_directory",
-                description = "Create a directory.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "directory path", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
-                    ToolParameterSchema(name = "create_parents", type = "boolean", description = "boolean", required = false, default = "false")
-                )
-            ),
-            ToolPrompt(
-                name = "find_files",
-                description = "Search for files matching a pattern.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "search path, for Android use /sdcard/..., for Linux use /home/... or /etc/...", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
-                    ToolParameterSchema(name = "pattern", type = "string", description = "search pattern, e.g. \"*.jpg\"", required = true),
-                    ToolParameterSchema(name = "max_depth", type = "integer", description = "optional, controls depth of subdirectory search, -1=unlimited", required = false),
-                    ToolParameterSchema(name = "use_path_pattern", type = "boolean", description = "boolean", required = false, default = "false"),
-                    ToolParameterSchema(name = "case_insensitive", type = "boolean", description = "boolean", required = false, default = "false")
-                )
-            ),
-            ToolPrompt(
-                name = "grep_code",
-                description = "Search code content matching a regex pattern in files. Returns matches with surrounding context lines.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "search path", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
-                    ToolParameterSchema(name = "pattern", type = "string", description = "regex pattern", required = true),
-                    ToolParameterSchema(name = "file_pattern", type = "string", description = "file filter", required = false, default = "\"*\""),
-                    ToolParameterSchema(name = "case_insensitive", type = "boolean", description = "boolean", required = false, default = "false"),
-                    ToolParameterSchema(name = "context_lines", type = "integer", description = "lines of context before/after match", required = false, default = "3"),
-                    ToolParameterSchema(name = "max_results", type = "integer", description = "max matches", required = false, default = "100")
-                )
-            ),
-            ToolPrompt(
-                name = "grep_context",
-                description = "Search for relevant content based on intent/context understanding. Supports two modes: 1) Directory mode: when path is a directory, finds most relevant files. 2) File mode: when path is a file, finds most relevant code segments within that file. Uses semantic relevance scoring.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "directory or file path", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
-                    ToolParameterSchema(name = "intent", type = "string", description = "intent or context description string", required = true),
-                    ToolParameterSchema(name = "file_pattern", type = "string", description = "file filter for directory mode", required = false, default = "\"*\""),
-                    ToolParameterSchema(name = "max_results", type = "integer", description = "maximum items to return", required = false, default = "10")
-                )
-            ),
-            ToolPrompt(
-                name = "download_file",
-                description = "Download a file from the internet. Two modes: (1) Provide `url` + `destination`. (2) Provide `visit_key` + (`link_number` or `image_number`) + `destination` to download an item by index from a previous `visit_web` result.",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "url", type = "string", description = "optional, file URL. If omitted, use visit_key + link_number/image_number to download from a previous visit_web result", required = false),
-                    ToolParameterSchema(name = "visit_key", type = "string", description = "optional, visitKey from a previous visit_web result", required = false),
-                    ToolParameterSchema(name = "link_number", type = "integer", description = "optional, 1-based link index from Results (use with visit_key)", required = false),
-                    ToolParameterSchema(name = "image_number", type = "integer", description = "optional, 1-based image index from Images (use with visit_key)", required = false),
-                    ToolParameterSchema(name = "destination", type = "string", description = "save path", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "optional, same as read_file environment", required = false),
-                    ToolParameterSchema(name = "headers", type = "string", description = "optional HTTP headers as JSON object string, e.g. {\"Referer\":\"...\"}", required = false)
-                )
-            )
-        )
     )
     
     val fileSystemToolsCn = SystemToolPromptCategory(
         categoryName = "文件系统工具",
         tools = listOf(
-            ToolPrompt(
-                name = "list_files",
-                description = "列出目录中的文件。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "例如\"/sdcard/Download\"", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false)
-                )
-            ),
-            ToolPrompt(
-                name = "read_file",
-                description = "读取文件内容。对于图片文件(jpg, jpeg, png, gif, bmp)，自动使用OCR提取文本。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "文件路径", required = true),
-                    ToolParameterSchema(
-                        name = "environment",
-                        type = "string",
-                        description = "可选，执行环境。取值：\"android\"（默认，Android文件系统）| \"linux\"（本地Ubuntu 24终端环境，通过proot实现；路径用Linux格式，如/home/...、/etc/hosts）| \"repo:<仓库名>\"（附加本地储存仓库）",
-                        required = false
-                    ),
-                    ToolParameterSchema(
-                        name = "intent",
-                        type = "string",
-                        description = "可选，用户对媒体/文件的问题（用于后端识别模型）",
-                        required = false
-                    ),
-                    ToolParameterSchema(
-                        name = "direct_image",
-                        type = "boolean",
-                        description = "可选，为true时：返回<link type=\"image\">标签供支持识图的模型直接查看",
-                        required = false
-                    ),
-                    ToolParameterSchema(
-                        name = "direct_audio",
-                        type = "boolean",
-                        description = "可选，为true时：返回<link type=\"audio\">标签供支持音频的模型直接处理",
-                        required = false
-                    ),
-                    ToolParameterSchema(
-                        name = "direct_video",
-                        type = "boolean",
-                        description = "可选，为true时：返回<link type=\"video\">标签供支持视频的模型直接处理",
-                        required = false
-                    )
-                )
-            ),
-            ToolPrompt(
-                name = "read_file_part",
-                description = "按行号范围读取文件内容。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "文件路径", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
-                    ToolParameterSchema(name = "start_line", type = "integer", description = "起始行号，从1开始", required = false, default = "1"),
-                    ToolParameterSchema(name = "end_line", type = "integer", description = "结束行号，从1开始，包括该行，可选", required = false, default = "start_line + 99")
-                )
-            ),
-            ToolPrompt(
-                name = "create_file",
-                description = "通过委托给 apply_file 且 type=create 来创建新文件。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "文件路径", required = true),
-                    ToolParameterSchema(name = "new", type = "string", description = "新文件的完整内容", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false)
-                )
-            ),
-            ToolPrompt(
-                name = "edit_file",
-                description = "通过委托给 apply_file 且 type=replace 来编辑已存在文件。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "文件路径", required = true),
-                    ToolParameterSchema(name = "old", type = "string", description = "用于匹配并替换的原始内容", required = true),
-                    ToolParameterSchema(name = "new", type = "string", description = "要插入的新内容", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false)
-                )
-            ),
-            ToolPrompt(
-                name = "delete_file",
-                description = "删除文件或目录。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "目标路径", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
-                    ToolParameterSchema(name = "recursive", type = "boolean", description = "布尔值", required = false, default = "false")
-                )
-            ),
-            ToolPrompt(
-                name = "make_directory",
-                description = "创建目录。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "目录路径", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
-                    ToolParameterSchema(name = "create_parents", type = "boolean", description = "布尔值", required = false, default = "false")
-                )
-            ),
-            ToolPrompt(
-                name = "find_files",
-                description = "搜索匹配模式的文件。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "搜索路径，Android用/sdcard/...，Linux用/home/...或/etc/...", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
-                    ToolParameterSchema(name = "pattern", type = "string", description = "搜索模式，例如\"*.jpg\"", required = true),
-                    ToolParameterSchema(name = "max_depth", type = "integer", description = "可选，控制子目录搜索深度，-1=无限", required = false),
-                    ToolParameterSchema(name = "use_path_pattern", type = "boolean", description = "布尔值", required = false, default = "false"),
-                    ToolParameterSchema(name = "case_insensitive", type = "boolean", description = "布尔值", required = false, default = "false")
-                )
-            ),
-            ToolPrompt(
-                name = "grep_code",
-                description = "在文件中搜索匹配正则表达式的代码内容，返回带上下文的匹配结果。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "搜索路径", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
-                    ToolParameterSchema(name = "pattern", type = "string", description = "正则表达式模式", required = true),
-                    ToolParameterSchema(name = "file_pattern", type = "string", description = "文件过滤", required = false, default = "\"*\""),
-                    ToolParameterSchema(name = "case_insensitive", type = "boolean", description = "布尔值", required = false, default = "false"),
-                    ToolParameterSchema(name = "context_lines", type = "integer", description = "匹配行前后的上下文行数", required = false, default = "3"),
-                    ToolParameterSchema(name = "max_results", type = "integer", description = "最大匹配数", required = false, default = "100")
-                )
-            ),
-            ToolPrompt(
-                name = "grep_context",
-                description = "基于意图/上下文理解搜索相关内容。支持两种模式：1) 目录模式：当path是目录时，找出最相关的文件。2) 文件模式：当path是文件时，找出该文件内最相关的代码段。使用语义相关性评分。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "path", type = "string", description = "目录或文件路径", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
-                    ToolParameterSchema(name = "intent", type = "string", description = "意图或上下文描述字符串", required = true),
-                    ToolParameterSchema(name = "file_pattern", type = "string", description = "目录模式下的文件过滤", required = false, default = "\"*\""),
-                    ToolParameterSchema(name = "max_results", type = "integer", description = "返回的最大项数", required = false, default = "10")
-                )
-            ),
-            ToolPrompt(
-                name = "download_file",
-                description = "从互联网下载文件。有两种用法：1）提供 `url` + `destination` 直接下载。2）提供 `visit_key` +（`link_number` 或 `image_number`）+ `destination`，从上一次 `visit_web` 的 Results/Images 编号中按序号下载。",
-                parametersStructured = listOf(
-                    ToolParameterSchema(name = "url", type = "string", description = "可选, 文件URL。不传时可使用 visit_key + link_number/image_number 从上一次 visit_web 结果按编号下载", required = false),
-                    ToolParameterSchema(name = "visit_key", type = "string", description = "可选, 上一次 visit_web 返回的 visitKey", required = false),
-                    ToolParameterSchema(name = "link_number", type = "integer", description = "可选, 整数, Results 中的链接编号（从1开始，需要配合 visit_key）", required = false),
-                    ToolParameterSchema(name = "image_number", type = "integer", description = "可选, 整数, Images 中的图片编号（从1开始，需要配合 visit_key）", required = false),
-                    ToolParameterSchema(name = "destination", type = "string", description = "保存路径", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
-                    ToolParameterSchema(name = "headers", type = "string", description = "可选：HTTP请求头，JSON对象字符串，例如{\"Referer\":\"...\"}", required = false)
-                )
-            )
-        )
     )
     
     // ==================== HTTP工具 ====================
@@ -1004,4 +680,22 @@ object SystemToolPrompts {
         return afterContext.toolPrompt
             ?: renderToolPromptFromAvailableTools(afterContext.availableTools)
     }
-}
+}            ToolPrompt(
+                name = "execute_hidden_terminal_command",
+                description = "Run a Linux command directly in the built-in hidden terminal, without activating super_admin. Use this for file operations and code search. Root commands require separate permissions.",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "command", type = "string", description = "Command to execute", required = true),
+                    ToolParameterSchema(name = "executor_key", type = "string", description = "Optional background terminal context key", required = false, default = "default"),
+                    ToolParameterSchema(name = "timeout_ms", type = "integer", description = "Timeout in milliseconds", required = false, default = "120000")
+                )
+            ),
+            ToolPrompt(
+                name = "execute_hidden_terminal_command",
+                description = "直接在内置 Linux 后台终端执行命令，无需激活 super_admin。文件操作和代码关键词搜索优先使用此工具；Root 权限需单独获取。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "command", type = "string", description = "要执行的命令", required = true),
+                    ToolParameterSchema(name = "executor_key", type = "string", description = "Optional background terminal context key", required = false, default = "default"),
+                    ToolParameterSchema(name = "timeout_ms", type = "integer", description = "Timeout in milliseconds", required = false, default = "120000")
+                )
+            ),
+
