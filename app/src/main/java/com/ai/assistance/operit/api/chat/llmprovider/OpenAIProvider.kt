@@ -596,10 +596,11 @@ open class OpenAIProvider(
             enableThinking = enableThinking,
             optionId = thinkingOptionId,
         )
-        return createJsonRequestBody(requestJson.toString())
+        return createJsonRequestBody(requestJson.toString(), context)
     }
 
-    protected fun createJsonRequestBody(jsonString: String): RequestBody {
+    protected fun createJsonRequestBody(jsonString: String, captureContext: Context? = null): RequestBody {
+        captureContext?.let { FirstRequestCapture.captureIfArmed(it, jsonString) }
         return jsonString.toByteArray(Charsets.UTF_8).toRequestBody(JSON)
     }
 
