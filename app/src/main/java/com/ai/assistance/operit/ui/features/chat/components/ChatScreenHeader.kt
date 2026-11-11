@@ -145,7 +145,7 @@ fun ChatScreenHeader(
                 val tokens = formatTokenCount(overview.totals.totalTokens.knownSum, unit)
                 val symbol = if (currency.name == "CNY") "¥" else "$"
                 val cost = String.format(Locale.US, "%.2f", overview.totals.cost.knownAmount)
-                lifetimeUsageText = "$"+"tokens Token · $"+"symbol$"+"cost"
+                lifetimeUsageText = "${tokens} Token · ${symbol}${cost}"
             } catch (_: Exception) {
                 // Keep the last successful value if a statistics refresh fails.
             }
