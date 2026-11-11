@@ -36,6 +36,9 @@ import kotlinx.coroutines.flow.flowOf
 import com.ai.assistance.operit.data.stats.TokenStatsPreferencesStore
 import com.ai.assistance.operit.data.stats.TokenStatsQueryParams
 import com.ai.assistance.operit.data.stats.TokenStatsQueryService
+import com.ai.assistance.operit.data.stats.TokenStatsTimeRange
+import java.time.Instant
+import java.time.ZoneId
 import com.ai.assistance.operit.data.stats.formatTokenCount
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -138,13 +141,40 @@ fun ChatScreenHeader(
                 val currency = settings.loadTargetCurrency()
                 val rate = settings.loadRateWithEstimate().first
                 val unit = settings.loadTokenDisplayUnit()
-                val overview = TokenStatsQueryService.lifetimeOverview(
+                val zone = ZoneId.systemDefault()
+                val range = settings.loadTimeRange() ?: run {
+                    val today = Instant.ofEpochMilli(System.currentTimeMillis())
+                        .atZone(zone).toLocalDate()
+                    TokenStatsTimeRange(
+                        today.minusDays(29).atStartOfDay(zone).toInstant().toEpochMilli(),
+                        today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+                    )
+                }
+                val selectedModels = settings.loadSelectedModels()
+                val providerModels = if (selectedModels.isEmpty()) {
+                    null
+                } else {
+                    TokenStatsQueryService.lifetimeOverview(
+                        context,
+                        TokenStatsQueryParams(targetCurrency = currency, manualRate = rate),
+                    ).displayModels
+                        .filter { it.displayModelId in selectedModels }
+                        .flatMap { it.providerModels }
+                        .toSet()
+                }
+                val summary = TokenStatsQueryService.rangeData(
                     context,
-                    TokenStatsQueryParams(targetCurrency = currency, manualRate = rate),
-                )
-                val tokens = formatTokenCount(overview.totals.totalTokens.knownSum, unit)
+                    range,
+                    TokenStatsQueryParams(
+                        targetCurrency = currency,
+                        manualRate = rate,
+                        providerModels = providerModels,
+                    ),
+                    zone,
+                ).summary
+                val tokens = formatTokenCount(summary.totalTokens.knownSum, unit)
                 val symbol = if (currency.name == "CNY") "¥" else "$"
-                val cost = String.format(Locale.US, "%.2f", overview.totals.cost.knownAmount)
+                val cost = String.format(Locale.US, "%.2f", summary.cost.knownAmount)
                 lifetimeUsageText = "${tokens} Token · ${symbol}${cost}"
             } catch (_: Exception) {
                 // Keep the last successful value if a statistics refresh fails.
