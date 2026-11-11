@@ -43,6 +43,13 @@ object SystemToolPrompts {
         categoryName = "Available tools",
         tools = listOf(
             ToolPrompt(
+                name = "execute_shell",
+                description = "Execute Android shell commands directly using configured Root/Shizuku permissions, without activating super_admin. Use execute_hidden_terminal_command for Linux workspace commands.",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "command", type = "string", description = "Android shell command", required = true)
+                )
+            ),
+            ToolPrompt(
                 name = "execute_hidden_terminal_command",
                 description = "Execute Linux commands in the built-in background terminal without activating a package. Use for file operations and literal code search.",
                 parametersStructured = listOf(
@@ -69,6 +76,13 @@ object SystemToolPrompts {
     val basicToolsCn = SystemToolPromptCategory(
         categoryName = "可用工具",
         tools = listOf(
+            ToolPrompt(
+                name = "execute_shell",
+                description = "直接通过已配置的 Root/Shizuku 权限执行 Android Shell 命令，无需激活 super_admin。Linux 工作区命令使用 execute_hidden_terminal_command。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "command", type = "string", description = "Android Shell 命令", required = true)
+                )
+            ),
             ToolPrompt(
                 name = "execute_hidden_terminal_command",
                 description = "直接使用内置 Linux 后台终端执行命令，无需激活工具包。用于文件操作和代码关键词搜索。",
