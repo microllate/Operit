@@ -51,7 +51,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "execute_hidden_terminal_command",
-                description = "Execute Linux commands in the built-in background terminal without activating a package. Use for file operations and literal code search.",
+                description = "Preferred first choice for Linux workspace commands, file operations, script editing, and code search. Runs directly in the built-in background terminal; do not activate super_admin for these tasks. Use super_admin:terminal only when this tool cannot meet the task requirements.",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "command", type = "string", description = "Command to execute", required = true),
                     ToolParameterSchema(name = "executor_key", type = "string", description = "Optional terminal context key", required = false, default = "default"),
@@ -60,7 +60,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "use_package",
-                description = "Activate a package for use in the current session.",
+                description = "Activate a package only when its specific capabilities are needed. Do not activate super_admin solely for Linux file operations or code search; prefer execute_hidden_terminal_command. For Android shell commands prefer execute_shell.",
                 parametersStructured = listOf(
                     ToolParameterSchema(
                         name = "package_name",
@@ -85,7 +85,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "execute_hidden_terminal_command",
-                description = "直接使用内置 Linux 后台终端执行命令，无需激活工具包。用于文件操作和代码关键词搜索。",
+                description = "Linux 工作区命令、文件操作、脚本修改和代码搜索优先使用本工具。直接调用，无需激活 super_admin；只有本工具无法满足任务需求时才使用 super_admin:terminal。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "command", type = "string", description = "执行命令", required = true),
                     ToolParameterSchema(name = "executor_key", type = "string", description = "Optional terminal context key", required = false, default = "default"),
@@ -94,7 +94,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "use_package",
-                description = "在当前会话中激活包。",
+                description = "仅在需要工具包特有能力时激活。Linux 文件操作和代码搜索优先使用 execute_hidden_terminal_command，Android Shell 优先使用 execute_shell；不要仅为执行这些命令而激活 super_admin。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "package_name", type = "string", description = "要激活的包名", required = true)
                 )
