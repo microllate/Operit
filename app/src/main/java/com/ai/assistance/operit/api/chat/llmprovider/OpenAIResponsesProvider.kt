@@ -85,7 +85,7 @@ open class OpenAIResponsesProvider(
             "Final Responses request body: "
         )
 
-        return createJsonRequestBody(jsonObject.toString())
+        return createJsonRequestBody(jsonObject.toString(), context)
     }
 
     override fun customizeFinalRequestObject(
