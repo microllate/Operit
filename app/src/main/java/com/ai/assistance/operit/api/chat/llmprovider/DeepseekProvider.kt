@@ -188,7 +188,7 @@ class DeepseekProvider(
         calculateAndStoreInputTokens(
             providerReadyHistory,
             toolsJson,
-            preserveThinkInHistory = true
+            preserveThinkInHistory = false
         )
 
         // 使用特殊的消息构建方法（支持reasoning_content）
@@ -319,7 +319,7 @@ class DeepseekProvider(
 
         if (effectiveHistory.isNotEmpty()) {
             for (turn in effectiveHistory) {
-                val originalContent = comparableContentForTurn(turn, preserveThinkInHistory = true)
+                val originalContent = comparableContentForTurn(turn, preserveThinkInHistory = false)
                 if (useToolCall) {
                     when (turn.kind) {
                         PromptTurnKind.SYSTEM -> {
