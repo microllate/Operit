@@ -2,6 +2,9 @@ package com.ai.assistance.operit.ui.features.chat.components.style.input.classic
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.content.ReceiveContentListener
+import androidx.compose.foundation.content.TransferableContent
+import androidx.compose.foundation.content.contentReceiver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -122,6 +125,24 @@ fun ClassicChatInputSection(
     val showTokenLimitDialog = remember { mutableStateOf(false) }
     val showFullscreenInput = remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val imagePasteReceiver = remember(onAttachmentRequest) {
+        object : ReceiveContentListener {
+            override fun onReceive(transferableContent: TransferableContent): TransferableContent? {
+                val clip = transferableContent.clipEntry.clipData
+                val imageUris = (0 until clip.itemCount).mapNotNull { index ->
+                    clip.getItemAt(index).uri?.takeIf { uri ->
+                        uri.scheme == "content" &&
+                            (clip.description.hasMimeType("image/*") ||
+                                context.contentResolver.getType(uri)?.startsWith("image/") == true)
+                    }
+                }
+                if (imageUris.isEmpty()) return transferableContent
+                imageUris.forEach { onAttachmentRequest(it.toString()) }
+                return null
+            }
+        }
+    }
+
     val isProcessing =
         isLoading ||
             inputState is InputProcessingState.Connecting ||
@@ -504,6 +525,7 @@ fun ClassicChatInputSection(
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 30.dp)
+                        .contentReceiver(imagePasteReceiver)
                         .onPreviewKeyEvent { keyEvent ->
                             if (!enableEnterToSend) {
                                 false
