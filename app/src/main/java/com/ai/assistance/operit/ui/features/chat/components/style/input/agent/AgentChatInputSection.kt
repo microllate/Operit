@@ -252,15 +252,26 @@ fun AgentChatInputSection(
     var showCharacterCardMemoryBindingSwitchConfirm by remember { mutableStateOf(false) }
     var pendingCharacterCardMemorySelection by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val richInputState = remember { TextFieldState(initialText = userMessage.text) }
-    LaunchedEffect(userMessage.text) {
+    val richInputState = remember {
+        TextFieldState(initialText = userMessage.text, initialSelection = userMessage.selection)
+    }
+    // Keep the legacy message state (used by @ mentions) and the state-based
+    // text field in sync, including the cursor/selection.
+    LaunchedEffect(userMessage.text, userMessage.selection) {
         if (richInputState.text.toString() != userMessage.text) {
-            richInputState.setTextAndPlaceCursorAtEnd(userMessage.text)
+            richInputState.edit {
+                replace(0, length, userMessage.text)
+                selection = userMessage.selection
+            }
+        } else if (richInputState.selection != userMessage.selection) {
+            richInputState.edit { selection = userMessage.selection }
         }
     }
     LaunchedEffect(richInputState, onUserMessageChange) {
-        snapshotFlow { richInputState.text.toString() }.collectLatest { text ->
-            if (text != userMessage.text) onUserMessageChange(TextFieldValue(text))
+        snapshotFlow {
+            TextFieldValue(richInputState.text.toString(), richInputState.selection)
+        }.collectLatest { value ->
+            onUserMessageChange(value)
         }
     }
 
