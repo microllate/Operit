@@ -14,7 +14,7 @@ on:
           - ':app:assembleNightly'
           - ':app:assembleClone'
   push:
-    branches: [main]
+    branches: [main, fix/task-completion-summary-context-auto]
     paths:
       - .github/workflows/android-build.yml
       - .gitmodules
@@ -208,7 +208,13 @@ jobs:
         run: |
           set -euo pipefail
           case "$EVENT_NAME" in
-            push) gradle_task=':app:assembleRelease' ;;
+            push)
+              if [[ "$GITHUB_REF" == 'refs/heads/fix/task-completion-summary-context-auto' ]]; then
+                gradle_task=':app:compileReleaseKotlin'
+              else
+                gradle_task=':app:assembleRelease'
+              fi
+              ;;
             workflow_dispatch) gradle_task="$DISPATCH_GRADLE_TASK" ;;
             *) echo "Unsupported workflow event: $EVENT_NAME" >&2; exit 2 ;;
           esac
@@ -227,7 +233,7 @@ jobs:
           retention-days: 14
 
       - name: Upload successful Android outputs
-        if: success()
+        if: success() && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main')
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: operit-android-${{ github.run_number }}
