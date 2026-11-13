@@ -5,6 +5,11 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.content.ReceiveContentListener
 import androidx.compose.foundation.content.TransferableContent
 import androidx.compose.foundation.content.contentReceiver
@@ -247,6 +252,18 @@ fun AgentChatInputSection(
     var showCharacterCardMemoryBindingSwitchConfirm by remember { mutableStateOf(false) }
     var pendingCharacterCardMemorySelection by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val richInputState = remember { TextFieldState(initialText = userMessage.text) }
+    LaunchedEffect(userMessage.text) {
+        if (richInputState.text.toString() != userMessage.text) {
+            richInputState.setTextAndPlaceCursorAtEnd(userMessage.text)
+        }
+    }
+    LaunchedEffect(richInputState, onUserMessageChange) {
+        snapshotFlow { richInputState.text.toString() }.collectLatest { text ->
+            if (text != userMessage.text) onUserMessageChange(TextFieldValue(text))
+        }
+    }
+
     val imagePasteReceiver = remember(onAttachmentRequest) {
         object : ReceiveContentListener {
             override fun onReceive(transferableContent: TransferableContent): TransferableContent? {
@@ -851,9 +868,7 @@ fun AgentChatInputSection(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     OutlinedTextField(
-                        value = userMessage,
-                        onValueChange = onUserMessageChange,
-                        visualTransformation = mentionVisualTransformation,
+                        state = richInputState,
                         placeholder = {
                             Text(
                                 if (isWorkspaceOpen) {
@@ -866,19 +881,12 @@ fun AgentChatInputSection(
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).contentReceiver(imagePasteReceiver).onPreviewKeyEvent(onEnterToSendKeyEvent),
                         textStyle = inputTextStyle,
-                        maxLines = 6,
-                        minLines = 1,
-                        singleLine = false,
+                        lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 6),
                         keyboardOptions =
                             KeyboardOptions(
                                 imeAction = if (enableEnterToSend) ImeAction.Send else ImeAction.Default
                             ),
-                        keyboardActions =
-                            if (enableEnterToSend) {
-                                KeyboardActions(onSend = { handleEnterSendAction() })
-                            } else {
-                                KeyboardActions()
-                            },
+                        onKeyboardAction = { if (enableEnterToSend) handleEnterSendAction() },
                         colors =
                             OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Color.Transparent,
@@ -1151,9 +1159,7 @@ fun AgentChatInputSection(
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
                         OutlinedTextField(
-                            value = userMessage,
-                            onValueChange = onUserMessageChange,
-                            visualTransformation = mentionVisualTransformation,
+                            state = richInputState,
                             placeholder = {
                                 Text(
                                     if (isWorkspaceOpen) {
@@ -1166,19 +1172,12 @@ fun AgentChatInputSection(
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).contentReceiver(imagePasteReceiver).onPreviewKeyEvent(onEnterToSendKeyEvent),
                             textStyle = inputTextStyle,
-                            maxLines = 6,
-                            minLines = 1,
-                            singleLine = false,
+                            lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 6),
                             keyboardOptions =
                                 KeyboardOptions(
                                     imeAction = if (enableEnterToSend) ImeAction.Send else ImeAction.Default
                                 ),
-                            keyboardActions =
-                                if (enableEnterToSend) {
-                                    KeyboardActions(onSend = { handleEnterSendAction() })
-                                } else {
-                                    KeyboardActions()
-                                },
+                            onKeyboardAction = { if (enableEnterToSend) handleEnterSendAction() },
                             colors =
                                 OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color.Transparent,
