@@ -3,6 +3,11 @@ package com.ai.assistance.operit.ui.features.chat.components.style.input.classic
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.content.ReceiveContentListener
 import androidx.compose.foundation.content.TransferableContent
 import androidx.compose.foundation.content.contentReceiver
@@ -127,6 +132,18 @@ fun ClassicChatInputSection(
     val showTokenLimitDialog = remember { mutableStateOf(false) }
     val showFullscreenInput = remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val richInputState = remember { TextFieldState(initialText = userMessage.text) }
+    LaunchedEffect(userMessage.text) {
+        if (richInputState.text.toString() != userMessage.text) {
+            richInputState.setTextAndPlaceCursorAtEnd(userMessage.text)
+        }
+    }
+    LaunchedEffect(richInputState, onUserMessageChange) {
+        snapshotFlow { richInputState.text.toString() }.collectLatest { text ->
+            if (text != userMessage.text) onUserMessageChange(TextFieldValue(text))
+        }
+    }
+
     val imagePasteReceiver = remember(onAttachmentRequest) {
         object : ReceiveContentListener {
             override fun onReceive(transferableContent: TransferableContent): TransferableContent? {
@@ -522,8 +539,7 @@ fun ClassicChatInputSection(
                     }
 
                 BasicTextField(
-                    value = userMessage,
-                    onValueChange = onUserMessageChange,
+                    state = richInputState,
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 30.dp)
@@ -544,19 +560,12 @@ fun ClassicChatInputSection(
                         },
                     textStyle = modernTextStyle.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    visualTransformation = mentionVisualTransformation,
-                    maxLines = 5,
-                    minLines = 1,
+                    lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 5),
                     keyboardOptions =
                     KeyboardOptions(imeAction = if (enableEnterToSend) ImeAction.Send else ImeAction.Default),
-                    keyboardActions =
-                    if (enableEnterToSend) {
-                        KeyboardActions(onSend = { handleEnterSendAction() })
-                    } else {
-                        KeyboardActions()
-                    },
+                    onKeyboardAction = { if (enableEnterToSend) handleEnterSendAction() },
                     enabled = classicInputEnabled,
-                    decorationBox = { innerTextField ->
+                    decorator = { innerTextField ->
                         Row(
                             modifier =
                                 Modifier
