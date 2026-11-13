@@ -2,6 +2,7 @@ package com.ai.assistance.operit.ui.features.chat.components.style.input.classic
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.content.ReceiveContentListener
 import androidx.compose.foundation.content.TransferableContent
 import androidx.compose.foundation.content.contentReceiver
@@ -81,6 +82,7 @@ import androidx.compose.ui.res.stringResource
 import android.net.Uri
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun ClassicChatInputSection(
     actualViewModel: ChatViewModel,
     userMessage: TextFieldValue,
