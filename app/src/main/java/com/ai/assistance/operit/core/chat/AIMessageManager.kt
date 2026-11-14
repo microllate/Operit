@@ -1052,12 +1052,48 @@ object AIMessageManager {
             val summaryChatId = requireNotNull(chatId?.takeIf { it.isNotBlank() }) {
                 "Cannot summarize without a chat ID"
             }
-            val finalAssistantContent = messages.lastOrNull { it.sender == "ai" }?.content.orEmpty()
-            val summary = enhancedAiService.generateSummaryInChatContext(
-                chatId = summaryChatId,
-                finalAssistantContent = finalAssistantContent,
-                summaryConfig = summaryConfig
-            )
+            // Hidden USER turn goes through the same CHAT sending pipeline as normal messages.
+            // Do not add either the instruction or the response to persisted chat messages.
+            val useEnglishForPrompt = !LocaleUtils.usesChineseContent(context)
+            val instruction = buildString {
+                appendLine(FunctionalPrompts.buildSummarySystemPrompt(
+                    previousSummary = null,
+                    useEnglish = useEnglishForPrompt,
+                    summaryConfig = summaryConfig
+                ))
+                appendLine()
+                appendLine(FunctionalPrompts.summaryUserMessage(useEnglishForPrompt))
+                appendLine()
+                append("Only produce the requested summary sections. Do not call tools.")
+            }
+            val chatTurns = messages
+                .filter { it.sender == "user" || it.sender == "ai" || it.sender == "summary" }
+                .map { item ->
+                    PromptTurn(
+                        kind = when (item.sender) {
+                            "user" -> PromptTurnKind.USER
+                            "summary" -> PromptTurnKind.SUMMARY
+                            else -> PromptTurnKind.ASSISTANT
+                        },
+                        content = item.content
+                    )
+                }
+            val summaryBuffer = StringBuilder()
+            enhancedAiService.sendMessage(
+                EnhancedAIService.SendMessageOptions(
+                    message = instruction,
+                    chatId = summaryChatId,
+                    chatHistory = chatTurns,
+                    workspacePath = workspacePath,
+                    workspaceEnv = workspaceEnv,
+                    chatModelConfigIdOverride = chatModelConfigIdOverride,
+                    chatModelIndexOverride = chatModelIndexOverride,
+                    functionType = com.ai.assistance.operit.data.model.FunctionType.CHAT,
+                    promptFunctionType = PromptFunctionType.CHAT,
+                    internalSummary = true
+                )
+            ).collect { summaryBuffer.append(it) }
+            val summary = ChatUtils.removeThinkingContent(summaryBuffer.toString().trim())
             AppLogger.d(TAG, "AI生成总结完成: ${summary.take(50)}...")
 
             if (summary.isBlank()) {
