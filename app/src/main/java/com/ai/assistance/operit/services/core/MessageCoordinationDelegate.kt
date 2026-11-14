@@ -536,7 +536,8 @@ class MessageCoordinationDelegate(
         enableGroupOrchestration: Boolean = true,
         isGroupOrchestrationTurn: Boolean = false,
         groupParticipantNamesText: String? = null,
-        turnOptions: ChatTurnOptions = ChatTurnOptions()
+        turnOptions: ChatTurnOptions = ChatTurnOptions(),
+        hiddenSummaryResult: CompletableDeferred<String>? = null
     ) {
         // 如果不是自动续写，更新当前的 promptFunctionType
         if (!isAutoContinuation) {
@@ -545,7 +546,7 @@ class MessageCoordinationDelegate(
         val isBackgroundSend =
             !chatIdOverride.isNullOrBlank() && chatIdOverride != chatHistoryDelegate.currentChatId.value
         // 自动续聊由总结消息中的续接指令驱动，不能消费用户尚未提交的编辑器状态。
-        val shouldReadComposerState = !isBackgroundSend && !isAutoContinuation
+        val shouldReadComposerState = !isBackgroundSend && !isAutoContinuation && hiddenSummaryResult == null
         val effectiveMessageTextOverride = if (isAutoContinuation) "" else messageTextOverride
         // 获取当前聊天ID和工作区路径
         val chatId = chatIdOverride ?: chatHistoryDelegate.currentChatId.value
@@ -714,7 +715,8 @@ class MessageCoordinationDelegate(
             suppressUserMessageInHistory = suppressUserMessageInHistory,
             isGroupOrchestrationTurn = isGroupOrchestrationTurn,
             groupParticipantNamesText = groupParticipantNamesText,
-            turnOptions = turnOptions
+            turnOptions = turnOptions,
+            hiddenSummaryResult = hiddenSummaryResult
         )
 
         // 只有在非续写（即用户主动发送）时才清空附件和UI状态
@@ -1881,19 +1883,14 @@ class MessageCoordinationDelegate(
         chatModelIndexOverride: Int?
     ): String {
         val result = CompletableDeferred<String>()
-        messageProcessingDelegate.sendUserMessage(
-            chatId = chatId,
-            messageTextOverride = instruction,
-            workspacePath = workspacePath,
+        sendMessageInternal(
             promptFunctionType = PromptFunctionType.CHAT,
-            roleCardId = "",
-            enableThinking = apiConfigDelegate.enableThinkingMode.value,
-            enableMemoryAutoUpdate = false,
-            maxTokens = Int.MAX_VALUE,
-            tokenUsageThreshold = Double.MAX_VALUE,
-            enableSummary = false,
+            chatIdOverride = chatId,
+            messageTextOverride = instruction,
             chatModelConfigIdOverride = chatModelConfigIdOverride,
             chatModelIndexOverride = chatModelIndexOverride,
+            forceDisableSummary = true,
+            enableGroupOrchestration = false,
             turnOptions = ChatTurnOptions(persistTurn = false, notifyReply = false),
             hiddenSummaryResult = result
         )
