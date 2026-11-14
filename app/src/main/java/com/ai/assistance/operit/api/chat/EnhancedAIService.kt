@@ -1118,7 +1118,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     if (functionType == FunctionType.CHAT && !chatId.isNullOrBlank() && !isSubTask) {
                         val cachedPrefix = requestHistory.toList()
                         val cachedParameters = modelParameters.toList()
-                        val cachedTools = availableTools.toList()
+                        val cachedTools = availableTools?.toList()
                         latestChatSummarySenders[chatId] = { _, assistantText, config ->
                             val useEnglish = !LocaleUtils.usesChineseContent(context)
                             val rules = com.ai.assistance.operit.core.config.FunctionalPrompts.buildSummarySystemPrompt(
