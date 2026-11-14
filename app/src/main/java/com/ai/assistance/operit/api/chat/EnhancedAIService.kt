@@ -107,9 +107,6 @@ class EnhancedAIService private constructor(private val context: Context) {
         @Volatile private var INSTANCE: EnhancedAIService? = null
 
         private val CHAT_INSTANCES = ConcurrentHashMap<String, EnhancedAIService>()
-        // Shared between global and per-chat EnhancedAIService instances.
-        private val latestChatSummarySenders =
-            ConcurrentHashMap<String, suspend (String, String, ConversationSummaryConfig) -> String>()
 
         private val FOREGROUND_REF_COUNT = AtomicInteger(0)
 
@@ -139,7 +136,6 @@ class EnhancedAIService private constructor(private val context: Context) {
 
         fun releaseChatInstance(chatId: String) {
             val instance = CHAT_INSTANCES.remove(chatId) ?: return
-            latestChatSummarySenders.remove(chatId)
             runCatching {
                 instance.cancelConversation()
             }.onFailure { e ->
@@ -1119,39 +1115,6 @@ class EnhancedAIService private constructor(private val context: Context) {
                         publishEstimate = true
                     )
                     
-                    if (functionType == FunctionType.CHAT && !chatId.isNullOrBlank() && !isSubTask) {
-                        val cachedPrefix = requestHistory.toList()
-                        val cachedParameters = modelParameters.toList()
-                        val cachedTools = availableTools?.toList()
-                        latestChatSummarySenders[chatId] = { _, assistantText, config ->
-                            val useEnglish = !LocaleUtils.usesChineseContent(context)
-                            val rules = com.ai.assistance.operit.core.config.FunctionalPrompts.buildSummarySystemPrompt(
-                                previousSummary = null,
-                                useEnglish = useEnglish,
-                                summaryConfig = config
-                            )
-                            val instruction = buildString {
-                                appendLine(rules)
-                                appendLine()
-                                appendLine(com.ai.assistance.operit.core.config.FunctionalPrompts.summaryUserMessage(useEnglish))
-                                appendLine()
-                                append("Only produce the requested summary sections. Do not call tools.")
-                            }
-                            val summaryHistory = cachedPrefix +
-                                PromptTurn(kind = PromptTurnKind.ASSISTANT, content = assistantText) +
-                                PromptTurn(kind = PromptTurnKind.USER, content = instruction)
-                            val result = StringBuilder()
-                            serviceForFunction.sendMessage(
-                                context = context,
-                                chatHistory = summaryHistory,
-                                modelParameters = cachedParameters,
-                                availableTools = cachedTools,
-                                recordTokenUsage = true
-                            ).collect { result.append(it) }
-                            ChatUtils.removeThinkingContent(result.toString().trim())
-                        }
-                    }
-
                     // 使用新的Stream API
                     AppLogger.d(TAG, "sendMessage请求前准备耗时: ${tAfterGetTools - startTime}ms, 流式输出: $stream")
                     val requestStartTime = messageTimingNow()
@@ -2636,17 +2599,63 @@ class EnhancedAIService private constructor(private val context: Context) {
         )
     }
 
-    // Keep the exact prepared CHAT request prefix for post-task summarization.
-    // The stored sender is refreshed on every CHAT request, including tool rounds.
-
-
+    /**
+     * Send an invisible user summary instruction through the active CHAT model.
+     * The request is prepared from persisted conversation turns, not an in-memory cache.
+     * Tool calls are not exposed or executed, and the generated text is not added to chat.
+     */
     suspend fun generateSummaryInChatContext(
         chatId: String,
-        finalAssistantContent: String,
-        summaryConfig: ConversationSummaryConfig
-    ): String? {
-        val sender = latestChatSummarySenders[chatId] ?: return null
-        return sender(chatId, finalAssistantContent, summaryConfig)
+        history: List<PromptTurn>,
+        summaryConfig: ConversationSummaryConfig,
+        workspacePath: String? = null,
+        workspaceEnv: String? = null,
+        chatModelConfigIdOverride: String? = null,
+        chatModelIndexOverride: Int? = null
+    ): String {
+        val useEnglish = !LocaleUtils.usesChineseContent(context)
+        val instruction = buildString {
+            appendLine(com.ai.assistance.operit.core.config.FunctionalPrompts.buildSummarySystemPrompt(
+                previousSummary = null,
+                useEnglish = useEnglish,
+                summaryConfig = summaryConfig
+            ))
+            appendLine()
+            appendLine(com.ai.assistance.operit.core.config.FunctionalPrompts.summaryUserMessage(useEnglish))
+            appendLine()
+            append("Only produce the requested summary sections. Do not call tools.")
+        }
+        val modelConfig = getModelConfigForFunction(
+            FunctionType.CHAT, chatModelConfigIdOverride, chatModelIndexOverride
+        )
+        val prepared = prepareConversationHistory(
+            chatHistory = history,
+            processedInput = instruction,
+            chatId = chatId,
+            workspacePath = workspacePath,
+            workspaceEnv = workspaceEnv,
+            promptFunctionType = PromptFunctionType.CHAT,
+            roleCardId = null,
+            enableGroupOrchestrationHint = false,
+            isSubTask = false,
+            functionType = FunctionType.CHAT,
+            modelConfig = modelConfig
+        ).appendUserTurnIfMissing(instruction)
+        val service = getAIServiceForFunction(
+            FunctionType.CHAT, chatModelConfigIdOverride, chatModelIndexOverride
+        )
+        val parameters = getModelParametersForFunction(
+            FunctionType.CHAT, chatModelConfigIdOverride, chatModelIndexOverride
+        )
+        val result = StringBuilder()
+        service.sendMessage(
+            context = context,
+            chatHistory = prepared,
+            modelParameters = parameters,
+            availableTools = null,
+            recordTokenUsage = true
+        ).collect { result.append(it) }
+        return ChatUtils.removeThinkingContent(result.toString().trim())
     }
 
     suspend fun generateSummaryFromPromptTurns(
