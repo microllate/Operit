@@ -1153,11 +1153,8 @@ object AIMessageManager {
 
                 val summaryWithQuotes = buildString {
                     appendLine("==========对话摘要==========")
-                    appendLine("1、用户目标，已更新历史摘要.md文档")
-                    appendLine("2、执行过程出现的错误，已更新历史摘要.md文档")
-                    appendLine("3、已完成的项目，已更新历史摘要.md文档")
-                    appendLine("4、下一步策略：$nextStepStrategy")
-                    append(".operit/chat-summaries/${chatId}/历史摘要.md")
+                    appendLine("历史摘要记忆卡已更新")
+                    appendLine("下一步策略：$nextStepStrategy")
                 }
 
                 val finalSummary = if (autoContinue) {
