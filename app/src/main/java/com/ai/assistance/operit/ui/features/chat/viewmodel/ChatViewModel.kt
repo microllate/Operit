@@ -909,7 +909,10 @@ class ChatViewModel(private val context: Context) : ViewModel() {
                     summaryConfig = summaryConfig,
                     workspacePath = currentChat?.workspace,
                     workspaceEnv = currentChat?.workspaceEnv,
-                    chatId = currentChatId
+                    chatId = currentChatId,
+                    sendHiddenSummary = { instruction ->
+                        messageCoordinationDelegate.sendManualSummaryThroughChat(currentChatId, instruction)
+                    }
                 )
 
                 if (summaryMessage != null) {
