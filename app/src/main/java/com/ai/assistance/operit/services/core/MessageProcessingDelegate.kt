@@ -561,6 +561,13 @@ class MessageProcessingDelegate(
         }
     }
 
+    suspend fun cancelHiddenSummaryTurn(chatId: String) {
+        val runtime = runtimeFor(chatId)
+        if (runtime.isLoading.value && !runtime.currentTurnOptions.persistTurn) {
+            cancelMessageInternal(chatId, keepPartialResponse = false)
+        }
+    }
+
     fun cancelMessage(chatId: String) {
         val expectedTurnId = runtimeFor(chatId).activeTurnId
         coroutineScope.launch(Dispatchers.IO) {
