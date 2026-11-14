@@ -704,6 +704,8 @@ class MessageProcessingDelegate(
             enableMemoryAutoUpdate = false,
             maxTokens = Int.MAX_VALUE,
             tokenUsageThreshold = Double.MAX_VALUE,
+            onNonFatalError = {},
+            roleCardId = "",
             chatModelConfigIdOverride = chatModelConfigIdOverride,
             chatModelIndexOverride = chatModelIndexOverride,
             internalSummary = true
