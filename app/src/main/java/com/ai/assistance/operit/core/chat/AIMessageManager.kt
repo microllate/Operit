@@ -1059,6 +1059,12 @@ object AIMessageManager {
             // Do not add either the instruction or the response to persisted chat messages.
             val useEnglishForPrompt = !LocaleUtils.usesChineseContent(context)
             val instruction = buildString {
+                appendLine(if (useEnglishForPrompt) {
+                    "This message is for context summarization. Do not use any tools. Reply according to the following rules."
+                } else {
+                    "此消息是上下文总结，不允许使用工具，按以下规则进行回复。"
+                })
+                appendLine()
                 appendLine(FunctionalPrompts.buildSummarySystemPrompt(
                     previousSummary = null,
                     useEnglish = useEnglishForPrompt,
