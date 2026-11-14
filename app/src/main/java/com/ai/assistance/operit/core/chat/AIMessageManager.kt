@@ -1153,7 +1153,7 @@ object AIMessageManager {
 
                 val summaryWithQuotes = buildString {
                     appendLine("==========对话摘要==========")
-                    appendLine("历史摘要记忆卡已更新")
+                    appendLine("历史摘要记忆库已更新")
                     appendLine("下一步策略：$nextStepStrategy")
                 }
 
