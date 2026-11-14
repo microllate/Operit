@@ -370,7 +370,8 @@ object AIMessageManager {
         chatModelConfigIdOverride: String? = null,
         chatModelIndexOverride: Int? = null,
         memorySpaceIdOverride: String? = null,
-        disableWarning: Boolean = false
+        disableWarning: Boolean = false,
+        internalSummary: Boolean = false
     ): SharedStream<String> {
         val totalStartTime = messageTimingNow()
         val chatKey = chatId ?: DEFAULT_CHAT_KEY
@@ -429,7 +430,7 @@ object AIMessageManager {
             )
 
             val matchPluginStartTime = messageTimingNow()
-            val pluginExecution = MessageProcessingPluginRegistry.createExecutionIfMatched(
+            val pluginExecution = if (internalSummary) null else MessageProcessingPluginRegistry.createExecutionIfMatched(
                 params = MessageProcessingHookParams(
                     context = context,
                     enhancedAIService = enhancedAiService,
@@ -507,7 +508,8 @@ object AIMessageManager {
                     chatModelIndexOverride = chatModelIndexOverride,
                     memorySpaceIdOverride = memorySpaceIdOverride,
                     stream = enableStream,
-                    disableWarning = disableWarning
+                    disableWarning = disableWarning,
+                    internalSummary = internalSummary
                 )
             ).shareRevisable(
                 scope = scope,
