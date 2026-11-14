@@ -1052,26 +1052,11 @@ object AIMessageManager {
             val summaryChatId = requireNotNull(chatId?.takeIf { it.isNotBlank() }) {
                 "Cannot summarize without a chat ID"
             }
-            val summaryHistory = messages
-                .filter { it.sender == "user" || it.sender == "ai" || it.sender == "summary" }
-                .map { message ->
-                    PromptTurn(
-                        kind = when (message.sender) {
-                            "user" -> PromptTurnKind.USER
-                            "summary" -> PromptTurnKind.SUMMARY
-                            else -> PromptTurnKind.ASSISTANT
-                        },
-                        content = message.content
-                    )
-                }
+            val finalAssistantContent = messages.lastOrNull { it.sender == "ai" }?.content.orEmpty()
             val summary = enhancedAiService.generateSummaryInChatContext(
                 chatId = summaryChatId,
-                history = summaryHistory,
-                summaryConfig = summaryConfig,
-                workspacePath = workspacePath,
-                workspaceEnv = workspaceEnv,
-                chatModelConfigIdOverride = chatModelConfigIdOverride,
-                chatModelIndexOverride = chatModelIndexOverride
+                finalAssistantContent = finalAssistantContent,
+                summaryConfig = summaryConfig
             )
             AppLogger.d(TAG, "AI生成总结完成: ${summary.take(50)}...")
 
