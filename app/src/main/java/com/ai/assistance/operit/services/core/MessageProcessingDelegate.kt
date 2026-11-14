@@ -1462,7 +1462,6 @@ class MessageProcessingDelegate(
                         )
                 }
                 aiMessage = aiMessage.copy(completedAt = System.currentTimeMillis())
-                hiddenSummaryResult?.complete(aiMessage.content)
 
                 if (isWaifuModeEnabled) {
                     syncWaifuMessageMetricsHandler?.invoke(aiMessage)
@@ -1508,9 +1507,6 @@ class MessageProcessingDelegate(
                     }
                 }
             } finally {
-                if (hiddenSummaryResult != null && !hiddenSummaryResult.isCompleted) {
-                    hiddenSummaryResult.completeExceptionally(IllegalStateException("Summary turn did not produce a reply"))
-                }
                 val finalizeMessageStartTime = messageTimingNow()
                 val interruptedTurn =
                     if (shouldFinalizeInterruptedMessage) chatRuntime.activeStreamingTurn else null
@@ -1582,6 +1578,20 @@ class MessageProcessingDelegate(
                             service,
                             calculateNextWindowSize,
                             turnOptions
+                        )
+                    }
+                }
+
+                // Only expose the summary after the stream and turn finalization have completed.
+                // Failed or interrupted turns must never be saved as valid summaries.
+                if (hiddenSummaryResult != null && !hiddenSummaryResult.isCompleted) {
+                    if (shouldNotifyTurnComplete && !deferTurnCompleteToAsyncJob &&
+                        finalInputStateAfterSend is EnhancedInputProcessingState.Completed
+                    ) {
+                        hiddenSummaryResult.complete(aiMessage.content)
+                    } else {
+                        hiddenSummaryResult.completeExceptionally(
+                            IllegalStateException("Summary turn did not complete successfully")
                         )
                     }
                 }
