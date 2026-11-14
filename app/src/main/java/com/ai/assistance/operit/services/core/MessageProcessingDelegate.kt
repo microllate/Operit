@@ -745,37 +745,6 @@ class MessageProcessingDelegate(
         val sendJob =
             coroutineScope.launch(Dispatchers.IO) {
             val sendUserMessageStartTime = messageTimingNow()
-            if (hiddenSummaryResult != null) {
-                try {
-                    val service = getEnhancedAiService() ?: error("Chat AI service unavailable")
-                    val output = StringBuilder()
-                    AIMessageManager.sendMessage(
-                        enhancedAiService = service,
-                        chatId = chatId,
-                        messageContent = rawMessageText,
-                        chatHistory = getRuntimeChatHistory(chatId),
-                        workspacePath = workspacePath,
-                        promptFunctionType = promptFunctionType,
-                        enableThinking = enableThinking,
-                        enableMemoryAutoUpdate = false,
-                        maxTokens = maxTokens,
-                        tokenUsageThreshold = Double.MAX_VALUE,
-                        onNonFatalError = {},
-                        roleCardId = roleCardId,
-                        chatModelConfigIdOverride = chatModelConfigIdOverride,
-                        chatModelIndexOverride = chatModelIndexOverride,
-                        internalSummary = true
-                    ).collect { output.append(it) }
-                    hiddenSummaryResult.complete(output.toString())
-                } catch (e: Throwable) {
-                    hiddenSummaryResult.completeExceptionally(e)
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                } finally {
-                    cleanupRuntimeAfterSend(chatId, chatRuntime, turnId)
-                    setChatInputProcessingState(chatId, EnhancedInputProcessingState.Idle)
-                }
-                return@launch
-            }
             val effectivePersistTurn = turnOptions.persistTurn
             val effectiveHideUserMessage = effectivePersistTurn && turnOptions.hideUserMessage
             // 检查这是否是聊天中的第一条用户消息（忽略AI的开场白）
@@ -1082,7 +1051,7 @@ class MessageProcessingDelegate(
                 )
 
                 val waifuPreferences = WaifuPreferences.getInstance(context)
-                isWaifuModeEnabled = waifuPreferences.enableWaifuModeFlow.first()
+                isWaifuModeEnabled = hiddenSummaryResult == null && waifuPreferences.enableWaifuModeFlow.first()
                 val waifuCharDelay = waifuPreferences.waifuCharDelayFlow.first()
                 val waifuRemovePunctuation =
                     if (isWaifuModeEnabled) {
@@ -1199,7 +1168,7 @@ class MessageProcessingDelegate(
                         if (effectivePersistTurn && chatId != null) {
                             addMessageToChat(chatId, segmentMessage)
                         }
-                        if (getIsAutoReadEnabled()) {
+                        if (hiddenSummaryResult == null && getIsAutoReadEnabled()) {
                             didStreamAutoRead = true
                             AppLogger.d(
                                 TAG,
@@ -1416,7 +1385,7 @@ class MessageProcessingDelegate(
                             autoReadJob?.join()
                             waifuSegmentsJob?.join()
 
-                            if (getIsAutoReadEnabled() && !isWaifuModeEnabled) {
+                            if (hiddenSummaryResult == null && getIsAutoReadEnabled() && !isWaifuModeEnabled) {
                                 val remaining = autoReadBuffer.toString()
                                 autoReadBuffer.clear()
                                 AppLogger.d(
@@ -1493,6 +1462,7 @@ class MessageProcessingDelegate(
                         )
                 }
                 aiMessage = aiMessage.copy(completedAt = System.currentTimeMillis())
+                hiddenSummaryResult?.complete(aiMessage.content)
 
                 if (isWaifuModeEnabled) {
                     syncWaifuMessageMetricsHandler?.invoke(aiMessage)
@@ -1521,10 +1491,12 @@ class MessageProcessingDelegate(
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
                     AppLogger.d(TAG, "消息发送被取消")
+                    hiddenSummaryResult?.completeExceptionally(e)
                     finalInputStateAfterSend = EnhancedInputProcessingState.Idle
                     shouldNotifyTurnComplete = false
                     cancellationToPropagate = e
                 } else {
+                    hiddenSummaryResult?.completeExceptionally(e)
                     AppLogger.e(TAG, "发送消息时出错", e)
                     shouldFinalizeInterruptedMessage = true
                     setChatInputProcessingState(
@@ -1534,6 +1506,9 @@ class MessageProcessingDelegate(
                     withContext(Dispatchers.Main) { showErrorMessage(context.getString(R.string.message_send_failed, e.message)) }
                 }
             } finally {
+                if (hiddenSummaryResult != null && !hiddenSummaryResult.isCompleted) {
+                    hiddenSummaryResult.completeExceptionally(IllegalStateException("Summary turn did not produce a reply"))
+                }
                 val finalizeMessageStartTime = messageTimingNow()
                 val interruptedTurn =
                     if (shouldFinalizeInterruptedMessage) chatRuntime.activeStreamingTurn else null
@@ -1596,7 +1571,7 @@ class MessageProcessingDelegate(
                     }
                 }
 
-                if (shouldNotifyTurnComplete && !deferTurnCompleteToAsyncJob) {
+                if (hiddenSummaryResult == null && shouldNotifyTurnComplete && !deferTurnCompleteToAsyncJob) {
                     val service = serviceForTurnComplete
                     if (service != null) {
                         notifyTurnComplete(
