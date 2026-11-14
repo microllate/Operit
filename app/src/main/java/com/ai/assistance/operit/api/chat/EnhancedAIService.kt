@@ -107,6 +107,9 @@ class EnhancedAIService private constructor(private val context: Context) {
         @Volatile private var INSTANCE: EnhancedAIService? = null
 
         private val CHAT_INSTANCES = ConcurrentHashMap<String, EnhancedAIService>()
+        // Shared between global and per-chat EnhancedAIService instances.
+        private val latestChatSummarySenders =
+            ConcurrentHashMap<String, suspend (String, String, ConversationSummaryConfig) -> String>()
 
         private val FOREGROUND_REF_COUNT = AtomicInteger(0)
 
@@ -136,6 +139,7 @@ class EnhancedAIService private constructor(private val context: Context) {
 
         fun releaseChatInstance(chatId: String) {
             val instance = CHAT_INSTANCES.remove(chatId) ?: return
+            latestChatSummarySenders.remove(chatId)
             runCatching {
                 instance.cancelConversation()
             }.onFailure { e ->
@@ -2634,8 +2638,7 @@ class EnhancedAIService private constructor(private val context: Context) {
 
     // Keep the exact prepared CHAT request prefix for post-task summarization.
     // The stored sender is refreshed on every CHAT request, including tool rounds.
-    private val latestChatSummarySenders =
-        ConcurrentHashMap<String, suspend (String, String, ConversationSummaryConfig) -> String>()
+
 
     suspend fun generateSummaryInChatContext(
         chatId: String,
