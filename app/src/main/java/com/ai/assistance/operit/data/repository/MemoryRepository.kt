@@ -875,6 +875,17 @@ class MemoryRepository(private val context: Context, profileId: String) {
     }
 
     /**
+     * Finds an exact-title memory only within the specified folder.
+     * This prevents memories in unrelated folders from being overwritten by title alone.
+     */
+    suspend fun findMemoryByTitleInFolder(title: String, folderPath: String?): Memory? =
+        withContext(Dispatchers.IO) {
+            val normalizedFolder = normalizeFolderPath(folderPath)
+            memoryBox.query(Memory_.title.equal(title)).build().find()
+                .firstOrNull { normalizeFolderPath(it.folderPath) == normalizedFolder }
+        }
+
+    /**
      * Finds all memories with the exact title (case-sensitive).
      * @param title The title of the memories to find.
      * @return A list of found Memory objects.
