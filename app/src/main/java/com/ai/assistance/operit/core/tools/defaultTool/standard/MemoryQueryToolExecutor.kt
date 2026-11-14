@@ -25,6 +25,7 @@ import com.ai.assistance.operit.data.preferences.preferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import java.security.MessageDigest
 
 /**
  * Executes queries against the AI's memory graph and the explicit user.md update tool.
@@ -363,9 +364,23 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
             if (memory == null) {
                 // "历史摘要" names a collection of timestamped memories, not one exact title.
                 if (title.trim() == "历史摘要") {
-                    val summaries = memoryRepository.getAllFolderPaths()
-                        .filter { it.startsWith("工作区/") && it.endsWith("/历史摘要") }
-                        .flatMap { memoryRepository.getMemoriesByFolderPath(it) }
+                    val workspacePath = tool.parameters.find { it.name == "workspace_path" }
+                        ?.value?.trim()?.trimEnd('/', '\\')
+                        ?.takeIf { it.isNotBlank() }
+                        ?: return ToolResult(
+                            toolName = tool.name,
+                            success = false,
+                            result = StringResultData(""),
+                            error = "workspace_path is required when title is 历史摘要"
+                        )
+                    val workspaceName = workspacePath.substringAfterLast('/')
+                        .substringAfterLast('\\').ifBlank { "workspace" }
+                        .replace("/", "_").replace("\\", "_")
+                    val workspaceKey = MessageDigest.getInstance("SHA-256")
+                        .digest(workspacePath.toByteArray(Charsets.UTF_8))
+                        .joinToString("") { "%02x".format(it) }.take(12)
+                    val folder = "工作区/$workspaceName-$workspaceKey/历史摘要"
+                    val summaries = memoryRepository.getMemoriesByFolderPath(folder)
                         .filter { it.source == "chat_summary" }
                         .distinctBy { it.id }
                         .sortedByDescending { it.createdAt }
