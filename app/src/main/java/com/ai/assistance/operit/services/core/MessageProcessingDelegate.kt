@@ -678,6 +678,39 @@ class MessageProcessingDelegate(
         _currentTurnToolInvocationCountByChatId.value = updated
     }
 
+    /**
+     * Internal summary turn: enter through the message-processing sender, using the same
+     * AIMessageManager CHAT request path without persisting or displaying either turn.
+     */
+    suspend fun sendHiddenSummaryMessage(
+        chatId: String,
+        instruction: String,
+        workspacePath: String?,
+        chatModelConfigIdOverride: String?,
+        chatModelIndexOverride: Int?
+    ): String {
+        check(!isChatLoading(chatId)) { "Cannot summarize while chat is sending" }
+        val service = getEnhancedAiService() ?: error("Chat AI service unavailable")
+        val history = getRuntimeChatHistory(chatId)
+        val output = StringBuilder()
+        AIMessageManager.sendMessage(
+            enhancedAiService = service,
+            chatId = chatId,
+            messageContent = instruction,
+            chatHistory = history,
+            workspacePath = workspacePath,
+            promptFunctionType = PromptFunctionType.CHAT,
+            enableThinking = false,
+            enableMemoryAutoUpdate = false,
+            maxTokens = Int.MAX_VALUE,
+            tokenUsageThreshold = Double.MAX_VALUE,
+            chatModelConfigIdOverride = chatModelConfigIdOverride,
+            chatModelIndexOverride = chatModelIndexOverride,
+            internalSummary = true
+        ).collect { output.append(it) }
+        return output.toString()
+    }
+
     fun sendUserMessage(
             attachments: List<AttachmentInfo> = emptyList(),
             chatId: String,
