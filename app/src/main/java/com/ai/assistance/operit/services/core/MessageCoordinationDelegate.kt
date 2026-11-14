@@ -1877,6 +1877,15 @@ class MessageCoordinationDelegate(
     /**
      * 执行历史总结并自动继续对话的核心逻辑
      */
+    suspend fun sendManualSummaryThroughChat(chatId: String, instruction: String): String =
+        sendSummaryThroughChat(
+            chatId = chatId,
+            instruction = instruction,
+            workspacePath = null,
+            chatModelConfigIdOverride = null,
+            chatModelIndexOverride = null
+        )
+
     private suspend fun sendSummaryThroughChat(
         chatId: String,
         instruction: String,
