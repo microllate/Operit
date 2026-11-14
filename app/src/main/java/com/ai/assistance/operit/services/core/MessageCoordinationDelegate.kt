@@ -551,6 +551,7 @@ class MessageCoordinationDelegate(
         // 获取当前聊天ID和工作区路径
         val chatId = chatIdOverride ?: chatHistoryDelegate.currentChatId.value
         if (chatId == null) {
+            hiddenSummaryResult?.completeExceptionally(IllegalStateException("No active conversation"))
             uiStateDelegate.showErrorMessage(context.getString(R.string.chat_no_active_conversation))
             return
         }
@@ -654,6 +655,7 @@ class MessageCoordinationDelegate(
             }
         } catch (e: Exception) {
             AppLogger.e(TAG, "解析角色卡对话模型绑定失败", e)
+            hiddenSummaryResult?.completeExceptionally(e)
             uiStateDelegate.showErrorMessage(
                 e.message ?: context.getString(R.string.role_card_chat_model_binding_parse_failed)
             )
@@ -720,7 +722,7 @@ class MessageCoordinationDelegate(
         )
 
         // 只有在非续写（即用户主动发送）时才清空附件和UI状态
-        if (!isBackgroundSend && !isContinuation) {
+        if (!isBackgroundSend && !isContinuation && hiddenSummaryResult == null) {
             if (currentAttachments.isNotEmpty()) {
                 attachmentDelegate.clearAttachments()
             }
