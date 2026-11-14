@@ -1049,15 +1049,30 @@ object AIMessageManager {
 
         return try {
             AppLogger.d(TAG, "开始使用AI生成任务恢复摘要：总结 ${messagesToSummarize.size} 条消息")
-            val finalAssistantContent = messagesToSummarize.lastOrNull { it.sender == "ai" }?.content.orEmpty()
             val summaryChatId = requireNotNull(chatId?.takeIf { it.isNotBlank() }) {
-                "Cannot summarize without a chat ID and its prepared CHAT context"
+                "Cannot summarize without a chat ID"
             }
+            val summaryHistory = messages
+                .filter { it.sender == "user" || it.sender == "ai" || it.sender == "summary" }
+                .map { message ->
+                    PromptTurn(
+                        kind = when (message.sender) {
+                            "user" -> PromptTurnKind.USER
+                            "summary" -> PromptTurnKind.SUMMARY
+                            else -> PromptTurnKind.ASSISTANT
+                        },
+                        content = message.content
+                    )
+                }
             val summary = enhancedAiService.generateSummaryInChatContext(
                 chatId = summaryChatId,
-                finalAssistantContent = finalAssistantContent,
-                summaryConfig = summaryConfig
-            ) ?: error("Prepared CHAT context unavailable; refusing separate SUMMARY request")
+                history = summaryHistory,
+                summaryConfig = summaryConfig,
+                workspacePath = workspacePath,
+                workspaceEnv = workspaceEnv,
+                chatModelConfigIdOverride = chatModelConfigIdOverride,
+                chatModelIndexOverride = chatModelIndexOverride
+            )
             AppLogger.d(TAG, "AI生成总结完成: ${summary.take(50)}...")
 
             if (summary.isBlank()) {
