@@ -1225,7 +1225,7 @@ class MessageProcessingDelegate(
                             val autoReadBuffer = StringBuilder()
                             var isFirstAutoReadSegment = true
                             val autoReadStream =
-                                if (!isWaifuModeEnabled) {
+                                if (!isWaifuModeEnabled && hiddenSummaryResult == null) {
                                     WaifuMessageProcessor.streamTtsText(sharedCharStream)
                                 } else {
                                     null
@@ -1250,7 +1250,7 @@ class MessageProcessingDelegate(
                             }
 
                             fun tryFlushAutoRead() {
-                                if (!getIsAutoReadEnabled()) return
+                                if (hiddenSummaryResult != null || !getIsAutoReadEnabled()) return
                                 if (isWaifuModeEnabled) return
                                 while (true) {
                                     val bufferBefore = autoReadBuffer.length
@@ -1503,7 +1503,9 @@ class MessageProcessingDelegate(
                         chatId,
                         EnhancedInputProcessingState.Error(context.getString(R.string.message_send_failed, e.message))
                     )
-                    withContext(Dispatchers.Main) { showErrorMessage(context.getString(R.string.message_send_failed, e.message)) }
+                    if (hiddenSummaryResult == null) {
+                        withContext(Dispatchers.Main) { showErrorMessage(context.getString(R.string.message_send_failed, e.message)) }
+                    }
                 }
             } finally {
                 if (hiddenSummaryResult != null && !hiddenSummaryResult.isCompleted) {
