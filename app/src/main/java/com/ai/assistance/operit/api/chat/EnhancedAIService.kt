@@ -1115,6 +1115,39 @@ class EnhancedAIService private constructor(private val context: Context) {
                         publishEstimate = true
                     )
                     
+                    if (functionType == FunctionType.CHAT && !chatId.isNullOrBlank() && !isSubTask) {
+                        val cachedPrefix = requestHistory.toList()
+                        val cachedParameters = modelParameters.toList()
+                        val cachedTools = availableTools.toList()
+                        latestChatSummarySenders[chatId] = { _, assistantText, config ->
+                            val useEnglish = !LocaleUtils.usesChineseContent(context)
+                            val rules = com.ai.assistance.operit.core.config.FunctionalPrompts.buildSummarySystemPrompt(
+                                previousSummary = null,
+                                useEnglish = useEnglish,
+                                summaryConfig = config
+                            )
+                            val instruction = buildString {
+                                appendLine(rules)
+                                appendLine()
+                                appendLine(com.ai.assistance.operit.core.config.FunctionalPrompts.summaryUserMessage(useEnglish))
+                                appendLine()
+                                append("Only produce the requested summary sections. Do not call tools.")
+                            }
+                            val summaryHistory = cachedPrefix +
+                                PromptTurn(kind = PromptTurnKind.ASSISTANT, content = assistantText) +
+                                PromptTurn(kind = PromptTurnKind.USER, content = instruction)
+                            val result = StringBuilder()
+                            serviceForFunction.sendMessage(
+                                context = context,
+                                chatHistory = summaryHistory,
+                                modelParameters = cachedParameters,
+                                availableTools = cachedTools,
+                                recordTokenUsage = true
+                            ).collect { result.append(it) }
+                            ChatUtils.removeThinkingContent(result.toString().trim())
+                        }
+                    }
+
                     // 使用新的Stream API
                     AppLogger.d(TAG, "sendMessage请求前准备耗时: ${tAfterGetTools - startTime}ms, 流式输出: $stream")
                     val requestStartTime = messageTimingNow()
@@ -2597,6 +2630,20 @@ class EnhancedAIService private constructor(private val context: Context) {
             chatModelConfigIdOverride,
             chatModelIndexOverride,
         )
+    }
+
+    // Keep the exact prepared CHAT request prefix for post-task summarization.
+    // The stored sender is refreshed on every CHAT request, including tool rounds.
+    private val latestChatSummarySenders =
+        ConcurrentHashMap<String, suspend (String, String, ConversationSummaryConfig) -> String>()
+
+    suspend fun generateSummaryInChatContext(
+        chatId: String,
+        finalAssistantContent: String,
+        summaryConfig: ConversationSummaryConfig
+    ): String? {
+        val sender = latestChatSummarySenders[chatId] ?: return null
+        return sender(chatId, finalAssistantContent, summaryConfig)
     }
 
     suspend fun generateSummaryFromPromptTurns(
