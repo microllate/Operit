@@ -1264,7 +1264,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     hadFatalError = true
                     // Handle any exceptions
                     AppLogger.e(TAG, "发送消息时发生错误: ${e.message}", e)
-                    if (!providerStreamCollectionStarted) {
+                    if (!providerStreamCollectionStarted && !internalSummary) {
                         withContext(Dispatchers.Main) {
                             _inputProcessingState.value =
                                     InputProcessingState.Error(message = context.getString(R.string.enhanced_error_with_message, e.message ?: ""))
@@ -1274,7 +1274,7 @@ class EnhancedAIService private constructor(private val context: Context) {
 
                 // 发生无法处理的错误时，也应停止服务，但用户取消除外
                 if (!isSocketClosed) {
-                    if (!isSubTask) stopAiService()
+                    if (!isSubTask && !internalSummary) stopAiService()
                     if (!providerStreamCollectionStarted) {
                         throw e
                     }
