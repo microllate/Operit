@@ -36,6 +36,7 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
     }
 
     private val toolHandler = AIToolHandler.getInstance(context)
+    private val summaryMemorySync = SummaryMemorySyncManager(context)
     private val appendMutex = Mutex()
 
     data class DocumentResult(
@@ -137,6 +138,13 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
             )
             if (!write.success) {
                 return@withLock DocumentResult(false, error = "Unable to write summary document")
+            }
+            // The document is durable before attempting the optional ObjectBox mirror.
+            // A memory indexing failure must not discard a successful summary write.
+            try {
+                summaryMemorySync.sync(workspacePath!!, chatId, timestamp, newContent)
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Summary saved, but memory mirror failed", e)
             }
             DocumentResult(true, content = merged)
         } catch (e: Exception) {
