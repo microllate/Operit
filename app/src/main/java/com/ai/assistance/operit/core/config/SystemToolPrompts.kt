@@ -224,6 +224,7 @@ object SystemToolPrompts {
                 description = "Retrieves a memory by exact title, including document content or selected chunks.",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "title", type = "string", description = "required, string, the exact title of the memory", required = true),
+                    ToolParameterSchema(name = "workspace_path", type = "string", description = "required when title is 历史摘要: the current workspace root path, used to return only its 5 most recent summary memories", required = false),
                     ToolParameterSchema(name = "chunk_index", type = "integer", description = "optional, int, read a specific chunk by its number, e.g., 3 for the 3rd chunk", required = false),
                     ToolParameterSchema(name = "chunk_range", type = "string", description = "optional, string, read a range of chunks in \"start-end\" format, e.g., \"3-7\" for chunks 3 through 7", required = false),
                     ToolParameterSchema(name = "query", type = "string", description = "optional, string, search inside the document by natural-language question or keywords. You can pass a short question, a space-separated phrase, or use `|` to separate multiple keywords, for example `error log timeout` or `error|timeout|retry`. Inside a keyword, `*` acts as a fuzzy wildcard placeholder, for example `error*timeout`", required = false),
@@ -255,6 +256,7 @@ object SystemToolPrompts {
                 description = "通过精确标题检索记忆，可读取完整内容或文档分块。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "title", type = "string", description = "记忆的精确标题", required = true),
+                    ToolParameterSchema(name = "workspace_path", type = "string", description = "标题为历史摘要时必填：当前工作区根路径，只返回该工作区最近5条摘要", required = false),
                     ToolParameterSchema(name = "chunk_index", type = "integer", description = "读取指定分块编号", required = false),
                     ToolParameterSchema(name = "chunk_range", type = "string", description = "分块范围，如 3-7", required = false),
                     ToolParameterSchema(name = "query", type = "string", description = "文档内搜索；支持自然语言、空格分词、| 分隔关键词、* 模糊匹配", required = false),
