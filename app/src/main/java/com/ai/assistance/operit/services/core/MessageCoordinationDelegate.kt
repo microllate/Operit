@@ -1801,7 +1801,16 @@ class MessageCoordinationDelegate(
                     chatModelIndexOverride = chatModelIndexOverride,
                     workspacePath = currentChat?.workspace,
                     workspaceEnv = currentChat?.workspaceEnv,
-                    chatId = originalChatId
+                    chatId = originalChatId,
+                    sendHiddenSummary = { instruction ->
+                        messageProcessingDelegate.sendHiddenSummaryMessage(
+                            chatId = originalChatId,
+                            instruction = instruction,
+                            workspacePath = currentChat?.workspace,
+                            chatModelConfigIdOverride = chatModelConfigIdOverride,
+                            chatModelIndexOverride = chatModelIndexOverride
+                        )
+                    }
                 ) ?: return@launch
 
                 val currentChatId = chatHistoryDelegate.currentChatId.value
@@ -1935,7 +1944,16 @@ class MessageCoordinationDelegate(
                     chatModelIndexOverride = effectiveChatModelIndexOverride,
                     workspacePath = currentChat?.workspace,
                     workspaceEnv = currentChat?.workspaceEnv,
-                    chatId = currentChatId
+                    chatId = currentChatId,
+                    sendHiddenSummary = { instruction ->
+                        messageProcessingDelegate.sendHiddenSummaryMessage(
+                            chatId = requireNotNull(currentChatId),
+                            instruction = instruction,
+                            workspacePath = currentChat?.workspace,
+                            chatModelConfigIdOverride = effectiveChatModelConfigIdOverride,
+                            chatModelIndexOverride = effectiveChatModelIndexOverride
+                        )
+                    }
                 )
 
             if (summaryMessage != null) {
