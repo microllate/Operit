@@ -1926,7 +1926,14 @@ class MessageCoordinationDelegate(
             turnOptions = ChatTurnOptions(persistTurn = false, notifyReply = false),
             hiddenSummaryResult = result
         )
-        return result.await()
+        // Never let a hidden summary keep the composer locked indefinitely.
+        // The hidden turn runs asynchronously in the normal CHAT pipeline.
+        return try {
+            kotlinx.coroutines.withTimeout(120_000L) { result.await() }
+        } catch (e: Exception) {
+            messageProcessingDelegate.cancelHiddenSummaryTurn(chatId)
+            throw e
+        }
     }
 
     private suspend fun summarizeHistory(
@@ -2056,7 +2063,12 @@ class MessageCoordinationDelegate(
                 currentChatId != null &&
                     messageProcessingDelegate.inputProcessingStateByChatId.value[currentChatId] is InputProcessingState.Summarizing
 
-            // 刷新聚合加载状态；这里只更新派生值，不会直接解除当前 chat 的加载锁
+            // A summary may already be persisted while its hidden CHAT turn is
+            // still holding the runtime lock. Release only that non-persistent
+            // turn before restoring the UI; never cancel a normal user turn.
+            if (currentChatId != null) {
+                messageProcessingDelegate.cancelHiddenSummaryTurn(currentChatId)
+            }
             messageProcessingDelegate.refreshGlobalLoadingState()
 
             if (summarySuccess) {
@@ -2111,6 +2123,14 @@ class MessageCoordinationDelegate(
                 }
             } else if (currentChatId != null) {
                 messageProcessingDelegate.setSuppressIdleCompletedStateForChat(currentChatId, false)
+            }
+            if (currentChatId != null &&
+                !messageProcessingDelegate.isChatLoading(currentChatId)
+            ) {
+                messageProcessingDelegate.setSuppressIdleCompletedStateForChat(currentChatId, false)
+                messageProcessingDelegate.setInputProcessingStateForChat(
+                    currentChatId, InputProcessingState.Idle
+                )
             }
         }
         return summarySuccess
