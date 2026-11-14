@@ -107,15 +107,6 @@ class EnhancedAIService private constructor(private val context: Context) {
         @Volatile private var INSTANCE: EnhancedAIService? = null
 
         private val CHAT_INSTANCES = ConcurrentHashMap<String, EnhancedAIService>()
-        // Exact provider request prefix from the most recent CHAT turn.
-        private data class ChatRequestSnapshot(
-            val turns: List<PromptTurn>,
-            val parameters: List<ModelParameter<*>>,
-            val service: AIService
-        )
-        private val lastChatRequests = ConcurrentHashMap<String, ChatRequestSnapshot>()
-
-
         private val FOREGROUND_REF_COUNT = AtomicInteger(0)
 
         /**
@@ -143,7 +134,6 @@ class EnhancedAIService private constructor(private val context: Context) {
         }
 
         fun releaseChatInstance(chatId: String) {
-            lastChatRequests.remove(chatId)
             val instance = CHAT_INSTANCES.remove(chatId) ?: return
             runCatching {
                 instance.cancelConversation()
@@ -360,7 +350,8 @@ class EnhancedAIService private constructor(private val context: Context) {
         var chatModelIndexOverride: Int? = null,
         var memorySpaceIdOverride: String? = null,
         var stream: Boolean = true,
-        var disableWarning: Boolean = false
+        var disableWarning: Boolean = false,
+        var internalSummary: Boolean = false
     )
 
     // MultiServiceManager 管理不同功能的 AIService 实例
@@ -938,6 +929,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         val memorySpaceIdOverride = options.memorySpaceIdOverride
         val stream = options.stream
         val disableWarning = options.disableWarning
+        val internalSummary = options.internalSummary
         val onNonFatalError: suspend (error: String) -> Unit = { error ->
             options.onNonFatalError(error)
             callbacks?.onNonFatalError(error)
@@ -984,12 +976,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                 // 确保所有操作都在IO线程上执行
                 withContext(Dispatchers.IO) {
                     // 仅当会话首次启动时开启服务，并更新前台通知为“运行中”
-                    if (!isSubTask) {
+                    if (!isSubTask && !internalSummary) {
                         startAiService(characterName, avatarUri)
                     }
 
                     // Update state to show we're processing
-                    if (!isSubTask) {
+                    if (!isSubTask && !internalSummary) {
                     withContext(Dispatchers.Main) {
                         _inputProcessingState.value = InputProcessingState.Processing(context.getString(R.string.enhanced_processing_message))
                         }
@@ -1054,7 +1046,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     currentRequestCachedInputTokenCount = 0L
 
                     // 获取工具列表（如果启用Tool Call）
-                    val availableTools = getAvailableToolsForFunction(
+                    val availableTools = if (internalSummary) null else getAvailableToolsForFunction(
                         functionType = functionType,
                         chatId = chatId,
                         promptFunctionType = promptFunctionType,
@@ -1117,13 +1109,6 @@ class EnhancedAIService private constructor(private val context: Context) {
                         }
                     execContext.conversationHistory.clear()
                     execContext.conversationHistory.addAll(requestHistory)
-                    if (functionType == FunctionType.CHAT && !chatId.isNullOrBlank() && !isSubTask) {
-                        lastChatRequests[chatId] = ChatRequestSnapshot(
-                            turns = requestHistory.toList(),
-                            parameters = modelParameters.toList(),
-                            service = serviceForFunction
-                        )
-                    }
                     estimatePreparedRequestWindow(
                         serviceForFunction = serviceForFunction,
                         preparedHistory = requestHistory,
@@ -1197,7 +1182,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                             responseStream.collect { content ->
                                 // 第一次收到响应，更新状态
                                 if (isFirstChunk) {
-                                    if (!isSubTask) {
+                                    if (!isSubTask && !internalSummary) {
                                     withContext(Dispatchers.Main) {
                                         _inputProcessingState.value =
                                                 InputProcessingState.Receiving(context.getString(R.string.enhanced_receiving_response))
@@ -1297,7 +1282,7 @@ class EnhancedAIService private constructor(private val context: Context) {
             } finally {
                 try {
                     // 确保流处理完成后调用；如果本轮已被取消，则不能再继续跑完成逻辑。
-                    if (!hadFatalError && isExecutionContextActive(execContext)) {
+                    if (!internalSummary && !hadFatalError && isExecutionContextActive(execContext)) {
                         val collector = this
                         withContext(Dispatchers.IO) {
                             processStreamCompletion(
@@ -2613,45 +2598,6 @@ class EnhancedAIService private constructor(private val context: Context) {
             chatModelConfigIdOverride,
             chatModelIndexOverride,
         )
-    }
-
-    /**
-     * Append a hidden summary user turn to the exact last CHAT request prefix.
-     * No conversation/system prompt preparation is performed here.
-     */
-    suspend fun generateSummaryInChatContext(
-        chatId: String,
-        finalAssistantContent: String,
-        summaryConfig: ConversationSummaryConfig
-    ): String {
-        val snapshot = lastChatRequests[chatId]
-            ?: error("No previous CHAT request available for this conversation; send a chat message first")
-        val useEnglish = !LocaleUtils.usesChineseContent(context)
-        val instruction = buildString {
-            appendLine(com.ai.assistance.operit.core.config.FunctionalPrompts.buildSummarySystemPrompt(
-                previousSummary = null,
-                useEnglish = useEnglish,
-                summaryConfig = summaryConfig
-            ))
-            appendLine()
-            appendLine(com.ai.assistance.operit.core.config.FunctionalPrompts.summaryUserMessage(useEnglish))
-            appendLine()
-            append("Only produce the requested summary sections. Do not call tools.")
-        }
-        val turns = snapshot.turns.toMutableList()
-        if (finalAssistantContent.isNotBlank()) {
-            turns.add(PromptTurn(kind = PromptTurnKind.ASSISTANT, content = finalAssistantContent))
-        }
-        turns.add(PromptTurn(kind = PromptTurnKind.USER, content = instruction))
-        val result = StringBuilder()
-        snapshot.service.sendMessage(
-            context = context,
-            chatHistory = turns,
-            modelParameters = snapshot.parameters,
-            availableTools = null,
-            recordTokenUsage = true
-        ).collect { result.append(it) }
-        return ChatUtils.removeThinkingContent(result.toString().trim())
     }
 
     suspend fun generateSummaryFromPromptTurns(
