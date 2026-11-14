@@ -37,6 +37,7 @@ import com.ai.assistance.operit.util.ChatMarkupRegex
 import com.ai.assistance.operit.util.ChatUtils
 import com.ai.assistance.operit.util.LocaleUtils
 import com.ai.assistance.operit.data.repository.MemoryAutoSaveCandidateRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -1803,7 +1804,7 @@ class MessageCoordinationDelegate(
                     workspaceEnv = currentChat?.workspaceEnv,
                     chatId = originalChatId,
                     sendHiddenSummary = { instruction ->
-                        messageProcessingDelegate.sendHiddenSummaryMessage(
+                        sendSummaryThroughChat(
                             chatId = originalChatId,
                             instruction = instruction,
                             workspacePath = currentChat?.workspace,
@@ -1872,6 +1873,33 @@ class MessageCoordinationDelegate(
     /**
      * 执行历史总结并自动继续对话的核心逻辑
      */
+    private suspend fun sendSummaryThroughChat(
+        chatId: String,
+        instruction: String,
+        workspacePath: String?,
+        chatModelConfigIdOverride: String?,
+        chatModelIndexOverride: Int?
+    ): String {
+        val result = CompletableDeferred<String>()
+        messageProcessingDelegate.sendUserMessage(
+            chatId = chatId,
+            messageTextOverride = instruction,
+            workspacePath = workspacePath,
+            promptFunctionType = PromptFunctionType.CHAT,
+            roleCardId = "",
+            enableThinking = apiConfigDelegate.enableThinkingMode.value,
+            enableMemoryAutoUpdate = false,
+            maxTokens = Int.MAX_VALUE,
+            tokenUsageThreshold = Double.MAX_VALUE,
+            enableSummary = false,
+            chatModelConfigIdOverride = chatModelConfigIdOverride,
+            chatModelIndexOverride = chatModelIndexOverride,
+            turnOptions = ChatTurnOptions(persistTurn = false, notifyReply = false),
+            hiddenSummaryResult = result
+        )
+        return result.await()
+    }
+
     private suspend fun summarizeHistory(
         autoContinue: Boolean = true,
         promptFunctionType: PromptFunctionType? = null,
@@ -1946,7 +1974,7 @@ class MessageCoordinationDelegate(
                     workspaceEnv = currentChat?.workspaceEnv,
                     chatId = currentChatId,
                     sendHiddenSummary = { instruction ->
-                        messageProcessingDelegate.sendHiddenSummaryMessage(
+                        sendSummaryThroughChat(
                             chatId = requireNotNull(currentChatId),
                             instruction = instruction,
                             workspacePath = currentChat?.workspace,
