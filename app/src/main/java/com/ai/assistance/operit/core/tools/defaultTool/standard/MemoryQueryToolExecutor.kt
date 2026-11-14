@@ -361,6 +361,26 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         return try {
             val memory = memoryRepository.findMemoryByTitle(title)
             if (memory == null) {
+                // "历史摘要" names a collection of timestamped memories, not one exact title.
+                if (title.trim() == "历史摘要") {
+                    val summaries = memoryRepository.getAllFolderPaths()
+                        .filter { it.startsWith("工作区/") && it.endsWith("/历史摘要") }
+                        .flatMap { memoryRepository.getMemoriesByFolderPath(it) }
+                        .filter { it.source == "chat_summary" }
+                        .distinctBy { it.id }
+                        .sortedByDescending { it.createdAt }
+                        .take(5)
+                    if (summaries.isNotEmpty()) {
+                        val formattedResult = buildResultData(
+                            memoryRepository, summaries, title, summaries.size
+                        )
+                        return ToolResult(
+                            toolName = tool.name,
+                            success = true,
+                            result = formattedResult
+                        )
+                    }
+                }
                 return ToolResult(
                     toolName = tool.name,
                     success = false,
