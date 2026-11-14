@@ -46,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.VisualTransformation
 import com.ai.assistance.operit.R
+import com.ai.assistance.operit.api.chat.llmprovider.FirstRequestCapture
 import com.ai.assistance.operit.api.chat.llmprovider.EndpointCompleter
 import com.ai.assistance.operit.api.chat.EnhancedAIService
 import com.ai.assistance.operit.api.chat.llmprovider.AIServiceFactory
@@ -137,6 +138,7 @@ fun ModelApiSettingsSection(
         navigateToMnnModelDownload: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    var captureNextRequest by remember { mutableStateOf(FirstRequestCapture.isArmed(context)) }
     val scope = rememberCoroutineScope()
     val codexAuthManager = remember { CodexAuthManager.getInstance(context) }
     val codexAuthState by codexAuthManager.authState.collectAsState()
@@ -225,6 +227,9 @@ fun ModelApiSettingsSection(
     var enableDeepSeekWebSearchInput by remember(config.id) {
         mutableStateOf(config.enableDeepSeekWebSearch)
     }
+    var blockDeepSeekPeakHoursInput by remember(config.id) {
+        mutableStateOf(config.blockDeepSeekPeakHours)
+    }
 
     var enableCodexWebSearchInput by remember(config.id) {
         mutableStateOf(config.enableCodexWebSearch)
@@ -263,6 +268,7 @@ fun ModelApiSettingsSection(
         val enableDirectVideoProcessing: Boolean,
         val enableGoogleSearch: Boolean,
         val enableDeepSeekWebSearch: Boolean,
+        val blockDeepSeekPeakHours: Boolean,
         val enableCodexWebSearch: Boolean,
         val enableClaude1hPromptCache: Boolean,
         val enableToolCall: Boolean,
@@ -289,6 +295,7 @@ fun ModelApiSettingsSection(
                     enableDirectVideoProcessing = state.enableDirectVideoProcessing,
                     enableGoogleSearch = state.enableGoogleSearch,
                     enableDeepSeekWebSearch = state.enableDeepSeekWebSearch,
+                    blockDeepSeekPeakHours = state.blockDeepSeekPeakHours,
                     enableCodexWebSearch = state.enableCodexWebSearch,
                     enableClaude1hPromptCache = state.enableClaude1hPromptCache,
                     enableToolCall = state.enableToolCall,
@@ -318,6 +325,7 @@ fun ModelApiSettingsSection(
             enableDirectVideoProcessing = enableDirectVideoProcessingInput,
             enableGoogleSearch = enableGoogleSearchInput,
             enableDeepSeekWebSearch = enableDeepSeekWebSearchInput,
+            blockDeepSeekPeakHours = blockDeepSeekPeakHoursInput,
             enableCodexWebSearch = enableCodexWebSearchInput,
             enableClaude1hPromptCache = enableClaude1hPromptCacheInput,
             enableToolCall = enableToolCallInput,
@@ -912,6 +920,12 @@ fun ModelApiSettingsSection(
                     checked = enableDeepSeekWebSearchInput,
                     onCheckedChange = { enableDeepSeekWebSearchInput = it }
                 )
+                SettingsSwitchRow(
+                    title = "高峰期禁止调用 DeepSeek",
+                    subtitle = "北京时间工作日 09:00–12:00、14:00–18:00 禁止发起新请求；节假日安排需另行维护",
+                    checked = blockDeepSeekPeakHoursInput,
+                    onCheckedChange = { blockDeepSeekPeakHoursInput = it }
+                )
             }
 
             // Claude 1小时提示缓存开关 (仅Claude支持)
@@ -925,6 +939,16 @@ fun ModelApiSettingsSection(
                     )
             }
             
+            SettingsSwitchRow(
+                title = "抓取下一次请求 JSON（一次性）",
+                subtitle = "开启后保存下一次 OpenAI/DeepSeek 请求到 Download/Operit/post_summary_request.json；保存成功后自动关闭。文件可能包含完整对话内容。",
+                checked = captureNextRequest,
+                onCheckedChange = {
+                    FirstRequestCapture.setArmed(context, it)
+                    captureNextRequest = FirstRequestCapture.isArmed(context)
+                }
+            )
+
             // Tool Call 开关
             SettingsSwitchRow(
                 title = stringResource(R.string.enable_tool_call),

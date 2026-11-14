@@ -202,6 +202,10 @@ class ChatServiceCore(
                     outputTokens,
                     windowSize
                 )
+                // 当前任务及工具调用链已完成，异步生成历史总结，不再在发送前按阈值打断任务。
+                if (turnOptions.persistTurn) {
+                    messageCoordinationDelegate.summarizeAfterTaskCompletion(chatId)
+                }
             },
             getIsAutoReadEnabled = {
                 apiConfigDelegate.enableAutoRead.value

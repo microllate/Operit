@@ -4,6 +4,15 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.foundation.content.ReceiveContentListener
+import androidx.compose.foundation.content.TransferableContent
+import androidx.compose.foundation.content.contentReceiver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -160,6 +169,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun AgentChatInputSection(
     actualViewModel: ChatViewModel,
     userMessage: TextFieldValue,
@@ -242,6 +252,47 @@ fun AgentChatInputSection(
     var showCharacterCardMemoryBindingSwitchConfirm by remember { mutableStateOf(false) }
     var pendingCharacterCardMemorySelection by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val richInputState = remember {
+        TextFieldState(initialText = userMessage.text, initialSelection = userMessage.selection)
+    }
+    // Keep the legacy message state (used by @ mentions) and the state-based
+    // text field in sync, including the cursor/selection.
+    LaunchedEffect(userMessage.text, userMessage.selection) {
+        if (richInputState.text.toString() != userMessage.text) {
+            richInputState.edit {
+                replace(0, length, userMessage.text)
+                selection = userMessage.selection
+            }
+        } else if (richInputState.selection != userMessage.selection) {
+            richInputState.edit { selection = userMessage.selection }
+        }
+    }
+    LaunchedEffect(richInputState, onUserMessageChange) {
+        snapshotFlow {
+            TextFieldValue(richInputState.text.toString(), richInputState.selection)
+        }.collectLatest { value ->
+            onUserMessageChange(value)
+        }
+    }
+
+    val imagePasteReceiver = remember(onAttachmentRequest) {
+        object : ReceiveContentListener {
+            override fun onReceive(transferableContent: TransferableContent): TransferableContent? {
+                val clip = transferableContent.clipEntry.clipData
+                val imageUris = (0 until clip.itemCount).mapNotNull { index ->
+                    clip.getItemAt(index).uri?.takeIf { uri ->
+                        uri.scheme == "content" &&
+                            (clip.description.hasMimeType("image/*") ||
+                                context.contentResolver.getType(uri)?.startsWith("image/") == true)
+                    }
+                }
+                if (imageUris.isEmpty()) return transferableContent
+                imageUris.forEach { onAttachmentRequest(it.toString()) }
+                return null
+            }
+        }
+    }
+
     val scope = rememberCoroutineScope()
     val characterCardManager = remember(context) { CharacterCardManager.getInstance(context) }
     val activePromptManager = remember(context) { ActivePromptManager.getInstance(context) }
@@ -828,9 +879,7 @@ fun AgentChatInputSection(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     OutlinedTextField(
-                        value = userMessage,
-                        onValueChange = onUserMessageChange,
-                        visualTransformation = mentionVisualTransformation,
+                        state = richInputState,
                         placeholder = {
                             Text(
                                 if (isWorkspaceOpen) {
@@ -841,21 +890,14 @@ fun AgentChatInputSection(
                                 style = inputTextStyle,
                             )
                         },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).onPreviewKeyEvent(onEnterToSendKeyEvent),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).contentReceiver(imagePasteReceiver).onPreviewKeyEvent(onEnterToSendKeyEvent),
                         textStyle = inputTextStyle,
-                        maxLines = 6,
-                        minLines = 1,
-                        singleLine = false,
+                        lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 6),
                         keyboardOptions =
                             KeyboardOptions(
                                 imeAction = if (enableEnterToSend) ImeAction.Send else ImeAction.Default
                             ),
-                        keyboardActions =
-                            if (enableEnterToSend) {
-                                KeyboardActions(onSend = { handleEnterSendAction() })
-                            } else {
-                                KeyboardActions()
-                            },
+                        onKeyboardAction = { if (enableEnterToSend) handleEnterSendAction() },
                         colors =
                             OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Color.Transparent,
@@ -1128,9 +1170,7 @@ fun AgentChatInputSection(
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
                         OutlinedTextField(
-                            value = userMessage,
-                            onValueChange = onUserMessageChange,
-                            visualTransformation = mentionVisualTransformation,
+                            state = richInputState,
                             placeholder = {
                                 Text(
                                     if (isWorkspaceOpen) {
@@ -1141,21 +1181,14 @@ fun AgentChatInputSection(
                                     style = inputTextStyle,
                                 )
                             },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).onPreviewKeyEvent(onEnterToSendKeyEvent),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).contentReceiver(imagePasteReceiver).onPreviewKeyEvent(onEnterToSendKeyEvent),
                             textStyle = inputTextStyle,
-                            maxLines = 6,
-                            minLines = 1,
-                            singleLine = false,
+                            lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 6),
                             keyboardOptions =
                                 KeyboardOptions(
                                     imeAction = if (enableEnterToSend) ImeAction.Send else ImeAction.Default
                                 ),
-                            keyboardActions =
-                                if (enableEnterToSend) {
-                                    KeyboardActions(onSend = { handleEnterSendAction() })
-                                } else {
-                                    KeyboardActions()
-                                },
+                            onKeyboardAction = { if (enableEnterToSend) handleEnterSendAction() },
                             colors =
                                 OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color.Transparent,

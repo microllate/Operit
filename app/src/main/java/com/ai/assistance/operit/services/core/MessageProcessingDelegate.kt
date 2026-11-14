@@ -561,6 +561,13 @@ class MessageProcessingDelegate(
         }
     }
 
+    suspend fun cancelHiddenSummaryTurn(chatId: String) {
+        val runtime = runtimeFor(chatId)
+        if (runtime.isLoading.value && !runtime.currentTurnOptions.persistTurn) {
+            cancelMessageInternal(chatId, keepPartialResponse = false)
+        }
+    }
+
     fun cancelMessage(chatId: String) {
         val expectedTurnId = runtimeFor(chatId).activeTurnId
         coroutineScope.launch(Dispatchers.IO) {
@@ -704,7 +711,8 @@ class MessageProcessingDelegate(
             suppressUserMessageInHistory: Boolean = false,
             isGroupOrchestrationTurn: Boolean = false,
             groupParticipantNamesText: String? = null,
-            turnOptions: ChatTurnOptions = ChatTurnOptions()
+            turnOptions: ChatTurnOptions = ChatTurnOptions(),
+            hiddenSummaryResult: CompletableDeferred<String>? = null
     ) {
         val rawMessageText = messageTextOverride ?: _userMessage.value.text
         // 群组编排模式下，允许空消息（后续成员不需要用户消息）
@@ -717,6 +725,7 @@ class MessageProcessingDelegate(
         }
         val chatRuntime = runtimeFor(chatId)
         if (chatRuntime.isLoading.value) {
+            hiddenSummaryResult?.completeExceptionally(IllegalStateException("Chat is busy"))
             AppLogger.w(
                 TAG,
                 "sendUserMessage忽略: chat正在处理中, chatId=$chatId, roleCardId=$roleCardId, override=${!messageTextOverride.isNullOrBlank()}, suppressUserMessageInHistory=$suppressUserMessageInHistory"
@@ -1014,20 +1023,10 @@ class MessageProcessingDelegate(
                 // 关闭总结时仍保留真实 limits，避免下游插件收到 0/Infinity 这类无效 JSON 值。
                 val effectiveMaxTokens = maxTokens
                 val effectiveEnableSummary = enableSummary && effectivePersistTurn
-                val effectiveTokenUsageThreshold =
-                    if (effectiveEnableSummary) tokenUsageThreshold else Double.MAX_VALUE
-                val effectiveOnTokenLimitExceeded = if (effectiveEnableSummary) {
-                    suspend {
-                        onTokenLimitExceeded(
-                            activeChatId,
-                            effectiveRoleCardId,
-                            isGroupOrchestrationTurn,
-                            groupParticipantNamesText
-                        )
-                    }
-                } else {
-                    null
-                }
+                // 自动总结统一在任务完成回调中执行。发送/工具调用阶段禁用阈值回调，
+                // 否则 EnhancedAIService 会停止当前工具链并提前转入总结续写。
+                val effectiveTokenUsageThreshold = Double.MAX_VALUE
+                val effectiveOnTokenLimitExceeded: (suspend () -> Unit)? = null
 
                 // 2. 使用 AIMessageManager 发送消息
                 // 群组编排模式下，只有当消息内容不为空时才添加 [From user] 前缀
@@ -1059,7 +1058,7 @@ class MessageProcessingDelegate(
                 )
 
                 val waifuPreferences = WaifuPreferences.getInstance(context)
-                isWaifuModeEnabled = waifuPreferences.enableWaifuModeFlow.first()
+                isWaifuModeEnabled = hiddenSummaryResult == null && waifuPreferences.enableWaifuModeFlow.first()
                 val waifuCharDelay = waifuPreferences.waifuCharDelayFlow.first()
                 val waifuRemovePunctuation =
                     if (isWaifuModeEnabled) {
@@ -1176,7 +1175,7 @@ class MessageProcessingDelegate(
                         if (effectivePersistTurn && chatId != null) {
                             addMessageToChat(chatId, segmentMessage)
                         }
-                        if (getIsAutoReadEnabled()) {
+                        if (hiddenSummaryResult == null && getIsAutoReadEnabled()) {
                             didStreamAutoRead = true
                             AppLogger.d(
                                 TAG,
@@ -1233,7 +1232,7 @@ class MessageProcessingDelegate(
                             val autoReadBuffer = StringBuilder()
                             var isFirstAutoReadSegment = true
                             val autoReadStream =
-                                if (!isWaifuModeEnabled) {
+                                if (!isWaifuModeEnabled && hiddenSummaryResult == null) {
                                     WaifuMessageProcessor.streamTtsText(sharedCharStream)
                                 } else {
                                     null
@@ -1258,7 +1257,7 @@ class MessageProcessingDelegate(
                             }
 
                             fun tryFlushAutoRead() {
-                                if (!getIsAutoReadEnabled()) return
+                                if (hiddenSummaryResult != null || !getIsAutoReadEnabled()) return
                                 if (isWaifuModeEnabled) return
                                 while (true) {
                                     val bufferBefore = autoReadBuffer.length
@@ -1393,7 +1392,7 @@ class MessageProcessingDelegate(
                             autoReadJob?.join()
                             waifuSegmentsJob?.join()
 
-                            if (getIsAutoReadEnabled() && !isWaifuModeEnabled) {
+                            if (hiddenSummaryResult == null && getIsAutoReadEnabled() && !isWaifuModeEnabled) {
                                 val remaining = autoReadBuffer.toString()
                                 autoReadBuffer.clear()
                                 AppLogger.d(
@@ -1498,17 +1497,21 @@ class MessageProcessingDelegate(
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
                     AppLogger.d(TAG, "消息发送被取消")
+                    hiddenSummaryResult?.completeExceptionally(e)
                     finalInputStateAfterSend = EnhancedInputProcessingState.Idle
                     shouldNotifyTurnComplete = false
                     cancellationToPropagate = e
                 } else {
+                    hiddenSummaryResult?.completeExceptionally(e)
                     AppLogger.e(TAG, "发送消息时出错", e)
                     shouldFinalizeInterruptedMessage = true
                     setChatInputProcessingState(
                         chatId,
                         EnhancedInputProcessingState.Error(context.getString(R.string.message_send_failed, e.message))
                     )
-                    withContext(Dispatchers.Main) { showErrorMessage(context.getString(R.string.message_send_failed, e.message)) }
+                    if (hiddenSummaryResult == null) {
+                        withContext(Dispatchers.Main) { showErrorMessage(context.getString(R.string.message_send_failed, e.message)) }
+                    }
                 }
             } finally {
                 val finalizeMessageStartTime = messageTimingNow()
@@ -1573,7 +1576,7 @@ class MessageProcessingDelegate(
                     }
                 }
 
-                if (shouldNotifyTurnComplete && !deferTurnCompleteToAsyncJob) {
+                if (hiddenSummaryResult == null && shouldNotifyTurnComplete && !deferTurnCompleteToAsyncJob) {
                     val service = serviceForTurnComplete
                     if (service != null) {
                         notifyTurnComplete(
@@ -1582,6 +1585,20 @@ class MessageProcessingDelegate(
                             service,
                             calculateNextWindowSize,
                             turnOptions
+                        )
+                    }
+                }
+
+                // Only expose the summary after the stream and turn finalization have completed.
+                // Failed or interrupted turns must never be saved as valid summaries.
+                if (hiddenSummaryResult != null && !hiddenSummaryResult.isCompleted) {
+                    if (shouldNotifyTurnComplete && !deferTurnCompleteToAsyncJob &&
+                        finalInputStateAfterSend is EnhancedInputProcessingState.Completed
+                    ) {
+                        hiddenSummaryResult.complete(aiMessage.content)
+                    } else {
+                        hiddenSummaryResult.completeExceptionally(
+                            IllegalStateException("Summary turn did not complete successfully")
                         )
                     }
                 }

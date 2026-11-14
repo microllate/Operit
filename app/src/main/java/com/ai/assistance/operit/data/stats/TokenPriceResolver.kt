@@ -66,21 +66,24 @@ object TokenPriceResolver {
         user: ModelPriceSettings?,
     ): ResolvedTokenPricing {
         val defaults = DefaultModelPricingCollect.getDefaultPricing(providerModel)
+        val official = OfficialModelPricingCache.get(providerModel)
+        val hasUserPrice = user?.hasAnyUserSetting() == true
+        val useOfficial = !hasUserPrice && official != null
         return ResolvedTokenPricing(
             billingMode = user?.billingMode ?: defaults.billingMode,
-            currency = user?.currency ?: defaults.currency,
-            inputPricePerMillion = user?.inputPricePerMillion ?: defaults.inputPricePerMillion,
-            cachedInputPricePerMillion =
-                user?.cachedInputPricePerMillion
-                    ?: user?.inputPricePerMillion
-                    ?: defaults.cachedInputPricePerMillion,
-            cacheWritePricePerMillion =
-                user?.cacheWritePricePerMillion
-                    ?: user?.inputPricePerMillion
-                    ?: defaults.inputPricePerMillion,
-            outputPricePerMillion = user?.outputPricePerMillion ?: defaults.outputPricePerMillion,
+            currency = user?.currency ?: if (useOfficial) PricingCurrency.USD else defaults.currency,
+            inputPricePerMillion = user?.inputPricePerMillion
+                ?: if (useOfficial) official!!.input else defaults.inputPricePerMillion,
+            cachedInputPricePerMillion = user?.cachedInputPricePerMillion
+                ?: user?.inputPricePerMillion
+                ?: if (useOfficial) (official!!.cachedInput ?: official.input) else defaults.cachedInputPricePerMillion,
+            cacheWritePricePerMillion = user?.cacheWritePricePerMillion
+                ?: user?.inputPricePerMillion
+                ?: if (useOfficial) (official!!.cacheWrite ?: official.input) else defaults.inputPricePerMillion,
+            outputPricePerMillion = user?.outputPricePerMillion
+                ?: if (useOfficial) official!!.output else defaults.outputPricePerMillion,
             pricePerRequest = user?.pricePerRequest ?: defaults.pricePerRequest,
-            source = if (user?.hasAnyUserSetting() == true) PricingSource.USER else PricingSource.BUILT_IN,
+            source = if (hasUserPrice) PricingSource.USER else PricingSource.BUILT_IN,
         )
     }
 }

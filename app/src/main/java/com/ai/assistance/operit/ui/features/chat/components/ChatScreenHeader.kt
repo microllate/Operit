@@ -33,6 +33,17 @@ import com.ai.assistance.operit.ui.features.chat.viewmodel.ChatViewModel
 import com.ai.assistance.operit.ui.floating.FloatingMode
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
+import com.ai.assistance.operit.data.stats.TokenStatsPreferencesStore
+import com.ai.assistance.operit.data.stats.TokenStatsQueryParams
+import com.ai.assistance.operit.data.stats.TokenStatsQueryService
+import com.ai.assistance.operit.data.stats.TokenStatsTimeRange
+import java.time.Instant
+import java.time.ZoneId
+import com.ai.assistance.operit.data.stats.formatTokenCount
+import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import androidx.compose.runtime.setValue
 
 @Composable
 fun useFloatingWindowLauncher(
@@ -121,6 +132,57 @@ fun ChatScreenHeader(
     val inputTokenCount by actualViewModel.inputTokenCount.collectAsState()
     val outputTokenCount by actualViewModel.outputTokenCount.collectAsState()
 
+    // Reuse the lifetime statistics query and display preferences from Token Usage Statistics.
+    var lifetimeUsageText by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(context) {
+        val settings = TokenStatsPreferencesStore(context)
+        while (isActive) {
+            try {
+                val currency = settings.loadTargetCurrency()
+                val rate = settings.loadRateWithEstimate().first
+                val unit = settings.loadTokenDisplayUnit()
+                val zone = ZoneId.systemDefault()
+                val range = settings.loadTimeRange() ?: run {
+                    val today = Instant.ofEpochMilli(System.currentTimeMillis())
+                        .atZone(zone).toLocalDate()
+                    TokenStatsTimeRange(
+                        today.minusDays(29).atStartOfDay(zone).toInstant().toEpochMilli(),
+                        today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+                    )
+                }
+                val selectedModels = settings.loadSelectedModels()
+                val providerModels = if (selectedModels.isEmpty()) {
+                    null
+                } else {
+                    TokenStatsQueryService.lifetimeOverview(
+                        context,
+                        TokenStatsQueryParams(targetCurrency = currency, manualRate = rate),
+                    ).displayModels
+                        .filter { it.displayModelId in selectedModels }
+                        .flatMap { it.providerModels }
+                        .toSet()
+                }
+                val summary = TokenStatsQueryService.rangeData(
+                    context,
+                    range,
+                    TokenStatsQueryParams(
+                        targetCurrency = currency,
+                        manualRate = rate,
+                        providerModels = providerModels,
+                    ),
+                    zone,
+                ).summary
+                val tokens = formatTokenCount(summary.totalTokens.knownSum, unit)
+                val symbol = if (currency.name == "CNY") "¥" else "$"
+                val cost = String.format(Locale.US, "%.2f", summary.cost.knownAmount)
+                lifetimeUsageText = "${tokens} Token · ${symbol}${cost}"
+            } catch (_: Exception) {
+                // Keep the last successful value if a statistics refresh fails.
+            }
+            delay(10_000L)
+        }
+    }
+
     val permissionLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestPermission()
@@ -169,6 +231,14 @@ fun ChatScreenHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            lifetimeUsageText?.let { usage ->
+                Text(
+                    text = usage,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
             // 统计信息
             val maxWindowSize = (maxWindowSizeInK * 1024).toLong().coerceAtLeast(0L)
             val totalTokenCount = inputTokenCount + outputTokenCount

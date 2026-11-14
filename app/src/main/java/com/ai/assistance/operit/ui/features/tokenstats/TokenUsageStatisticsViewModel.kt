@@ -91,6 +91,7 @@ class TokenUsageStatisticsViewModel(
     private var loadGeneration = 0
     private var loadJob: Job? = null
     private var modeRangeJob: Job? = null
+    private var selectedModelsLoaded = false
     private val knownModelNames = linkedMapOf<String, String>()
     private val knownModelProviderModels = linkedMapOf<String, Set<String>>()
 
@@ -155,9 +156,13 @@ class TokenUsageStatisticsViewModel(
     private fun loadInternal(loadViewMode: Boolean) {
         loadJob?.cancel()
         val generation = ++loadGeneration
-        val filterSnapshot = _state.value
         loadJob = viewModelScope.launch(dispatcher) {
             try {
+                if (!selectedModelsLoaded) {
+                    val persistedSelectedModels = settings.loadSelectedModels()
+                    _state.update { it.copy(selectedModels = persistedSelectedModels) }
+                    selectedModelsLoaded = true
+                }
                 val rateInfo = settings.loadRateWithEstimate()
                 val currency = settings.loadTargetCurrency()
                 val tokenDisplayUnit = settings.loadTokenDisplayUnit()
@@ -178,13 +183,6 @@ class TokenUsageStatisticsViewModel(
 
                 val result = coroutineScope {
                     val pricesDeferred = async(Dispatchers.IO) { manager.allPriceSettings() }
-                    val selectedProviderModels = providerModelsFor(filterSnapshot)
-                    val rangeParams = TokenStatsQueryParams(
-                        targetCurrency = currency,
-                        manualRate = rateInfo.first,
-                        providerModels = selectedProviderModels,
-                    )
-                    val availableParams = rangeParams.copy(providerModels = null)
                     val lifetimeDeferred = async(Dispatchers.IO) {
                         TokenStatsQueryService.lifetimeOverview(
                             appContext,
@@ -194,20 +192,27 @@ class TokenUsageStatisticsViewModel(
                             ),
                         )
                     }
+                    val lifetime = lifetimeDeferred.await()
+                    rememberModelNames(lifetime.displayModels)
+                    // Lifetime results are not a whitelist: models without lifetime
+                    // records must not erase the user's persisted selection.
+                    val selectedProviderModels = providerModelsFor(_state.value)
+                    val rangeParams = TokenStatsQueryParams(
+                        targetCurrency = currency,
+                        manualRate = rateInfo.first,
+                        providerModels = selectedProviderModels,
+                    )
+                    val availableParams = rangeParams.copy(providerModels = null)
                     val rangeDeferred = async(Dispatchers.IO) {
                         TokenStatsQueryService.rangeData(appContext, range, rangeParams, zone)
                     }
                     val availableDeferred = async(Dispatchers.IO) {
-                        if (selectedProviderModels == null) {
-                            null
-                        } else {
-                            TokenStatsQueryService.rangeData(
-                                appContext,
-                                range,
-                                availableParams,
-                                zone,
-                            )
-                        }
+                        if (selectedProviderModels == null) null else TokenStatsQueryService.rangeData(
+                            appContext,
+                            range,
+                            availableParams,
+                            zone,
+                        )
                     }
                     val activityDeferred = async(Dispatchers.IO) {
                         TokenStatsQueryService.activitySnapshot(appContext, range, rangeParams, zone)
@@ -230,7 +235,7 @@ class TokenUsageStatisticsViewModel(
                         }
                     }
                     QueryLoadResult(
-                        lifetime = lifetimeDeferred.await(),
+                        lifetime = lifetime,
                         range = rangeData,
                         available = availableDeferred.await() ?: rangeData,
                         prices = pricesDeferred.await(),
@@ -343,13 +348,20 @@ class TokenUsageStatisticsViewModel(
             if (!selected.add(displayModelId)) selected.remove(displayModelId)
             state.copy(selectedModels = selected)
         }
-        load()
+        val selected = _state.value.selectedModels
+        viewModelScope.launch(dispatcher) {
+            settings.saveSelectedModels(selected)
+            load()
+        }
     }
 
     fun selectAllModels() {
         modeRangeJob?.cancel()
         _state.update { it.copy(selectedModels = emptySet()) }
-        load()
+        viewModelScope.launch(dispatcher) {
+            settings.saveSelectedModels(emptySet())
+            load()
+        }
     }
 
     fun setTargetCurrency(currency: PricingCurrency) {

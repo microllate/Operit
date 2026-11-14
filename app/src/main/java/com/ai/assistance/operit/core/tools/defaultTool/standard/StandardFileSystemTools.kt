@@ -194,7 +194,7 @@ open class StandardFileSystemTools(protected val context: Context) {
                 chatHistory = listOf(PromptTurn(kind = PromptTurnKind.USER, content = prompt)),
                 modelParameters = modelParameters,
                 enableThinking = false,
-                stream = false,
+                stream = true,
                 availableTools = null
             )
         stream.collect { chunk -> sb.append(chunk) }

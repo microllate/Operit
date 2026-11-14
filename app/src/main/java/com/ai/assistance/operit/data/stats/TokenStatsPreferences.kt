@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ai.assistance.operit.data.collects.PricingCurrency
 import kotlinx.coroutines.flow.first
@@ -24,6 +25,7 @@ internal class TokenStatsPreferences(context: Context) {
         private val TIME_RANGE_END = longPreferencesKey("time_range_end")
         private val ACTIVITY_VIEW_MODE = stringPreferencesKey("activity_view_mode")
         private val IMPORTED_AT = longPreferencesKey("imported_at_ms")
+        private val SELECTED_MODELS = stringSetPreferencesKey("selected_models")
     }
 
     private val dataStore = context.applicationContext.tokenStatsDataStore
@@ -97,5 +99,12 @@ internal class TokenStatsPreferences(context: Context) {
             preferences[TIME_RANGE_START] = range.startMs
             preferences[TIME_RANGE_END] = range.endMs
         }
+    }
+
+    suspend fun loadSelectedModels(): Set<String> =
+        dataStore.data.first()[SELECTED_MODELS].orEmpty()
+
+    suspend fun saveSelectedModels(models: Set<String>) {
+        dataStore.edit { preferences -> preferences[SELECTED_MODELS] = models }
     }
 }

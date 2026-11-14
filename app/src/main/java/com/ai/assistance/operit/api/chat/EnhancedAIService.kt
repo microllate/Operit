@@ -107,7 +107,6 @@ class EnhancedAIService private constructor(private val context: Context) {
         @Volatile private var INSTANCE: EnhancedAIService? = null
 
         private val CHAT_INSTANCES = ConcurrentHashMap<String, EnhancedAIService>()
-
         private val FOREGROUND_REF_COUNT = AtomicInteger(0)
 
         /**
@@ -351,7 +350,8 @@ class EnhancedAIService private constructor(private val context: Context) {
         var chatModelIndexOverride: Int? = null,
         var memorySpaceIdOverride: String? = null,
         var stream: Boolean = true,
-        var disableWarning: Boolean = false
+        var disableWarning: Boolean = false,
+        var internalSummary: Boolean = false
     )
 
     // MultiServiceManager 管理不同功能的 AIService 实例
@@ -929,6 +929,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         val memorySpaceIdOverride = options.memorySpaceIdOverride
         val stream = options.stream
         val disableWarning = options.disableWarning
+        val internalSummary = options.internalSummary
         val onNonFatalError: suspend (error: String) -> Unit = { error ->
             options.onNonFatalError(error)
             callbacks?.onNonFatalError(error)
@@ -975,12 +976,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                 // 确保所有操作都在IO线程上执行
                 withContext(Dispatchers.IO) {
                     // 仅当会话首次启动时开启服务，并更新前台通知为“运行中”
-                    if (!isSubTask) {
+                    if (!isSubTask && !internalSummary) {
                         startAiService(characterName, avatarUri)
                     }
 
                     // Update state to show we're processing
-                    if (!isSubTask) {
+                    if (!isSubTask && !internalSummary) {
                     withContext(Dispatchers.Main) {
                         _inputProcessingState.value = InputProcessingState.Processing(context.getString(R.string.enhanced_processing_message))
                         }
@@ -1045,7 +1046,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     currentRequestCachedInputTokenCount = 0L
 
                     // 获取工具列表（如果启用Tool Call）
-                    val availableTools = getAvailableToolsForFunction(
+                    val availableTools = if (internalSummary) null else getAvailableToolsForFunction(
                         functionType = functionType,
                         chatId = chatId,
                         promptFunctionType = promptFunctionType,
@@ -1181,7 +1182,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                             responseStream.collect { content ->
                                 // 第一次收到响应，更新状态
                                 if (isFirstChunk) {
-                                    if (!isSubTask) {
+                                    if (!isSubTask && !internalSummary) {
                                     withContext(Dispatchers.Main) {
                                         _inputProcessingState.value =
                                                 InputProcessingState.Receiving(context.getString(R.string.enhanced_receiving_response))
@@ -1263,7 +1264,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     hadFatalError = true
                     // Handle any exceptions
                     AppLogger.e(TAG, "发送消息时发生错误: ${e.message}", e)
-                    if (!providerStreamCollectionStarted) {
+                    if (!providerStreamCollectionStarted && !internalSummary) {
                         withContext(Dispatchers.Main) {
                             _inputProcessingState.value =
                                     InputProcessingState.Error(message = context.getString(R.string.enhanced_error_with_message, e.message ?: ""))
@@ -1273,7 +1274,7 @@ class EnhancedAIService private constructor(private val context: Context) {
 
                 // 发生无法处理的错误时，也应停止服务，但用户取消除外
                 if (!isSocketClosed) {
-                    if (!isSubTask) stopAiService()
+                    if (!isSubTask && !internalSummary) stopAiService()
                     if (!providerStreamCollectionStarted) {
                         throw e
                     }
@@ -1281,7 +1282,7 @@ class EnhancedAIService private constructor(private val context: Context) {
             } finally {
                 try {
                     // 确保流处理完成后调用；如果本轮已被取消，则不能再继续跑完成逻辑。
-                    if (!hadFatalError && isExecutionContextActive(execContext)) {
+                    if (!internalSummary && !hadFatalError && isExecutionContextActive(execContext)) {
                         val collector = this
                         withContext(Dispatchers.IO) {
                             processStreamCompletion(
@@ -2586,12 +2587,16 @@ class EnhancedAIService private constructor(private val context: Context) {
             previousSummary: String?,
             summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig(),
             recordTokenUsage: Boolean = true,
+            chatModelConfigIdOverride: String? = null,
+            chatModelIndexOverride: Int? = null,
     ): String {
         return generateSummaryFromPromptTurns(
             messages.toPromptTurns(),
             previousSummary,
             summaryConfig,
             recordTokenUsage,
+            chatModelConfigIdOverride,
+            chatModelIndexOverride,
         )
     }
 
@@ -2600,14 +2605,18 @@ class EnhancedAIService private constructor(private val context: Context) {
             previousSummary: String?,
             summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig(),
             recordTokenUsage: Boolean = true,
+            chatModelConfigIdOverride: String? = null,
+            chatModelIndexOverride: Int? = null,
     ): String {
-        // 调用ConversationService中的方法
+        // 总结默认沿用当前聊天的模型配置和模型索引。
         return conversationService.generateSummaryFromPromptTurns(
             messages,
             previousSummary,
             multiServiceManager,
             summaryConfig,
             recordTokenUsage,
+            chatModelConfigIdOverride,
+            chatModelIndexOverride,
         )
     }
 

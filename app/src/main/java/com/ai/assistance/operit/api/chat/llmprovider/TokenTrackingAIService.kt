@@ -29,8 +29,49 @@ class TokenTrackingAIService(
     private val delegate: AIService,
     context: Context,
     private val configId: String,
+    private val blockDeepSeekPeakHours: Boolean = false,
 ) : AIService {
     private val repository = TokenUsageRepository.getInstance(context.applicationContext)
+
+    private fun isDeepSeekPeakHour(): Boolean {
+        val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Shanghai"))
+        val year = calendar.get(java.util.Calendar.YEAR)
+        val month = calendar.get(java.util.Calendar.MONTH) + 1
+        val dayOfMonth = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        val date = year * 10000 + month * 100 + dayOfMonth
+        val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+
+        // 国务院办公厅《2026年部分节假日安排的通知》（国办发明电〔2025〕7号）。
+        // 2026年放假日期优先于星期判断，调休补班日期按工作日处理。
+        val isWorkday = if (year == 2026) {
+            val holiday = date in 20260101..20260103 ||
+                date in 20260215..20260223 ||
+                date in 20260404..20260406 ||
+                date in 20260501..20260505 ||
+                date in 20260619..20260621 ||
+                date in 20260925..20260927 ||
+                date in 20261001..20261007
+            val makeupWorkday = date == 20260104 ||
+                date == 20260214 || date == 20260228 ||
+                date == 20260509 || date == 20260920 ||
+                date == 20261010
+            when {
+                holiday -> false
+                makeupWorkday -> true
+                else -> dayOfWeek != java.util.Calendar.SATURDAY &&
+                    dayOfWeek != java.util.Calendar.SUNDAY
+            }
+        } else {
+            // 尚未配置官方调休日历的年份退回星期判断，不猜测节假日日期。
+            dayOfWeek != java.util.Calendar.SATURDAY &&
+                dayOfWeek != java.util.Calendar.SUNDAY
+        }
+        if (!isWorkday) return false
+
+        val minutes = calendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 +
+            calendar.get(java.util.Calendar.MINUTE)
+        return minutes in 540 until 720 || minutes in 840 until 1080
+    }
     private val activeRequests = ConcurrentHashMap.newKeySet<RequestTracker>()
     private val cancellationLock = Any()
     private var cancellationEpoch = 0L
@@ -73,6 +114,9 @@ class TokenTrackingAIService(
         recordTokenUsage: Boolean,
         onUsageFinalized: (suspend (attempt: Int?) -> Unit)?,
     ): Stream<String> {
+        if (blockDeepSeekPeakHours && isDeepSeekPeakHour()) {
+            throw IllegalStateException("当前处于 DeepSeek 高峰时段（北京时间），已禁止发送 API 请求")
+        }
         val request = RequestTracker(configId = configId, providerModel = providerModel)
         val requestEpoch = synchronized(cancellationLock) { cancellationEpoch }
         val onStarted: () -> Unit = {
