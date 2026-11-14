@@ -450,7 +450,7 @@ object MemoryLibrary {
             try {
                 // 1. Create main problem memory
                 val mainProblemMemory = analysis.mainProblem?.let { mainProblem ->
-                    val existingMemory = memoryRepository.findMemoryByTitle(mainProblem.title)
+                    val existingMemory = memoryRepository.findMemoryByTitleInFolder(mainProblem.title, mainProblem.folderPath)
                     if (existingMemory != null) {
                         AppLogger.d(TAG, "1. 发现同名核心记忆，更新内容: '${mainProblem.title}'")
                         existingMemory.content = mainProblem.content
@@ -485,7 +485,7 @@ object MemoryLibrary {
                         // This entity is an alias for an existing one, as determined by the LLM.
                         AppLogger.d(TAG, "   -> LLM 识别此实体为 '${entity.aliasFor}' 的别名。")
                         // Try to find the canonical memory, first in the ones we just created, then in the DB.
-                        memory = createdMemories[entity.aliasFor] ?: memoryRepository.findMemoryByTitle(entity.aliasFor)
+                        memory = createdMemories[entity.aliasFor] ?: memoryRepository.findMemoryByTitleInFolder(entity.aliasFor, entity.folderPath)
 
                         if (memory != null) {
                             AppLogger.d(TAG, "   -> 复用已存在的记忆节点 (ID: ${memory.id}).")
