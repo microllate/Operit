@@ -3544,10 +3544,10 @@ private constructor(private val context: Context, private val aiToolHandler: AIT
         val sb = StringBuilder()
 
         sb.appendLine("Using package: ${toolPackage.name}")
-        sb.appendLine("Use Time: ${java.time.LocalDateTime.now()}")
+        //sb.appendLine("Use Time: ${java.time.LocalDateTime.now()}")
         sb.appendLine("Description: ${toolPackage.description.resolve(context)}")
         sb.appendLine()
-        sb.appendLine("Available tools in this package:")
+        //sb.appendLine("Available tools in this package:")
 
         toolPackage.tools.forEach { tool ->
             val toolLabel =

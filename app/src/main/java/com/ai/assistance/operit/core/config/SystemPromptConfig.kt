@@ -324,7 +324,7 @@ AVAILABLE_TOOLS_SECTION""".trimIndent()
           } catch (_: Exception) {
               packageTools.description.toString()
           }
-          packagesSection.appendLine("- $packageName : $resolvedDescription")
+          packagesSection.appendLine("$packageName : $resolvedDescription")
         }
       }
 
@@ -345,7 +345,7 @@ AVAILABLE_TOOLS_SECTION""".trimIndent()
       packagesSection.appendLine("No packages are currently available.")
     }
 
-    if (packageSystemVisible) {
+    if (packageSystemVisible && !useToolCallApi) {
       // Information about using packages
       packagesSection.appendLine()
       packagesSection.appendLine("To use a package:")

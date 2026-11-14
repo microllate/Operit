@@ -23,25 +23,18 @@ object FunctionalPrompts {
         ==========对话摘要==========
 
         【用户目标】
-        [记录用户明确提出的最终目标、原始要求、禁止事项和验收条件。除非用户明确修改目标，否则必须逐次继承，不得自行推断、扩展或改写目标。]
+        
 
         【任务过程】
-        [持续记录项目过程中出现的错误、复现条件、错误信息、尝试过的解决方案及结果。旧错误不得删除；状态可更新为未解决、已解决或待验证，并保留解决依据。]
+        
 
         【完成项目】
-        [持续记录已经实际执行并完成的工作、具体产出、文件路径、分支/提交信息及验证证据。不得把计划或尝试标记为完成；旧完成事项不得因摘要更新而丢失。]
+        
 
         【下一步策略】
-        [根据最新对话动态更新当前最合理的下一步行动、前置条件、阻塞项和验收标准。此部分只表达当前策略，不要求保留过时策略。]
+        
 
-        增量继承规则（优先级高于一般摘要压缩要求）：
-        - 用户目标：默认原样继承旧摘要。只有用户明确提出修改、增加或撤销目标时才更新，并记录变更内容；不得把模型建议当作用户目标。
-        - 错误记录：旧错误必须全部保留。新错误追加到历史记录；已有错误只有在新对话提供证据时才更新状态或补充排查结果，不能静默删除。
-        - 已完成项目：旧完成事项必须全部保留。新完成事项只有在对话或工具结果明确证明已执行时才能追加；可补充验证证据，不得将计划、建议或未验证操作写成已完成。
-        - 下一步策略：每次只选择一个最优先、可立即执行的动作；旧策略全部替换，不得把多个待办事项并列保留。必要时只补充一个验收条件。
-        - 可以合并完全重复的描述，但不得合并掉独立错误、独立成果或其证据；不得为缩短摘要而删除历史事实。
-        - 如果无法确认某项是否完成或某错误是否解决，保留原记录并标注“待验证”。
-        - 只保留继续任务必需的背景，删除闲聊和无关互动。
+        
 
         ============================
 
@@ -51,11 +44,8 @@ object FunctionalPrompts {
         3. 没有记录的板块写“无”；方括号内的说明只是规则，不得照抄。
 
         **内容要求：**
-        1. 语言专业、清晰、客观、精简，不写叙事性过程回顾。
-        2. 用户目标、错误历史、已完成项目分别压缩汇总为一个段落；多个事项用分号衔接，保留所有独立事实、关键结果和必要证据，不得逐条列举。
-        3. 下一步策略只采用最近聊天模型最后一条回复的最后一个自然段，作为一个段落；不得从历史待办或模型自己的推测中另行拼接。
-        4. 只保留恢复任务必需的信息；路径、提交号、参数和验证结果仅在后续执行确实需要时保留。
-        5. 不得在四个板块之外追加工具包介绍、执行日志、对话回顾或其他附录。
+        1. 语言通俗易懂、精简。
+        2. 必须记录重要的内容。
 
     """
 
@@ -67,39 +57,30 @@ object FunctionalPrompts {
         ==========Conversation Summary==========
 
         [User Goals]
-        [Record the user's explicit goals, original requirements, prohibitions, and acceptance criteria. Inherit them unchanged unless the user explicitly changes them.]
+        
 
-        [Errors During Model Execution]
-        [Keep a cumulative history of errors, reproduction conditions, messages, attempted fixes, and outcomes. Never drop old errors; update status only with evidence and distinguish unresolved, resolved, and unverified.]
+        [Task Progress]
+     
 
         [Completed Work]
-        [Keep all work actually executed and completed, its outputs, file paths, branch/commit details, and verification evidence. Never present plans or attempts as completed; never drop prior completed items.]
+       
 
         [Next-Step Strategy]
-        [Refresh the current next actions, prerequisites, blockers, and acceptance criteria based on the latest conversation. This section is the current strategy; obsolete strategies need not be retained.]
+        
 
-        Incremental inheritance rules (higher priority than ordinary summarization/compression):
-        - User goals: inherit the previous goals unchanged by default. Update only when the user explicitly changes, adds, or withdraws a goal. Never treat an assistant suggestion as a user goal.
-        - Errors: retain every previous error. Append new errors. Update an existing error's status or findings only when recent conversation provides evidence; never silently remove it.
-        - Completed work: retain every previous completed item. Add work only when execution is explicitly supported by conversation or tool evidence. Plans, suggestions, attempts, and unverified actions are not completed work.
-        - Next-step strategy: select exactly one highest-priority actionable item and replace all previous next steps. Add at most one acceptance condition; never list multiple parallel tasks.
-        - Merge only truly duplicate descriptions; do not merge away distinct errors, completed items, or evidence. Never delete historical facts merely to shorten the summary.
-        - If resolution or completion cannot be verified, preserve the record and mark it unverified.
-        - Omit small talk and irrelevant interaction.
+      
 
         =======================================
 
         **Formatting requirements:**
-        1. Keep the summary title, exactly four section headers, and closing separator.
-        2. After each section header, write exactly one concise prose paragraph. Never use numbered lists, bullets, itemized lines, or one line per fact.
-        3. Write “None” for an empty section. Do not copy bracketed placeholder descriptions.
+        1. Preserve the summary title, all four section headings, and the ending separator. Do not add or remove any sections.
+        2. Each section must contain exactly one paragraph after its heading. Do not use numbering, bullet points, lists, or line-by-line formatting.
+        3. If a section has no information to record, write "None". The instructions in square brackets are rules only and must not be copied into the summary.
+        
 
         **Content requirements:**
-        1. Use professional, clear, objective, concise factual language; do not narrate the conversation.
-        2. Condense User Goals, Errors, and Completed Work into one paragraph each. Connect distinct facts with semicolons while preserving every important fact and necessary evidence; do not enumerate them.
-        3. For Next-Step Strategy, use only the final paragraph of the latest chat-model response in the recent conversation, condensing it only if necessary. Do not invent or combine other next steps.
-        4. Include only information required to resume the task; retain paths, commit IDs, parameters, and verification details only when essential.
-        5. Do not append package descriptions, execution logs, conversation reviews, or content outside the four sections.
+        1. Use clear, simple, and concise language.
+        2. All important information must be recorded.
 
     """
 
@@ -113,7 +94,7 @@ object FunctionalPrompts {
         return if (useEnglish) {
             listOf(
                 "User Goals",
-                "Errors During Model Execution",
+                "Task Progress",
                 "Completed Work",
                 "Next-Step Strategy"
             )
@@ -283,7 +264,7 @@ object FunctionalPrompts {
                 请将本轮新证据增量合并到上一次摘要中，完整保留所有历史用户目标、错误记录和已完成项目。只更新本轮对话有证据支持的事实；仅重新生成下一步策略。
                 """.trimIndent()
             }
-    }
+    }//已经返回调用null，不起作用。
 
     /**
      * Prompt for the AI to perform a full-content merge as a fallback mechanism.
@@ -382,14 +363,14 @@ object FunctionalPrompts {
 
     const val SUMMARY_MARKER_CN = "==========对话摘要=========="
     const val SUMMARY_MARKER_EN = "==========Conversation Summary=========="
-    const val SUMMARY_SECTION_CORE_TASK_CN = "【核心任务状态】"
-    const val SUMMARY_SECTION_INTERACTION_CN = "【代码变更与执行记录】"
-    const val SUMMARY_SECTION_PROGRESS_CN = "【错误与排查过程】"
-    const val SUMMARY_SECTION_KEY_INFO_CN = "【下一步与接手说明】"
-    const val SUMMARY_SECTION_CORE_TASK_EN = "[Core Task Status]"
-    const val SUMMARY_SECTION_INTERACTION_EN = "[Code Changes & Execution Log]"
-    const val SUMMARY_SECTION_PROGRESS_EN = "[Errors & Troubleshooting]"
-    const val SUMMARY_SECTION_KEY_INFO_EN = "[Next Steps & Handoff]"
+    const val SUMMARY_SECTION_CORE_TASK_CN = "【用户目标】"
+    const val SUMMARY_SECTION_INTERACTION_CN = "【任务过程】"
+    const val SUMMARY_SECTION_PROGRESS_CN = "【完成项目】"
+    const val SUMMARY_SECTION_KEY_INFO_CN = "【下一步策略】"
+    const val SUMMARY_SECTION_CORE_TASK_EN = "[User Goals]"
+    const val SUMMARY_SECTION_INTERACTION_EN = "[Task Progress]"
+    const val SUMMARY_SECTION_PROGRESS_EN = "[Completed Work]"
+    const val SUMMARY_SECTION_KEY_INFO_EN = "[Next-Step Strategy]"
 
     fun summaryUserMessage(useEnglish: Boolean): String {
         return if (useEnglish) "Please summarize the conversation as instructed." else "请按照要求总结对话内容"

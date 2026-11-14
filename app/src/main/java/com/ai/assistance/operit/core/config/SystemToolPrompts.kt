@@ -138,7 +138,7 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "grep_context",
-                description = "基于意图/上下文理解搜索相关内容。支持两种模式：1) 目录模式：当path是目录时，找出最相关的文件。2) 文件模式：当path是文件时，找出该文件内最相关的代码段。使用语义相关性评分。",
+                description = "语义搜索文件或代码。path 为目录时返回相关文件，为文件时返回相关代码段，按相关度排序。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "path", type = "string", description = "目录或文件路径", required = true),
                     ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
@@ -149,15 +149,15 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "download_file",
-                description = "从互联网下载文件。有两种用法：1）提供 `url` + `destination` 直接下载。2）提供 `visit_key` +（`link_number` 或 `image_number`）+ `destination`，从上一次 `visit_web` 的 Results/Images 编号中按序号下载。",
+                description = "下载文件。使用 url 直接下载，或通过 visit_key + link_number/image_number 下载 visit_web 返回的链接或图片（编号从1开始）。",
                 parametersStructured = listOf(
-                    ToolParameterSchema(name = "url", type = "string", description = "可选, 文件URL。不传时可使用 visit_key + link_number/image_number 从上一次 visit_web 结果按编号下载", required = false),
-                    ToolParameterSchema(name = "visit_key", type = "string", description = "可选, 上一次 visit_web 返回的 visitKey", required = false),
-                    ToolParameterSchema(name = "link_number", type = "integer", description = "可选, 整数, Results 中的链接编号（从1开始，需要配合 visit_key）", required = false),
-                    ToolParameterSchema(name = "image_number", type = "integer", description = "可选, 整数, Images 中的图片编号（从1开始，需要配合 visit_key）", required = false),
+                    ToolParameterSchema(name = "url", type = "string", description = "文件下载URL", required = false),
+                    ToolParameterSchema(name = "visit_key", type = "string", description = "上次 visit_web 的访问标识", required = false),
+                    ToolParameterSchema(name = "link_number", type = "integer", description = "Results 链接编号，从1开始", required = false),
+                    ToolParameterSchema(name = "image_number", type = "integer", description = "Images 图片编号，从1开始", required = false),
                     ToolParameterSchema(name = "destination", type = "string", description = "保存路径", required = true),
-                    ToolParameterSchema(name = "environment", type = "string", description = "可选，同 read_file 的 environment", required = false),
-                    ToolParameterSchema(name = "headers", type = "string", description = "可选：HTTP请求头，JSON对象字符串，例如{\"Referer\":\"...\"}", required = false)
+                    ToolParameterSchema(name = "environment", type = "string", description = "执行环境，同 read_file", required = false),
+                    ToolParameterSchema(name = "headers", type = "string", description = "HTTP请求头，JSON对象字符串，例如{\"Referer\":\"...\"}", required = false)
                 )
             )
         )
@@ -190,13 +190,13 @@ object SystemToolPrompts {
                 name = "visit_web",
                 description = "访问网页并提取文本、链接及可选图片链接。传 url 访问新页面；传 visit_key + link_number 跟进链接（编号从1开始）。设置 include_image_links=true 获取图片列表；下载图片使用 download_file 的 visit_key + image_number。仅支持只读网页提取，不支持登录、点击或表单操作，也不适合获取原始 HTTP/API 响应。",
                 parametersStructured = listOf(
-                    ToolParameterSchema(name = "url", type = "string", description = "可选, 网页URL", required = false),
-                    ToolParameterSchema(name = "visit_key", type = "string", description = "可选, 字符串, 上一次 visit_web 返回的 visitKey", required = false),
-                    ToolParameterSchema(name = "link_number", type = "integer", description = "可选, 整数, 要继续访问的链接编号（从1开始，对应 Results 里的 `[n]`；范围 1..links.length）", required = false),
-                    ToolParameterSchema(name = "include_image_links", type = "boolean", description = "可选, boolean, 为 true 时在结果中额外包含提取到的图片链接列表（imageLinks）", required = false),
-                    ToolParameterSchema(name = "headers", type = "string", description = "可选：HTTP请求头，JSON对象字符串，例如{\"Referer\":\"...\"}", required = false),
-                    ToolParameterSchema(name = "user_agent_preset", type = "string", description = "可选：UA预设，快速选择：desktop/android", required = false),
-                    ToolParameterSchema(name = "user_agent", type = "string", description = "可选：完整自定义UA（优先级高于预设）", required = false)
+                    ToolParameterSchema(name = "url", type = "string", description = "网页URL", required = false),
+                    ToolParameterSchema(name = "visit_key", type = "string", description = "上次 visit_web 的访问标识", required = false),
+                    ToolParameterSchema(name = "link_number", type = "integer", description = "Results 链接编号，从1开始", required = false),
+                    ToolParameterSchema(name = "include_image_links", type = "boolean", description = "是否返回图片链接", required = false),
+                    ToolParameterSchema(name = "headers", type = "string", description = "HTTP请求头，JSON对象字符串，例如{\"Referer\":\"...\"}", required = false),
+                    ToolParameterSchema(name = "user_agent_preset", type = "string", description = "UA预设：desktop/android", required = false),
+                    ToolParameterSchema(name = "user_agent", type = "string", description = "自定义UA，优先于预设", required = false)
                 )
             )
         )
@@ -241,24 +241,24 @@ object SystemToolPrompts {
                 name = "query_memory",
                 description = "从记忆库中搜索相关记忆和文档分块。",
                 parametersStructured = listOf(
-                    ToolParameterSchema(name = "query", type = "string", description = "string, 搜索查询。可以传自然语言问题、空格分隔的短语，或使用 `|` 分隔多个关键词，例如 `network error timeout` 或 `network|error|timeout`。在单个关键词内部，`*` 可作为模糊通配占位符，例如 `error*timeout`；仅传 `*` 时返回所有记忆", required = true),
-                    ToolParameterSchema(name = "folder_path", type = "string", description = "可选, string, 要搜索的特定文件夹路径", required = false),
-                    ToolParameterSchema(name = "start_time", type = "string", description = "可选, 本地时间字符串，格式支持 `YYYY-MM-DD` 或 `YYYY-MM-DD HH:mm`。按创建时间过滤 createdAt >= start_time", required = false),
-                    ToolParameterSchema(name = "end_time", type = "string", description = "可选, 本地时间字符串，格式支持 `YYYY-MM-DD` 或 `YYYY-MM-DD HH:mm`。按创建时间过滤 createdAt <= end_time", required = false),
-                    ToolParameterSchema(name = "snapshot_id", type = "string", description = "可选, 字符串。不传或传空时会自动创建新快照；传入任意非空 snapshot_id 时会直接使用这个 id，不存在则按该 id 创建。后续串行或并发查询复用同一个 snapshot_id 时，会排除该快照里已经返回过的记忆", required = false),
-                    ToolParameterSchema(name = "threshold", type = "number", description = "可选, number >= 0。返回记忆所需的最小相关度分数。query_memory 默认值为 0", required = false, default = "0"),
-                    ToolParameterSchema(name = "limit", type = "integer", description = "可选, int >= 1, 返回结果的最大数量. 当 > 20 时，只返回标题和截断内容", required = false, default = "20")
+                    ToolParameterSchema(name = "query", type = "string", description = "搜索内容；支持自然语言、空格分词、| 分隔关键词、* 模糊匹配（如 error*timeout）；单独 * 返回全部记忆", required = true),
+                    ToolParameterSchema(name = "folder_path", type = "string", description = "限定搜索文件夹路径", required = false),
+                    ToolParameterSchema(name = "start_time", type = "string", description = "创建时间下限，格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm", required = false),
+                    ToolParameterSchema(name = "end_time", type = "string", description = "创建时间上限，格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm", required = false),
+                    ToolParameterSchema(name = "snapshot_id", type = "string", description = "快照ID；留空新建，非空时使用或创建该ID；复用可排除已返回的记忆", required = false),
+                    ToolParameterSchema(name = "threshold", type = "number", description = "最低相关度，≥0", required = false, default = "0"),
+                    ToolParameterSchema(name = "limit", type = "integer", description = "最大返回条数，≥1；超过20条仅返回标题和截断内容", required = false, default = "20")
                 )
             ),
             ToolPrompt(
                 name = "get_memory_by_title",
                 description = "通过精确标题检索记忆，可读取完整内容或文档分块。",
                 parametersStructured = listOf(
-                    ToolParameterSchema(name = "title", type = "string", description = "必需, 字符串, 记忆的精确标题", required = true),
-                    ToolParameterSchema(name = "chunk_index", type = "integer", description = "可选, 整数, 读取特定编号的分块, 例如3表示第3块", required = false),
-                    ToolParameterSchema(name = "chunk_range", type = "string", description = "可选, 字符串, 读取分块范围，格式为\"起始-结束\"，例如\"3-7\"表示第3到第7块", required = false),
-                    ToolParameterSchema(name = "query", type = "string", description = "可选, 字符串, 在文档内部搜索匹配分块。可以传自然语言问题、空格分隔的短语，或使用 `|` 分隔多个关键词，例如 `error log timeout` 或 `error|timeout|retry`。在单个关键词内部，`*` 可作为模糊通配占位符，例如 `error*timeout`", required = false),
-                    ToolParameterSchema(name = "limit", type = "integer", description = "可选, int >= 1, 使用 query 时最多返回多少个文档分块，默认 20", required = false, default = "20")
+                    ToolParameterSchema(name = "title", type = "string", description = "记忆的精确标题", required = true),
+                    ToolParameterSchema(name = "chunk_index", type = "integer", description = "读取指定分块编号", required = false),
+                    ToolParameterSchema(name = "chunk_range", type = "string", description = "分块范围，如 3-7", required = false),
+                    ToolParameterSchema(name = "query", type = "string", description = "文档内搜索；支持自然语言、空格分词、| 分隔关键词、* 模糊匹配", required = false),
+                    ToolParameterSchema(name = "limit", type = "integer", description = "搜索时最多返回分块数，≥1", required = false, default = "20")
                 )
             )
         ),
