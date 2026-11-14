@@ -107,6 +107,14 @@ class EnhancedAIService private constructor(private val context: Context) {
         @Volatile private var INSTANCE: EnhancedAIService? = null
 
         private val CHAT_INSTANCES = ConcurrentHashMap<String, EnhancedAIService>()
+        // Exact provider request prefix from the most recent CHAT turn.
+        private data class ChatRequestSnapshot(
+            val turns: List<PromptTurn>,
+            val parameters: List<ModelParameter<*>>,
+            val service: AIService
+        )
+        private val lastChatRequests = ConcurrentHashMap<String, ChatRequestSnapshot>()
+
 
         private val FOREGROUND_REF_COUNT = AtomicInteger(0)
 
@@ -135,6 +143,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         }
 
         fun releaseChatInstance(chatId: String) {
+            lastChatRequests.remove(chatId)
             val instance = CHAT_INSTANCES.remove(chatId) ?: return
             runCatching {
                 instance.cancelConversation()
@@ -1108,6 +1117,13 @@ class EnhancedAIService private constructor(private val context: Context) {
                         }
                     execContext.conversationHistory.clear()
                     execContext.conversationHistory.addAll(requestHistory)
+                    if (functionType == FunctionType.CHAT && !chatId.isNullOrBlank() && !isSubTask) {
+                        lastChatRequests[chatId] = ChatRequestSnapshot(
+                            turns = requestHistory.toList(),
+                            parameters = modelParameters.toList(),
+                            service = serviceForFunction
+                        )
+                    }
                     estimatePreparedRequestWindow(
                         serviceForFunction = serviceForFunction,
                         preparedHistory = requestHistory,
@@ -2600,19 +2616,16 @@ class EnhancedAIService private constructor(private val context: Context) {
     }
 
     /**
-     * Send an invisible user summary instruction through the active CHAT model.
-     * The request is prepared from persisted conversation turns, not an in-memory cache.
-     * Tool calls are not exposed or executed, and the generated text is not added to chat.
+     * Append a hidden summary user turn to the exact last CHAT request prefix.
+     * No conversation/system prompt preparation is performed here.
      */
     suspend fun generateSummaryInChatContext(
         chatId: String,
-        history: List<PromptTurn>,
-        summaryConfig: ConversationSummaryConfig,
-        workspacePath: String? = null,
-        workspaceEnv: String? = null,
-        chatModelConfigIdOverride: String? = null,
-        chatModelIndexOverride: Int? = null
+        finalAssistantContent: String,
+        summaryConfig: ConversationSummaryConfig
     ): String {
+        val snapshot = lastChatRequests[chatId]
+            ?: error("No previous CHAT request available for this conversation; send a chat message first")
         val useEnglish = !LocaleUtils.usesChineseContent(context)
         val instruction = buildString {
             appendLine(com.ai.assistance.operit.core.config.FunctionalPrompts.buildSummarySystemPrompt(
@@ -2625,33 +2638,16 @@ class EnhancedAIService private constructor(private val context: Context) {
             appendLine()
             append("Only produce the requested summary sections. Do not call tools.")
         }
-        val modelConfig = getModelConfigForFunction(
-            FunctionType.CHAT, chatModelConfigIdOverride, chatModelIndexOverride
-        )
-        val prepared = prepareConversationHistory(
-            chatHistory = history,
-            processedInput = instruction,
-            chatId = chatId,
-            workspacePath = workspacePath,
-            workspaceEnv = workspaceEnv,
-            promptFunctionType = PromptFunctionType.CHAT,
-            roleCardId = null,
-            enableGroupOrchestrationHint = false,
-            isSubTask = false,
-            functionType = FunctionType.CHAT,
-            modelConfig = modelConfig
-        ).appendUserTurnIfMissing(instruction)
-        val service = getAIServiceForFunction(
-            FunctionType.CHAT, chatModelConfigIdOverride, chatModelIndexOverride
-        )
-        val parameters = getModelParametersForFunction(
-            FunctionType.CHAT, chatModelConfigIdOverride, chatModelIndexOverride
-        )
+        val turns = snapshot.turns.toMutableList()
+        if (finalAssistantContent.isNotBlank()) {
+            turns.add(PromptTurn(kind = PromptTurnKind.ASSISTANT, content = finalAssistantContent))
+        }
+        turns.add(PromptTurn(kind = PromptTurnKind.USER, content = instruction))
         val result = StringBuilder()
-        service.sendMessage(
+        snapshot.service.sendMessage(
             context = context,
-            chatHistory = prepared,
-            modelParameters = parameters,
+            chatHistory = turns,
+            modelParameters = snapshot.parameters,
             availableTools = null,
             recordTokenUsage = true
         ).collect { result.append(it) }
