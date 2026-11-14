@@ -678,41 +678,6 @@ class MessageProcessingDelegate(
         _currentTurnToolInvocationCountByChatId.value = updated
     }
 
-    /**
-     * Internal summary turn: enter through the message-processing sender, using the same
-     * AIMessageManager CHAT request path without persisting or displaying either turn.
-     */
-    suspend fun sendHiddenSummaryMessage(
-        chatId: String,
-        instruction: String,
-        workspacePath: String?,
-        chatModelConfigIdOverride: String?,
-        chatModelIndexOverride: Int?
-    ): String {
-        check(!isChatLoading(chatId)) { "Cannot summarize while chat is sending" }
-        val service = getEnhancedAiService() ?: error("Chat AI service unavailable")
-        val history = getRuntimeChatHistory(chatId)
-        val output = StringBuilder()
-        AIMessageManager.sendMessage(
-            enhancedAiService = service,
-            chatId = chatId,
-            messageContent = instruction,
-            chatHistory = history,
-            workspacePath = workspacePath,
-            promptFunctionType = PromptFunctionType.CHAT,
-            enableThinking = false,
-            enableMemoryAutoUpdate = false,
-            maxTokens = Int.MAX_VALUE,
-            tokenUsageThreshold = Double.MAX_VALUE,
-            onNonFatalError = {},
-            roleCardId = "",
-            chatModelConfigIdOverride = chatModelConfigIdOverride,
-            chatModelIndexOverride = chatModelIndexOverride,
-            internalSummary = true
-        ).collect { output.append(it) }
-        return output.toString()
-    }
-
     fun sendUserMessage(
             attachments: List<AttachmentInfo> = emptyList(),
             chatId: String,
@@ -739,7 +704,8 @@ class MessageProcessingDelegate(
             suppressUserMessageInHistory: Boolean = false,
             isGroupOrchestrationTurn: Boolean = false,
             groupParticipantNamesText: String? = null,
-            turnOptions: ChatTurnOptions = ChatTurnOptions()
+            turnOptions: ChatTurnOptions = ChatTurnOptions(),
+            hiddenSummaryResult: CompletableDeferred<String>? = null
     ) {
         val rawMessageText = messageTextOverride ?: _userMessage.value.text
         // 群组编排模式下，允许空消息（后续成员不需要用户消息）
@@ -752,6 +718,7 @@ class MessageProcessingDelegate(
         }
         val chatRuntime = runtimeFor(chatId)
         if (chatRuntime.isLoading.value) {
+            hiddenSummaryResult?.completeExceptionally(IllegalStateException("Chat is busy"))
             AppLogger.w(
                 TAG,
                 "sendUserMessage忽略: chat正在处理中, chatId=$chatId, roleCardId=$roleCardId, override=${!messageTextOverride.isNullOrBlank()}, suppressUserMessageInHistory=$suppressUserMessageInHistory"
@@ -778,6 +745,37 @@ class MessageProcessingDelegate(
         val sendJob =
             coroutineScope.launch(Dispatchers.IO) {
             val sendUserMessageStartTime = messageTimingNow()
+            if (hiddenSummaryResult != null) {
+                try {
+                    val service = getEnhancedAiService() ?: error("Chat AI service unavailable")
+                    val output = StringBuilder()
+                    AIMessageManager.sendMessage(
+                        enhancedAiService = service,
+                        chatId = chatId,
+                        messageContent = rawMessageText,
+                        chatHistory = getRuntimeChatHistory(chatId),
+                        workspacePath = workspacePath,
+                        promptFunctionType = promptFunctionType,
+                        enableThinking = enableThinking,
+                        enableMemoryAutoUpdate = false,
+                        maxTokens = maxTokens,
+                        tokenUsageThreshold = Double.MAX_VALUE,
+                        onNonFatalError = {},
+                        roleCardId = roleCardId,
+                        chatModelConfigIdOverride = chatModelConfigIdOverride,
+                        chatModelIndexOverride = chatModelIndexOverride,
+                        internalSummary = true
+                    ).collect { output.append(it) }
+                    hiddenSummaryResult.complete(output.toString())
+                } catch (e: Throwable) {
+                    hiddenSummaryResult.completeExceptionally(e)
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                } finally {
+                    cleanupRuntimeAfterSend(chatId, chatRuntime, turnId)
+                    setChatInputProcessingState(chatId, EnhancedInputProcessingState.Idle)
+                }
+                return@launch
+            }
             val effectivePersistTurn = turnOptions.persistTurn
             val effectiveHideUserMessage = effectivePersistTurn && turnOptions.hideUserMessage
             // 检查这是否是聊天中的第一条用户消息（忽略AI的开场白）
