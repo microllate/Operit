@@ -1791,6 +1791,20 @@ class MessageCoordinationDelegate(
             try {
                 val service = getEnhancedAiService() ?: return@launch
 
+                // The triggering chat turn must release its runtime before the hidden
+                // summary can enter the same send pipeline. Otherwise sendUserMessage
+                // rejects the summary as "Chat is busy".
+                val previousTurnFinished = withTimeoutOrNull(30_000L) {
+                    while (messageProcessingDelegate.isChatLoading(originalChatId)) {
+                        delay(100L)
+                    }
+                    true
+                } == true
+                if (!previousTurnFinished) {
+                    AppLogger.w(TAG, "Async summary aborted: chat turn did not become idle, chatId=$originalChatId")
+                    return@launch
+                }
+
                 // 检查是否是群聊
                 val currentChat = chatHistoryDelegate.chatHistories.value.firstOrNull { it.id == originalChatId }
                 val isGroupChat = currentChat?.characterGroupId != null
@@ -1859,7 +1873,9 @@ class MessageCoordinationDelegate(
                 // 当异步总结结束时，主动恢复到 Idle
                 val currentState =
                     messageProcessingDelegate.inputProcessingStateByChatId.value[originalChatId]
-                if (currentState is InputProcessingState.Summarizing) {
+                if (!messageProcessingDelegate.isChatLoading(originalChatId) &&
+                    currentState !is InputProcessingState.Idle
+                ) {
                     messageProcessingDelegate.setInputProcessingStateForChat(
                         originalChatId,
                         InputProcessingState.Idle
