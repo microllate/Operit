@@ -692,7 +692,8 @@ object AIMessageManager {
         chatModelIndexOverride: Int? = null,
         workspacePath: String? = null,
         workspaceEnv: String? = null,
-        chatId: String? = null
+        chatId: String? = null,
+        sendHiddenSummary: suspend (String) -> String
     ): ChatMessage? {
         val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
 
@@ -1066,34 +1067,7 @@ object AIMessageManager {
                 appendLine()
                 append("Only produce the requested summary sections. Do not call tools.")
             }
-            val chatTurns = messages
-                .filter { it.sender == "user" || it.sender == "ai" || it.sender == "summary" }
-                .map { item ->
-                    PromptTurn(
-                        kind = when (item.sender) {
-                            "user" -> PromptTurnKind.USER
-                            "summary" -> PromptTurnKind.SUMMARY
-                            else -> PromptTurnKind.ASSISTANT
-                        },
-                        content = item.content
-                    )
-                }
-            val summaryBuffer = StringBuilder()
-            enhancedAiService.sendMessage(
-                EnhancedAIService.SendMessageOptions(
-                    message = instruction,
-                    chatId = summaryChatId,
-                    chatHistory = chatTurns,
-                    workspacePath = workspacePath,
-                    workspaceEnv = workspaceEnv,
-                    chatModelConfigIdOverride = chatModelConfigIdOverride,
-                    chatModelIndexOverride = chatModelIndexOverride,
-                    functionType = com.ai.assistance.operit.data.model.FunctionType.CHAT,
-                    promptFunctionType = PromptFunctionType.CHAT,
-                    internalSummary = true
-                )
-            ).collect { summaryBuffer.append(it) }
-            val summary = ChatUtils.removeThinkingContent(summaryBuffer.toString().trim())
+            val summary = ChatUtils.removeThinkingContent(sendHiddenSummary(instruction).trim())
             AppLogger.d(TAG, "AI生成总结完成: ${summary.take(50)}...")
 
             if (summary.isBlank()) {
