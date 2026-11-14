@@ -1724,7 +1724,12 @@ class MessageCoordinationDelegate(
             currentChatId?.let { affectedChatIds.add(it) }
         }
 
-        // 先真正取消 SUMMARY 模型请求，再取消协程/清理 UI，避免进度继续推进。
+        // Hidden summaries run through the CHAT send pipeline, not the SUMMARY
+        // provider stream. Cancel that runtime too, otherwise isLoading stays true
+        // and the stop button cannot unlock the composer.
+        affectedChatIds.forEach { chatId ->
+            messageProcessingDelegate.cancelHiddenSummaryTurn(chatId)
+        }
         cancelSummaryStreamingInternal()
 
         jobsToCancel.forEach { job -> job.cancel() }
