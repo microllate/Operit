@@ -151,6 +151,9 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
             }
     }
 
+    private fun currentWorkspacePath(): String? =
+        currentWorkspacePath()
+
     private fun workspaceMemoryFolder(workspacePath: String): String {
         val name = workspacePath.substringAfterLast('/').substringAfterLast('\\')
             .ifBlank { "workspace" }.replace("/", "_").replace("\\", "_")
@@ -380,8 +383,7 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         AppLogger.d(TAG, "Getting memory by title: $title, chunk_index: $chunkIndexParam, chunk_range: $chunkRangeParam, query: $queryParam, limit: $chunkLimitParam")
 
         return try {
-            val workspacePath = ToolExecutionManager.currentToolRuntimeContext()
-                ?.workspacePath?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
+            val workspacePath = currentWorkspacePath()
             val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
             val isSummaryAlias = title.trim() == "摘要" || title.trim() == "历史摘要"
             if (isSummaryAlias) {
