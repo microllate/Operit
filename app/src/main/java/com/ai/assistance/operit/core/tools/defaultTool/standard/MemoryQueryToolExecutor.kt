@@ -151,6 +151,15 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
             }
     }
 
+    private fun workspaceMemoryFolder(workspacePath: String): String {
+        val name = workspacePath.substringAfterLast('/').substringAfterLast('\\')
+            .ifBlank { "workspace" }.replace("/", "_").replace("\\", "_")
+        val key = MessageDigest.getInstance("SHA-256")
+            .digest(workspacePath.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }.take(12)
+        return "工作区/$name-$key"
+    }
+
     private fun parseTimeBoundary(value: String?, isEnd: Boolean): Long? {
         val trimmed = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val timezone = TimeZone.getDefault()
@@ -216,6 +225,9 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         val memoryRepository = getMemoryRepository(profileId)
         val query = tool.parameters.find { it.name == "query" }?.value ?: ""
         val folderPath = tool.parameters.find { it.name == "folder_path" }?.value
+        val workspacePath = tool.parameters.find { it.name == "workspace_path" }
+            ?.value?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
+        val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
         val settings = getMemorySearchSettingsPreferences(profileId).load()
         val limitParam = tool.parameters.find { it.name == "limit" }?.value
         val limit = limitParam?.toIntOrNull()
@@ -309,10 +321,18 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
                 createdAtEndMs = endTimeMs
             )
 
+            // Never return summaries belonging to another workspace.
+            val scopedResults = results.filter { memory ->
+                val memoryFolder = MemoryRepository.normalizeFolderPath(memory.folderPath).orEmpty()
+                if (!memoryFolder.startsWith("工作区/")) true
+                else workspaceFolder != null &&
+                    (memoryFolder == workspaceFolder || memoryFolder.startsWith("$workspaceFolder/"))
+            }
+
             // Keep de-duplication stable even when multiple calls share the same snapshot in parallel.
             val (excludedBySnapshotCount, returnedMemories) = synchronized(snapshotState.lock) {
-                val excludedCount = results.count { it.id in snapshotState.seenMemoryIds }
-                val unseenResults = results.filterNot { it.id in snapshotState.seenMemoryIds }
+                val excludedCount = scopedResults.count { it.id in snapshotState.seenMemoryIds }
+                val unseenResults = scopedResults.filterNot { it.id in snapshotState.seenMemoryIds }
                 val selectedResults = unseenResults.take(validLimit)
                 if (selectedResults.isNotEmpty()) {
                     snapshotState.seenMemoryIds.addAll(selectedResults.map { it.id })
