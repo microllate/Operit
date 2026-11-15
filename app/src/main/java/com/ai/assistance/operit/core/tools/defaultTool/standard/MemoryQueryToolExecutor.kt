@@ -152,7 +152,8 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
     }
 
     private fun currentWorkspacePath(): String? =
-        currentWorkspacePath()
+        ToolExecutionManager.currentToolRuntimeContext()
+            ?.workspacePath?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
 
     private fun workspaceMemoryFolder(workspacePath: String): String {
         val name = workspacePath.substringAfterLast('/').substringAfterLast('\\')
@@ -228,8 +229,7 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         val memoryRepository = getMemoryRepository(profileId)
         val query = tool.parameters.find { it.name == "query" }?.value ?: ""
         val folderPath = tool.parameters.find { it.name == "folder_path" }?.value
-        val workspacePath = ToolExecutionManager.currentToolRuntimeContext()
-            ?.workspacePath?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
+        val workspacePath = currentWorkspacePath()
         val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
         val settings = getMemorySearchSettingsPreferences(profileId).load()
         val limitParam = tool.parameters.find { it.name == "limit" }?.value
