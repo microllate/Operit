@@ -300,7 +300,7 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
 
         // limit 无上限，但至少为 1
         val validLimit = if (finalLimit < 1) 1 else finalLimit
-        val (snapshotState, snapshotCreated) = getOrCreateQuerySnapshot(profileId, normalizedSnapshotId)
+        val (snapshotState, snapshotCreated) = getOrCreateQuerySnapshot("$profileId:${workspaceFolder ?: "global"}", normalizedSnapshotId)
 
         AppLogger.d(
             TAG,
@@ -406,12 +406,13 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
                     error = "No history summaries found in the current workspace"
                 )
             }
-            val memory = memoryRepository.findMemoryByTitle(title)?.takeIf { candidate ->
-                val folder = MemoryRepository.normalizeFolderPath(candidate.folderPath).orEmpty()
-                !folder.startsWith("工作区/") ||
-                    (workspaceFolder != null &&
-                        (folder == workspaceFolder || folder.startsWith("$workspaceFolder/")))
-            }
+            val memory = memoryRepository.findMemoriesByTitle(title)
+                .firstOrNull { candidate ->
+                    val folder = MemoryRepository.normalizeFolderPath(candidate.folderPath).orEmpty()
+                    !folder.startsWith("工作区/") ||
+                        (workspaceFolder != null &&
+                            (folder == workspaceFolder || folder.startsWith("$workspaceFolder/")))
+                }
             if (memory == null) {
                 return ToolResult(
                     toolName = tool.name,
