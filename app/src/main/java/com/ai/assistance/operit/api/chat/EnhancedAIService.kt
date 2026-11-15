@@ -2307,19 +2307,12 @@ class EnhancedAIService private constructor(private val context: Context) {
             publishEstimate = true
         )
 
-        // After a tool call, check if token usage exceeds the threshold
-        if (maxTokens > 0) {
+        // 普通总结阈值只用于任务结束后的总结判断，不得在工具循环中打断任务。
+        // ChatServiceCore.onTurnComplete 会在完整回合结束后触发自动总结。
+        if (maxTokens > 0 && tokenUsageThreshold > 0.0) {
             val usageRatio = currentTokens.toDouble() / maxTokens.toDouble()
-
             if (usageRatio >= tokenUsageThreshold) {
-                AppLogger.w(TAG, "Token usage ($usageRatio) exceeds threshold ($tokenUsageThreshold) after tool call. Triggering summary.")
-                onTokenLimitExceeded?.invoke()
-                context.isConversationActive.set(false)
-                if (!isSubTask) {
-                    stopAiService(characterName, avatarUri)
-                }
-                // 关键修复：在触发总结后，直接返回，因为后续流程将由回调处理
-                return
+                AppLogger.d(TAG, "Token usage ($usageRatio) reached summary threshold ($tokenUsageThreshold); defer summary until turn completion.")
             }
         }
 
