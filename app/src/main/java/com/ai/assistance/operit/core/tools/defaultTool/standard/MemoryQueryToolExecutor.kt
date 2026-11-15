@@ -231,6 +231,12 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         val folderPath = tool.parameters.find { it.name == "folder_path" }?.value
         val workspacePath = currentWorkspacePath()
         val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
+            ?: return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Current chat workspace is unavailable; query_memory only searches the current workspace."
+            )
         val settings = getMemorySearchSettingsPreferences(profileId).load()
         val limitParam = tool.parameters.find { it.name == "limit" }?.value
         val limit = limitParam?.toIntOrNull()
@@ -324,12 +330,10 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
                 createdAtEndMs = endTimeMs
             )
 
-            // Never return summaries belonging to another workspace.
+            // Strictly return memories belonging to this chat workspace; exclude global and other workspaces.
             val scopedResults = results.filter { memory ->
                 val memoryFolder = MemoryRepository.normalizeFolderPath(memory.folderPath).orEmpty()
-                if (!memoryFolder.startsWith("工作区/")) true
-                else workspaceFolder != null &&
-                    (memoryFolder == workspaceFolder || memoryFolder.startsWith("$workspaceFolder/"))
+                memoryFolder == workspaceFolder || memoryFolder.startsWith("$workspaceFolder/")
             }
 
             // Keep de-duplication stable even when multiple calls share the same snapshot in parallel.
