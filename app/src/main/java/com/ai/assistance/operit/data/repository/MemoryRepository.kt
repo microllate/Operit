@@ -713,6 +713,14 @@ class MemoryRepository(private val context: Context, profileId: String) {
                 memoryById.putIfAbsent(memory.id, scopedMemory)
                 hitTokensByMemoryId.getOrPut(memory.id) { linkedSetOf() }.add(fragment)
             }
+
+            // Include ordinary memory body matches, even when the title does not match.
+            scopedMemories.forEach { memory ->
+                if (textMatchesLexicalToken(memory.content, fragment)) {
+                    memoryById.putIfAbsent(memory.id, memory)
+                    hitTokensByMemoryId.getOrPut(memory.id) { linkedSetOf() }.add(fragment)
+                }
+            }
         }
 
         return memoryById.values
@@ -1347,7 +1355,7 @@ class MemoryRepository(private val context: Context, profileId: String) {
         }
 
 
-        // 1. Keyword-based search (DB title contains any fragment from the query)
+        // 1. Keyword-based search (title or memory content contains query fragments)
         val keywordResults = queryTitleCandidatesByFragments(
             fragments = keywordTokensForLexicalMatch,
             scopedMemories = memoriesToSearch
@@ -1356,7 +1364,7 @@ class MemoryRepository(private val context: Context, profileId: String) {
         if (keywordResults.isNotEmpty()) {
             com.ai.assistance.operit.util.AppLogger.d(
                 "MemoryRepo",
-                "Keyword search (title fragments): ${keywordResults.size} matches"
+                "Keyword search (title/content fragments): ${keywordResults.size} matches"
             )
         }
         if (effectiveKeywordWeight > 0.0) {
