@@ -252,7 +252,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "get_memory_by_title",
-                description = "通过精确标题检索记忆；恢复历史聊天上下文时优先使用 title=\"摘要\" 或 "历史摘要"，返回当前聊天工作区最近5条摘要，工作区由程序自动确定。",
+                description = "通过精确标题检索记忆；恢复历史聊天上下文时优先使用 title=\"摘要\" 或 \"历史摘要\"，返回当前聊天工作区最近5条摘要，工作区由程序自动确定。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "title", type = "string", description = "记忆的精确标题", required = true),
                     ToolParameterSchema(name = "chunk_index", type = "integer", description = "读取指定分块编号", required = false),
