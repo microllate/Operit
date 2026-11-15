@@ -208,10 +208,10 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "query_memory",
-                description = "Searches the memory library for relevant memories and document chunks.",
+                description = "Searches keywords only within the current chat workspace (automatically scoped; never returns global or other-workspace memories). For restoring conversation context, FIRST call get_memory_by_title with title=摘要 or 历史摘要 to retrieve the latest five workspace summaries. Use query_memory only for specific facts or task keywords.",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "query", type = "string", description = "string, the search query. You can pass a natural-language question, a space-separated phrase, or use `|` to separate multiple keywords, for example `network error timeout` or `network|error|timeout`. Inside a keyword, `*` acts as a fuzzy wildcard placeholder, for example `error*timeout`; use only `*` to return all memories", required = true),
-                    ToolParameterSchema(name = "folder_path", type = "string", description = "optional, string, the specific folder path to search within", required = false),
+                    ToolParameterSchema(name = "folder_path", type = "string", description = "optional, string, further restrict results to a folder inside the current workspace; omit for automatic workspace scope", required = false),
                     ToolParameterSchema(name = "start_time", type = "string", description = "optional, local-time string in `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format. Filters memories by createdAt >= start_time", required = false),
                     ToolParameterSchema(name = "end_time", type = "string", description = "optional, local-time string in `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format. Filters memories by createdAt <= end_time", required = false),
                     ToolParameterSchema(name = "snapshot_id", type = "string", description = "optional, string. Omit or pass empty to create a new snapshot automatically. If you pass a non-empty snapshot_id, that exact id will be used; if it does not exist yet, it will be created and can be reused across follow-up or parallel queries to exclude memories already returned by that snapshot", required = false),
@@ -221,7 +221,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "get_memory_by_title",
-                description = "Retrieves a memory by exact title; 摘要 and 历史摘要 return the five newest summaries from the current chat workspace. Workspace is resolved automatically.",
+                description = "Retrieves a memory by exact title. For recovering prior conversation context, use title=摘要 or 历史摘要 FIRST; this returns the five newest summaries from the current chat workspace. Workspace is resolved automatically.",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "title", type = "string", description = "required, string, the exact title of the memory", required = true),
                     ToolParameterSchema(name = "chunk_index", type = "integer", description = "optional, int, read a specific chunk by its number, e.g., 3 for the 3rd chunk", required = false),
@@ -239,10 +239,10 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "query_memory",
-                description = "按关键词搜索记忆和文档分块；工作区记忆仅返回当前聊天工作区的内容，普通全局记忆保持可检索。",
+                description = "仅搜索并返回当前聊天工作区的记忆，自动隔离其他工作区及全局记忆。恢复历史聊天上下文时必须优先调用 get_memory_by_title(title="摘要")，获取当前工作区最近5条摘要；仅在查找具体任务信息时使用 query_memory 关键词搜索。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "query", type = "string", description = "搜索内容；支持自然语言、空格分词、| 分隔关键词、* 模糊匹配（如 error*timeout）；单独 * 返回全部记忆", required = true),
-                    ToolParameterSchema(name = "folder_path", type = "string", description = "限定搜索文件夹路径", required = false),
+                    ToolParameterSchema(name = "folder_path", type = "string", description = "可选，仅进一步限定当前工作区内的记忆文件夹；通常省略，自动确定工作区", required = false),
                     ToolParameterSchema(name = "start_time", type = "string", description = "创建时间下限，格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm", required = false),
                     ToolParameterSchema(name = "end_time", type = "string", description = "创建时间上限，格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm", required = false),
                     ToolParameterSchema(name = "snapshot_id", type = "string", description = "快照ID；留空新建，非空时使用或创建该ID；复用可排除已返回的记忆", required = false),
@@ -252,7 +252,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "get_memory_by_title",
-                description = "通过精确标题检索记忆；标题“摘要”或“历史摘要”返回当前聊天工作区最近5条摘要，工作区由程序自动确定。",
+                description = "通过精确标题检索记忆；恢复历史聊天上下文时优先使用 title="摘要" 或 "历史摘要"，返回当前聊天工作区最近5条摘要，工作区由程序自动确定。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "title", type = "string", description = "记忆的精确标题", required = true),
                     ToolParameterSchema(name = "chunk_index", type = "integer", description = "读取指定分块编号", required = false),
