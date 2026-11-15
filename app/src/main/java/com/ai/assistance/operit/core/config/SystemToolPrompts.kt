@@ -239,7 +239,7 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "query_memory",
-                description = "仅搜索并返回当前聊天工作区的记忆，自动隔离其他工作区及全局记忆。恢复历史聊天上下文时必须优先调用 get_memory_by_title(title="摘要")，获取当前工作区最近5条摘要；仅在查找具体任务信息时使用 query_memory 关键词搜索。",
+                description = "仅搜索并返回当前聊天工作区的记忆，自动隔离其他工作区及全局记忆。恢复历史聊天上下文时必须优先调用 get_memory_by_title(title=\"摘要\")，获取当前工作区最近5条摘要；仅在查找具体任务信息时使用 query_memory 关键词搜索。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "query", type = "string", description = "搜索内容；支持自然语言、空格分词、| 分隔关键词、* 模糊匹配（如 error*timeout）；单独 * 返回全部记忆", required = true),
                     ToolParameterSchema(name = "folder_path", type = "string", description = "可选，仅进一步限定当前工作区内的记忆文件夹；通常省略，自动确定工作区", required = false),
@@ -252,7 +252,7 @@ object SystemToolPrompts {
             ),
             ToolPrompt(
                 name = "get_memory_by_title",
-                description = "通过精确标题检索记忆；恢复历史聊天上下文时优先使用 title="摘要" 或 "历史摘要"，返回当前聊天工作区最近5条摘要，工作区由程序自动确定。",
+                description = "通过精确标题检索记忆；恢复历史聊天上下文时优先使用 title=\"摘要\" 或 "历史摘要"，返回当前聊天工作区最近5条摘要，工作区由程序自动确定。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "title", type = "string", description = "记忆的精确标题", required = true),
                     ToolParameterSchema(name = "chunk_index", type = "integer", description = "读取指定分块编号", required = false),
