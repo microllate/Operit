@@ -225,8 +225,8 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         val memoryRepository = getMemoryRepository(profileId)
         val query = tool.parameters.find { it.name == "query" }?.value ?: ""
         val folderPath = tool.parameters.find { it.name == "folder_path" }?.value
-        val workspacePath = tool.parameters.find { it.name == "workspace_path" }
-            ?.value?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
+        val workspacePath = ToolExecutionManager.currentToolRuntimeContext()
+            ?.workspacePath?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
         val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
         val settings = getMemorySearchSettingsPreferences(profileId).load()
         val limitParam = tool.parameters.find { it.name == "limit" }?.value
@@ -380,42 +380,39 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         AppLogger.d(TAG, "Getting memory by title: $title, chunk_index: $chunkIndexParam, chunk_range: $chunkRangeParam, query: $queryParam, limit: $chunkLimitParam")
 
         return try {
-            val memory = memoryRepository.findMemoryByTitle(title)
-            if (memory == null) {
-                // "历史摘要" names a collection of timestamped memories, not one exact title.
-                if (title.trim() == "历史摘要") {
-                    val workspacePath = tool.parameters.find { it.name == "workspace_path" }
-                        ?.value?.trim()?.trimEnd('/', '\\')
-                        ?.takeIf { it.isNotBlank() }
-                        ?: return ToolResult(
-                            toolName = tool.name,
-                            success = false,
-                            result = StringResultData(""),
-                            error = "workspace_path is required when title is 历史摘要"
-                        )
-                    val workspaceName = workspacePath.substringAfterLast('/')
-                        .substringAfterLast('\\').ifBlank { "workspace" }
-                        .replace("/", "_").replace("\\", "_")
-                    val workspaceKey = MessageDigest.getInstance("SHA-256")
-                        .digest(workspacePath.toByteArray(Charsets.UTF_8))
-                        .joinToString("") { "%02x".format(it) }.take(12)
-                    val folder = "工作区/$workspaceName-$workspaceKey/历史摘要"
-                    val summaries = memoryRepository.getMemoriesByFolderPath(folder)
+            val workspacePath = ToolExecutionManager.currentToolRuntimeContext()
+                ?.workspacePath?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
+            val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
+            val isSummaryAlias = title.trim() == "摘要" || title.trim() == "历史摘要"
+            if (isSummaryAlias) {
+                val summaries = workspaceFolder?.let { folder ->
+                    memoryRepository.getMemoriesByFolderPath("$folder/历史摘要")
                         .filter { it.source == "chat_summary" }
                         .distinctBy { it.id }
                         .sortedByDescending { it.createdAt }
                         .take(5)
-                    if (summaries.isNotEmpty()) {
-                        val formattedResult = buildResultData(
-                            memoryRepository, summaries, title, summaries.size
-                        )
-                        return ToolResult(
-                            toolName = tool.name,
-                            success = true,
-                            result = formattedResult
-                        )
-                    }
+                }.orEmpty()
+                if (summaries.isNotEmpty()) {
+                    return ToolResult(
+                        toolName = tool.name,
+                        success = true,
+                        result = buildResultData(memoryRepository, summaries, title, summaries.size)
+                    )
                 }
+                return ToolResult(
+                    toolName = tool.name,
+                    success = false,
+                    result = StringResultData(""),
+                    error = "No history summaries found in the current workspace"
+                )
+            }
+            val memory = memoryRepository.findMemoryByTitle(title)?.takeIf { candidate ->
+                val folder = MemoryRepository.normalizeFolderPath(candidate.folderPath).orEmpty()
+                !folder.startsWith("工作区/") ||
+                    (workspaceFolder != null &&
+                        (folder == workspaceFolder || folder.startsWith("$workspaceFolder/")))
+            }
+            if (memory == null) {
                 return ToolResult(
                     toolName = tool.name,
                     success = false,
