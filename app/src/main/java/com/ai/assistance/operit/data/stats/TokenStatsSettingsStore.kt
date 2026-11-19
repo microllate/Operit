@@ -20,6 +20,11 @@ interface TokenStatsSettingsStore {
 
     suspend fun saveActivityViewMode(mode: TokenActivityViewMode)
 
+    /** Null means an older installation has not chosen follow/manual mode yet. */
+    suspend fun loadFollowCurrentDay(): Boolean? = null
+
+    suspend fun saveFollowCurrentDay(enabled: Boolean) {}
+
     suspend fun loadTimeRange(): TokenStatsTimeRange?
 
     suspend fun saveTimeRange(range: TokenStatsTimeRange?)
@@ -63,6 +68,12 @@ class TokenStatsPreferencesStore(context: Context) : TokenStatsSettingsStore {
 
     override suspend fun saveActivityViewMode(mode: TokenActivityViewMode) {
         preferences.saveActivityViewMode(mode)
+    }
+
+    override suspend fun loadFollowCurrentDay(): Boolean? = preferences.loadFollowCurrentDay()
+
+    override suspend fun saveFollowCurrentDay(enabled: Boolean) {
+        preferences.saveFollowCurrentDay(enabled)
     }
 
     override suspend fun loadTimeRange(): TokenStatsTimeRange? {
