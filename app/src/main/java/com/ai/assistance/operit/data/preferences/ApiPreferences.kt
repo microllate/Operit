@@ -252,6 +252,19 @@ class ApiPreferences private constructor(private val context: Context) {
             }
 
     // Flow for Thinking Mode
+    fun thinkingModeFlowForConfig(configId: String): Flow<Boolean> =
+        context.apiDataStore.data.map { preferences ->
+            preferences[booleanPreferencesKey("enable_thinking_mode_config_$configId")]
+                ?: preferences[ENABLE_THINKING_MODE]
+                ?: DEFAULT_ENABLE_THINKING_MODE
+        }
+
+    suspend fun saveThinkingModeForConfig(configId: String, enabled: Boolean) {
+        context.apiDataStore.edit { preferences ->
+            preferences[booleanPreferencesKey("enable_thinking_mode_config_$configId")] = enabled
+        }
+    }
+
     val enableThinkingModeFlow: Flow<Boolean> =
         context.apiDataStore.data.map { preferences ->
             preferences[ENABLE_THINKING_MODE] ?: DEFAULT_ENABLE_THINKING_MODE
