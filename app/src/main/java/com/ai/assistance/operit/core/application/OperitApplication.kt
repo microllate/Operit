@@ -10,6 +10,12 @@ import com.ai.assistance.operit.util.AppLogger
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.work.Configuration as WorkConfiguration
 import androidx.work.WorkManager
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.ImageLoader
@@ -43,6 +49,8 @@ import com.ai.assistance.operit.data.preferences.initUserPreferencesManager
 import com.ai.assistance.operit.data.preferences.preferencesManager
 import com.ai.assistance.operit.data.repository.CustomEmojiRepository
 import com.ai.assistance.operit.data.stats.TokenUsageRepository
+import com.ai.assistance.operit.data.stats.OfficialModelPricingCache
+import com.ai.assistance.operit.data.stats.OfficialPricingSyncWorker
 import com.ai.assistance.operit.ui.features.chat.webview.LocalWebServer
 import com.ai.assistance.operit.ui.features.chat.webview.workspace.editor.language.LanguageFactory
 import com.ai.assistance.operit.util.GlobalExceptionHandler
@@ -71,6 +79,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.time.ZonedDateTime
+import java.time.temporal.ChronoUnit
 
 /** Application class for Operit */
 class OperitApplication : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
@@ -137,6 +147,37 @@ class OperitApplication : Application(), ImageLoaderFactory, WorkConfiguration.P
         }
 
         globalImageLoader = ImageLoader.Builder(this).build()
+        OfficialModelPricingCache.initialize(applicationContext)
+        ensureWorkManagerInitialized()
+        scheduleOfficialPricingSync()
+    }
+
+
+    /** Refresh pricing without inference calls; first sync runs soon, then daily near local midnight. */
+    private fun scheduleOfficialPricingSync() {
+        val manager = WorkManager.getInstance(applicationContext)
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        manager.enqueueUniqueWork(
+            "official-model-pricing-sync-now",
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<OfficialPricingSyncWorker>()
+                .setConstraints(constraints)
+                .build()
+        )
+        val now = ZonedDateTime.now()
+        val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+        val delayMs = ChronoUnit.MILLIS.between(now, nextMidnight).coerceAtLeast(0L)
+        val daily = PeriodicWorkRequestBuilder<OfficialPricingSyncWorker>(24, TimeUnit.HOURS)
+            .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+            .setConstraints(constraints)
+            .build()
+        manager.enqueueUniquePeriodicWork(
+            "official-model-pricing-sync-daily",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            daily
+        )
     }
 
     fun initializeMainApplication() {

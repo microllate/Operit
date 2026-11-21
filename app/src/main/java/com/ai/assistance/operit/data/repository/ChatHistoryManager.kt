@@ -1629,6 +1629,11 @@ class ChatHistoryManager private constructor(private val context: Context) {
         }
     }
 
+    suspend fun getChatWorkspacePath(chatId: String): String? =
+        withContext(Dispatchers.IO) {
+            chatDao.getChatById(chatId)?.workspace?.trim()?.takeIf { it.isNotBlank() }
+        }
+
     suspend fun getChatTitle(chatId: String): String? {
         return kotlinx.coroutines.withContext(Dispatchers.IO) {
             try {

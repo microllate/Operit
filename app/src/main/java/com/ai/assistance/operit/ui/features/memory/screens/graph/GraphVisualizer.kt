@@ -810,7 +810,7 @@ fun GraphVisualizer(
 
         Canvas(modifier = Modifier
             .fillMaxSize()
-            .pointerInput(isBoxSelectionMode) { // KEY CHANGE: Relaunch gestures when mode changes
+            .pointerInput(isBoxSelectionMode, graph.nodes) { // Restart gesture handlers when mode or folder graph nodes change
                 AppLogger.d("GraphVisualizer", "pointerInput recomposed/restarted. NEW MODE: ${if (isBoxSelectionMode) "BoxSelect" else "Normal"}")
                 coroutineScope {
                     if (isBoxSelectionMode) {

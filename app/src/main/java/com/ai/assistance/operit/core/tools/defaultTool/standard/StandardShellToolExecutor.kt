@@ -5,21 +5,16 @@ import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.core.tools.ADBResultData
 import com.ai.assistance.operit.core.tools.StringResultData
 import com.ai.assistance.operit.core.tools.system.AndroidShellExecutor
-import com.ai.assistance.operit.core.tools.system.ShizukuAuthorizer
 import com.ai.assistance.operit.data.model.AITool
 import com.ai.assistance.operit.data.model.ToolResult
 import com.ai.assistance.operit.data.model.ToolValidationResult
 import kotlinx.coroutines.runBlocking
 
-/**
- * Tool for executing ADB commands directly. This provides direct access to ADB shell commands for
- * system operations. Note: This requires Shizuku service to be running with proper permissions.
- */
+/** Executes Android shell commands through the configured permission-level executor. */
 open class StandardShellToolExecutor(private val context: Context) {
 
     companion object {
-        private const val TAG = "ADBToolExecutor"
-        private const val DEFAULT_TIMEOUT = 15000L // 15 seconds
+        private const val TAG = "ShellToolExecutor"
     }
 
     fun invoke(tool: AITool): ToolResult {
@@ -35,10 +30,8 @@ open class StandardShellToolExecutor(private val context: Context) {
         }
 
         val command = tool.parameters.find { it.name == "command" }?.value ?: ""
-        // Timeout parameter is kept for API compatibility but not used by AdbCommandExecutor
 
         return try {
-            // Use AdbCommandExecutor to execute the command
             val result = runBlocking { AndroidShellExecutor.executeShellCommand(command) }
 
             if (result.success) {
@@ -66,21 +59,21 @@ open class StandardShellToolExecutor(private val context: Context) {
                         success = false,
                         result = StringResultData(""),
                         error =
-                                "ADB command execution failed (exit code: ${result.exitCode}): $errorOutput"
+                                "Shell command execution failed (exit code: ${result.exitCode}): $errorOutput"
                 )
             }
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error executing ADB command", e)
+            AppLogger.e(TAG, "Error executing shell command", e)
             ToolResult(
                     toolName = tool.name,
                     success = false,
                     result = StringResultData(""),
-                    error = "ADB command execution failed: ${e.message}"
+                    error = "Shell command execution failed: ${e.message}"
             )
         }
     }
 
-    /** Validates the parameters for the ADB tool. */
+    /** Validates the parameters for the shell tool. */
     fun validateParameters(tool: AITool): ToolValidationResult {
         val command = tool.parameters.find { it.name == "command" }?.value
 

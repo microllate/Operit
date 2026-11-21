@@ -40,6 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.data.collects.PricingCurrency
@@ -52,8 +55,10 @@ import com.ai.assistance.operit.data.stats.TokenStatsRangeData
 import com.ai.assistance.operit.data.stats.cacheRate
 import com.ai.assistance.operit.data.stats.formatTokenCount
 import com.ai.assistance.operit.ui.components.CustomScaffold
+import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 private enum class ChartDetailMetric { COST, REQUESTS, TOKENS }
 
@@ -74,6 +79,7 @@ fun TokenUsageStatisticsScreen(
     onBackPressed: () -> Unit,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     // P1-3：VM 由路由级 ViewModelStore 管理（AppContent 为该 route 提供
     // LocalViewModelStoreOwner，键 = screenKey）——配置变化保留实例，
     // 路由出栈/替换/清栈时 store.clear() 触发 onCleared，viewModelScope
@@ -93,7 +99,21 @@ fun TokenUsageStatisticsScreen(
             viewModel.consumeActionMessage()
         }
     }
-    LaunchedEffect(Unit) { viewModel.loadForEntry() }
+    // Refresh on each foreground entry and exactly at Beijing midnight while visible.
+    // repeatOnLifecycle cancels the timer in the background, avoiding unnecessary queries.
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.loadForEntry()
+            while (true) {
+                val now = System.currentTimeMillis()
+                val nextMidnight = Instant.ofEpochMilli(now)
+                    .atZone(viewModel.zone).toLocalDate().plusDays(1)
+                    .atStartOfDay(viewModel.zone).toInstant().toEpochMilli()
+                delay((nextMidnight - now).coerceAtLeast(1_000L))
+                viewModel.load()
+            }
+        }
+    }
 
     TokenStatsColorsProvider {
         val colors = LocalTokenStatsColors.current
@@ -259,7 +279,15 @@ private fun TokenStatsPageContent(
             )
         }
 
-        // 6. 模型累计：使用当前周期、当前筛选后的动态模型列表，避免展示与筛选脱节。
+        // 6. 费用构成：使用同一套价格计算输入、缓存命中、缓存写入和输出费用。
+        item {
+            TokenStatsCostCompositionCard(
+                summary = range?.summary,
+                currency = state.targetCurrency,
+            )
+        }
+
+        // 7. 模型累计：使用当前周期、当前筛选后的动态模型列表，避免展示与筛选脱节。
         if (!range?.displayModels.isNullOrEmpty()) {
             item {
                 TokenStatsModelRankSection(

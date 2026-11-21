@@ -1,6 +1,7 @@
 package com.ai.assistance.operit.api.chat.enhance
 
 import android.content.Context
+import com.ai.assistance.operit.data.repository.ChatHistoryManager
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.core.tools.AIToolHandler
@@ -45,6 +46,7 @@ object ToolExecutionManager {
 
     data class ToolRuntimeContext(
         val callerCardId: String? = null,
+        val workspacePath: String? = null,
         val toolExposureMode: ToolExposureMode = ToolExposureMode.FULL
     )
 
@@ -532,9 +534,13 @@ object ToolExecutionManager {
                 AppLogger.e(TAG, "角色卡工具权限解析失败: callerCardId=$callerCardId", error)
             }.getOrNull()
         }
+        val chatWorkspacePath = callerChatId?.let {
+            ChatHistoryManager.getInstance(context).getChatWorkspacePath(it)
+        }
         val toolRuntimeContext =
             ToolRuntimeContext(
                 callerCardId = callerCardId,
+                workspacePath = chatWorkspacePath,
                 toolExposureMode = toolExposureMode
             )
 

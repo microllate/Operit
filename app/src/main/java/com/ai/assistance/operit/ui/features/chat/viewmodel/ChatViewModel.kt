@@ -906,7 +906,13 @@ class ChatViewModel(private val context: Context) : ViewModel() {
                     messagesToSummarize,
                     autoContinue = false,
                     isGroupChat = isGroupChat,
-                    summaryConfig = summaryConfig
+                    summaryConfig = summaryConfig,
+                    workspacePath = currentChat?.workspace,
+                    workspaceEnv = currentChat?.workspaceEnv,
+                    chatId = currentChatId,
+                    sendHiddenSummary = { instruction ->
+                        messageCoordinationDelegate.sendManualSummaryThroughChat(currentChatId, instruction)
+                    }
                 )
 
                 if (summaryMessage != null) {

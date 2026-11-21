@@ -79,4 +79,59 @@ class TokenStatsActivityRangePolicyTest {
             )
         )
     }
+
+    @Test
+    fun `daily auto range moves to Beijing today without changing calendar boundaries`() {
+        val yesterday = LocalDate.of(2026, 11, 19)
+        val today = yesterday.plusDays(1)
+        val previous = customRangeInclusiveEnd(yesterday, yesterday, zone)
+        assertEquals(
+            customRangeInclusiveEnd(today, today, zone),
+            advanceFollowedActivityRange(previous, TokenActivityViewMode.DAILY, today, zone),
+        )
+        assertEquals(
+            previous,
+            advanceFollowedActivityRange(previous, TokenActivityViewMode.DAILY, yesterday, zone),
+        )
+    }
+
+    @Test
+    fun `weekly auto range resets on Sunday and keeps same Sunday inside week`() {
+        val saturday = LocalDate.of(2026, 11, 21)
+        val sunday = saturday.plusDays(1)
+        val previous = customRangeInclusiveEnd(LocalDate.of(2026, 11, 15), saturday, zone)
+        assertEquals(
+            customRangeInclusiveEnd(sunday, sunday, zone),
+            advanceFollowedActivityRange(previous, TokenActivityViewMode.WEEKLY, sunday, zone),
+        )
+    }
+
+    @Test
+    fun `legacy historical custom range remains fixed`() {
+        val today = LocalDate.of(2026, 11, 20)
+        val historical = customRangeInclusiveEnd(today.minusDays(12), today.minusDays(12), zone)
+        assertEquals(
+            false,
+            inferLegacyFollowCurrentDay(historical, TokenActivityViewMode.DAILY, today, zone),
+        )
+        assertEquals(
+            true,
+            inferLegacyFollowCurrentDay(
+                customRangeInclusiveEnd(today.minusDays(1), today.minusDays(1), zone),
+                TokenActivityViewMode.DAILY,
+                today,
+                zone,
+            ),
+        )
+    }
+
+    @Test
+    fun `rolling thirty day window advances without losing older days`() {
+        val today = LocalDate.of(2026, 11, 20)
+        val lastRange = customRangeInclusiveEnd(today.minusDays(30), today.minusDays(1), zone)
+        assertEquals(
+            customRangeInclusiveEnd(today.minusDays(29), today, zone),
+            advanceFollowedActivityRange(lastRange, TokenActivityViewMode.DAILY, today, zone),
+        )
+    }
 }

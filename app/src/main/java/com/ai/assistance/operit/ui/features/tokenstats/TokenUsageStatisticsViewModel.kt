@@ -25,6 +25,7 @@ import com.ai.assistance.operit.data.stats.TokenStatsSettingsStore
 import com.ai.assistance.operit.data.stats.TokenStatsTimeRange
 import com.ai.assistance.operit.data.stats.TokenStatsTimeRanges
 import com.ai.assistance.operit.util.AppLogger
+import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -72,7 +73,7 @@ data class TokenStatsActionMessage(
 class TokenUsageStatisticsViewModel(
     context: Context,
     private val settings: TokenStatsSettingsStore = TokenStatsPreferencesStore(context),
-    val zone: ZoneId = ZoneId.systemDefault(),
+    val zone: ZoneId = ZoneId.of("Asia/Shanghai"),
     private val nowMs: () -> Long = { System.currentTimeMillis() },
     private val stringResolver: (Int) -> String = { context.applicationContext.getString(it) },
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
@@ -91,6 +92,7 @@ class TokenUsageStatisticsViewModel(
     private var loadGeneration = 0
     private var loadJob: Job? = null
     private var modeRangeJob: Job? = null
+    private var selectedModelsLoaded = false
     private val knownModelNames = linkedMapOf<String, String>()
     private val knownModelProviderModels = linkedMapOf<String, Set<String>>()
 
@@ -104,8 +106,7 @@ class TokenUsageStatisticsViewModel(
 
     fun setActivityViewMode(mode: TokenActivityViewMode) {
         val snapshot = _state.value
-        val currentRange = snapshot.currentRange ?: defaultDateRange(nowMs(), zone)
-        val anchorDate = activityRangeAnchorDate(currentRange, zone)
+        val anchorDate = Instant.ofEpochMilli(nowMs()).atZone(zone).toLocalDate()
         val providerModels = providerModelsFor(snapshot)
         modeRangeJob?.cancel()
         modeRangeJob = viewModelScope.launch(dispatcher) {
@@ -123,6 +124,7 @@ class TokenUsageStatisticsViewModel(
                     ?: return@launch
                 settings.saveActivityViewMode(mode)
                 settings.saveTimeRange(range)
+                settings.saveFollowCurrentDay(true)
                 _state.update {
                     it.copy(
                         currentRange = range,
@@ -155,14 +157,34 @@ class TokenUsageStatisticsViewModel(
     private fun loadInternal(loadViewMode: Boolean) {
         loadJob?.cancel()
         val generation = ++loadGeneration
-        val filterSnapshot = _state.value
         loadJob = viewModelScope.launch(dispatcher) {
             try {
+                if (!selectedModelsLoaded) {
+                    val persistedSelectedModels = settings.loadSelectedModels()
+                    _state.update { it.copy(selectedModels = persistedSelectedModels) }
+                    selectedModelsLoaded = true
+                }
                 val rateInfo = settings.loadRateWithEstimate()
                 val currency = settings.loadTargetCurrency()
                 val tokenDisplayUnit = settings.loadTokenDisplayUnit()
                 val entryViewMode = if (loadViewMode) settings.loadActivityViewMode() else null
-                val range = settings.loadTimeRange() ?: defaultDateRange(nowMs(), zone)
+                val storedRange = settings.loadTimeRange()
+                val today = Instant.ofEpochMilli(nowMs()).atZone(zone).toLocalDate()
+                val mode = entryViewMode ?: _state.value.activity.viewMode
+                val followPreference = settings.loadFollowCurrentDay()
+                val followCurrentDay = followPreference
+                    ?: inferLegacyFollowCurrentDay(storedRange, mode, today, zone)
+                if (followPreference == null) {
+                    settings.saveFollowCurrentDay(followCurrentDay)
+                }
+                val range = when {
+                    storedRange == null -> defaultDateRange(nowMs(), zone)
+                    followCurrentDay -> advanceFollowedActivityRange(storedRange, mode, today, zone)
+                    else -> storedRange
+                }
+                if (storedRange != null && range != storedRange) {
+                    settings.saveTimeRange(range)
+                }
 
                 if (generation != loadGeneration) return@launch
                 _state.update {
@@ -178,13 +200,6 @@ class TokenUsageStatisticsViewModel(
 
                 val result = coroutineScope {
                     val pricesDeferred = async(Dispatchers.IO) { manager.allPriceSettings() }
-                    val selectedProviderModels = providerModelsFor(filterSnapshot)
-                    val rangeParams = TokenStatsQueryParams(
-                        targetCurrency = currency,
-                        manualRate = rateInfo.first,
-                        providerModels = selectedProviderModels,
-                    )
-                    val availableParams = rangeParams.copy(providerModels = null)
                     val lifetimeDeferred = async(Dispatchers.IO) {
                         TokenStatsQueryService.lifetimeOverview(
                             appContext,
@@ -194,20 +209,27 @@ class TokenUsageStatisticsViewModel(
                             ),
                         )
                     }
+                    val lifetime = lifetimeDeferred.await()
+                    rememberModelNames(lifetime.displayModels)
+                    // Lifetime results are not a whitelist: models without lifetime
+                    // records must not erase the user's persisted selection.
+                    val selectedProviderModels = providerModelsFor(_state.value)
+                    val rangeParams = TokenStatsQueryParams(
+                        targetCurrency = currency,
+                        manualRate = rateInfo.first,
+                        providerModels = selectedProviderModels,
+                    )
+                    val availableParams = rangeParams.copy(providerModels = null)
                     val rangeDeferred = async(Dispatchers.IO) {
                         TokenStatsQueryService.rangeData(appContext, range, rangeParams, zone)
                     }
                     val availableDeferred = async(Dispatchers.IO) {
-                        if (selectedProviderModels == null) {
-                            null
-                        } else {
-                            TokenStatsQueryService.rangeData(
-                                appContext,
-                                range,
-                                availableParams,
-                                zone,
-                            )
-                        }
+                        if (selectedProviderModels == null) null else TokenStatsQueryService.rangeData(
+                            appContext,
+                            range,
+                            availableParams,
+                            zone,
+                        )
                     }
                     val activityDeferred = async(Dispatchers.IO) {
                         TokenStatsQueryService.activitySnapshot(appContext, range, rangeParams, zone)
@@ -230,7 +252,7 @@ class TokenUsageStatisticsViewModel(
                         }
                     }
                     QueryLoadResult(
-                        lifetime = lifetimeDeferred.await(),
+                        lifetime = lifetime,
                         range = rangeData,
                         available = availableDeferred.await() ?: rangeData,
                         prices = pricesDeferred.await(),
@@ -330,6 +352,7 @@ class TokenUsageStatisticsViewModel(
 
     private fun saveCustomRange(range: TokenStatsTimeRange): Boolean {
         viewModelScope.launch(dispatcher) {
+            settings.saveFollowCurrentDay(false)
             settings.saveTimeRange(range)
             load()
         }
@@ -343,13 +366,20 @@ class TokenUsageStatisticsViewModel(
             if (!selected.add(displayModelId)) selected.remove(displayModelId)
             state.copy(selectedModels = selected)
         }
-        load()
+        val selected = _state.value.selectedModels
+        viewModelScope.launch(dispatcher) {
+            settings.saveSelectedModels(selected)
+            load()
+        }
     }
 
     fun selectAllModels() {
         modeRangeJob?.cancel()
         _state.update { it.copy(selectedModels = emptySet()) }
-        load()
+        viewModelScope.launch(dispatcher) {
+            settings.saveSelectedModels(emptySet())
+            load()
+        }
     }
 
     fun setTargetCurrency(currency: PricingCurrency) {

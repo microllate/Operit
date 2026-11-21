@@ -427,7 +427,9 @@ class ApiConfigDelegate(
 
         // Collect thinking mode setting
         configScope.launch {
-            apiPreferences.enableThinkingModeFlow.collect { enabled ->
+            effectiveChatConfigId
+                .flatMapLatest { configId -> apiPreferences.thinkingModeFlowForConfig(configId) }
+                .collect { enabled ->
                 _enableThinkingMode.value = enabled
             }
         }
@@ -622,7 +624,7 @@ class ApiConfigDelegate(
     fun toggleThinkingMode() {
         configScope.launch {
             val newValue = !_enableThinkingMode.value
-            apiPreferences.updateThinkingSettings(enableThinkingMode = newValue)
+            apiPreferences.saveThinkingModeForConfig(effectiveChatConfigId.value, newValue)
         }
     }
 

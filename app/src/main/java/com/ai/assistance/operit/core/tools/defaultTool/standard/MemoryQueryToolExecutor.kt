@@ -25,6 +25,7 @@ import com.ai.assistance.operit.data.preferences.preferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import java.security.MessageDigest
 
 /**
  * Executes queries against the AI's memory graph and the explicit user.md update tool.
@@ -150,6 +151,19 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
             }
     }
 
+    private fun currentWorkspacePath(): String? =
+        ToolExecutionManager.currentToolRuntimeContext()
+            ?.workspacePath?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
+
+    private fun workspaceMemoryFolder(workspacePath: String): String {
+        val name = workspacePath.substringAfterLast('/').substringAfterLast('\\')
+            .ifBlank { "workspace" }.replace("/", "_").replace("\\", "_")
+        val key = MessageDigest.getInstance("SHA-256")
+            .digest(workspacePath.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }.take(12)
+        return "工作区/$name-$key"
+    }
+
     private fun parseTimeBoundary(value: String?, isEnd: Boolean): Long? {
         val trimmed = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val timezone = TimeZone.getDefault()
@@ -215,6 +229,14 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         val memoryRepository = getMemoryRepository(profileId)
         val query = tool.parameters.find { it.name == "query" }?.value ?: ""
         val folderPath = tool.parameters.find { it.name == "folder_path" }?.value
+        val workspacePath = currentWorkspacePath()
+        val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
+            ?: return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Current chat workspace is unavailable; query_memory only searches the current workspace."
+            )
         val settings = getMemorySearchSettingsPreferences(profileId).load()
         val limitParam = tool.parameters.find { it.name == "limit" }?.value
         val limit = limitParam?.toIntOrNull()
@@ -287,7 +309,7 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
 
         // limit 无上限，但至少为 1
         val validLimit = if (finalLimit < 1) 1 else finalLimit
-        val (snapshotState, snapshotCreated) = getOrCreateQuerySnapshot(profileId, normalizedSnapshotId)
+        val (snapshotState, snapshotCreated) = getOrCreateQuerySnapshot("$profileId:${workspaceFolder ?: "global"}", normalizedSnapshotId)
 
         AppLogger.d(
             TAG,
@@ -308,10 +330,16 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
                 createdAtEndMs = endTimeMs
             )
 
+            // Strictly return memories belonging to this chat workspace; exclude global and other workspaces.
+            val scopedResults = results.filter { memory ->
+                val memoryFolder = MemoryRepository.normalizeFolderPath(memory.folderPath).orEmpty()
+                memoryFolder == workspaceFolder || memoryFolder.startsWith("$workspaceFolder/")
+            }
+
             // Keep de-duplication stable even when multiple calls share the same snapshot in parallel.
             val (excludedBySnapshotCount, returnedMemories) = synchronized(snapshotState.lock) {
-                val excludedCount = results.count { it.id in snapshotState.seenMemoryIds }
-                val unseenResults = results.filterNot { it.id in snapshotState.seenMemoryIds }
+                val excludedCount = scopedResults.count { it.id in snapshotState.seenMemoryIds }
+                val unseenResults = scopedResults.filterNot { it.id in snapshotState.seenMemoryIds }
                 val selectedResults = unseenResults.take(validLimit)
                 if (selectedResults.isNotEmpty()) {
                     snapshotState.seenMemoryIds.addAll(selectedResults.map { it.id })
@@ -359,7 +387,38 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         AppLogger.d(TAG, "Getting memory by title: $title, chunk_index: $chunkIndexParam, chunk_range: $chunkRangeParam, query: $queryParam, limit: $chunkLimitParam")
 
         return try {
-            val memory = memoryRepository.findMemoryByTitle(title)
+            val workspacePath = currentWorkspacePath()
+            val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
+            val isSummaryAlias = title.trim() == "摘要" || title.trim() == "历史摘要"
+            if (isSummaryAlias) {
+                val summaries = workspaceFolder?.let { folder ->
+                    memoryRepository.getMemoriesByFolderPath("$folder/历史摘要")
+                        .filter { it.source == "chat_summary" }
+                        .distinctBy { it.id }
+                        .sortedByDescending { it.createdAt }
+                        .take(5)
+                }.orEmpty()
+                if (summaries.isNotEmpty()) {
+                    return ToolResult(
+                        toolName = tool.name,
+                        success = true,
+                        result = buildResultData(memoryRepository, summaries, title, summaries.size)
+                    )
+                }
+                return ToolResult(
+                    toolName = tool.name,
+                    success = false,
+                    result = StringResultData(""),
+                    error = "No history summaries found in the current workspace"
+                )
+            }
+            val memory = memoryRepository.findMemoriesByTitle(title)
+                .firstOrNull { candidate ->
+                    val folder = MemoryRepository.normalizeFolderPath(candidate.folderPath).orEmpty()
+                    !folder.startsWith("工作区/") ||
+                        (workspaceFolder != null &&
+                            (folder == workspaceFolder || folder.startsWith("$workspaceFolder/")))
+                }
             if (memory == null) {
                 return ToolResult(
                     toolName = tool.name,
