@@ -13,6 +13,10 @@ on:
           - assembleDebug
           - ':app:assembleNightly'
           - ':app:assembleClone'
+      bundle_toolpkgs:
+        description: Build and bundle example ToolPkg packages
+        type: boolean
+        default: false
   push:
     branches: [main, fix/task-completion-summary-context-auto]
     paths:
@@ -177,20 +181,20 @@ jobs:
             app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
           test -s app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
 
-      - name: Install JavaScript dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install -g pnpm@10.34.5
-          npm ci --no-audit --no-fund
-          npm --prefix web-chat ci --no-audit --no-fund
+      - name: Install WebChat dependencies
+        run: npm --prefix web-chat ci --no-audit --no-fund
 
       - name: Build WebChat assets
         run: |
           npm run build:webchat
 
       - name: Build bundled ToolPkg packages
+        if: ${{ inputs.bundle_toolpkgs }}
+        shell: bash
         run: |
+          set -euo pipefail
+          npm install -g pnpm@10.34.5
+          npm ci --no-audit --no-fund
           npm run build:examples:github
           python3 tools/example_packages/sync_example_packages.py --no-hot-reload
 
