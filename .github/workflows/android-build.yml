@@ -57,6 +57,7 @@ permissions:
   contents: read
 
 env:
+  ANDROID_DEPS_PROFILE: ${{ github.ref_name == 'fix/task-completion-summary-context-auto' && 'lean' || 'full' }}
   JAVA_VERSION: '21'
   NODE_VERSION: '22'
   ANDROID_NDK_VERSION: '25.1.8937393'
@@ -135,7 +136,7 @@ jobs:
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.MANUAL_DEPS_DIR }}
-          key: android-full-deps-${{ runner.os }}-${{ hashFiles('ci/script/download_android_dependencies.sh', 'ci/script/prepare_android_dependencies.py') }}
+          key: android-${{ env.ANDROID_DEPS_PROFILE }}-deps-${{ runner.os }}-${{ hashFiles('ci/script/download_android_dependencies.sh', 'ci/script/prepare_android_dependencies.py') }}
 
       - name: Restore generated STT asset cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -145,12 +146,12 @@ jobs:
 
       - name: Download Android dependencies
         if: steps.cache-manual-deps.outputs.cache-hit != 'true'
-        run: bash ci/script/download_android_dependencies.sh full "$MANUAL_DEPS_DIR"
+        run: bash ci/script/download_android_dependencies.sh "$ANDROID_DEPS_PROFILE" "$MANUAL_DEPS_DIR"
 
       - name: Prepare Android dependencies
         run: |
           python3 ci/script/prepare_android_dependencies.py \
-            --profile full \
+            --profile "$ANDROID_DEPS_PROFILE" \
             --archives "$MANUAL_DEPS_DIR" \
             --repository "$GITHUB_WORKSPACE"
 
