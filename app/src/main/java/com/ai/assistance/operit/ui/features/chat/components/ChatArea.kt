@@ -37,7 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
@@ -50,12 +50,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -109,6 +111,7 @@ import com.ai.assistance.operit.plugins.chatmessage.ChatMessageMenuItemParams
 import com.ai.assistance.operit.plugins.chatmessage.ChatMessageMenuItemRegistry
 import com.ai.assistance.operit.ui.common.composedsl.ToolPkgComposeDslDialogHost
 import com.ai.assistance.operit.ui.common.icons.MaterialIconNameResolver
+import com.ai.assistance.operit.ui.common.markdown.LocalChatTextSelection
 import com.ai.assistance.operit.ui.common.markdown.markdownToPlainTextForCopy
 import com.ai.assistance.operit.ui.features.chat.components.style.cursor.CursorStyleChatMessage
 import com.ai.assistance.operit.ui.features.chat.components.style.bubble.BubbleImageStyleConfig
@@ -671,7 +674,6 @@ private fun MessageItem(
     var showHiddenUserMessageDialog by remember { mutableStateOf(false) }
     var showDeleteMessageConfirmDialog by remember { mutableStateOf(false) }
     var copyPreviewContent by remember { mutableStateOf<MessageCopyContent?>(null) }
-    var selectionContent by remember(currentChatId, message.timestamp) { mutableStateOf<String?>(null) }
     var toolPkgDialogRequest by remember(currentChatId, message.timestamp) {
         mutableStateOf<ChatMessageMenuDialogRequest?>(null)
     }
@@ -693,6 +695,17 @@ private fun MessageItem(
             messageIndex = messageIndex,
             message = message
         )
+
+    fun openMessageMenu() {
+        pluginMenuItems = if (isHiddenUserMessage) {
+            emptyList()
+        } else {
+            ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
+        }
+        showContextMenu = true
+    }
+
+    val canSelectText = enableDialogs && isActionable && !isHidden && !isHiddenUserMessage && !isMultiSelectMode
 
     Box(
         modifier =
@@ -716,76 +729,82 @@ private fun MessageItem(
                         showHiddenUserMessageDialog = true
                     }
                 },
-                onLongClick = { 
-                    if (!isMultiSelectMode && isActionable) {
-                        pluginMenuItems =
-                            if (!isHiddenUserMessage) {
-                                ChatMessageMenuItemRegistry.createMenuItems(
-                                    buildPluginMenuItemParams()
-                                )
-                            } else {
-                                emptyList()
-                            }
-                        showContextMenu = true
-                    }
+                onLongClick = {
+                    if (!isMultiSelectMode && isActionable) openMessageMenu()
                 },
             ),
     ) {
         Column {
-            when (chatStyle) {
-                ChatStyle.CURSOR -> {
-                    CursorStyleChatMessage(
-                        message = message,
-                        userMessageColor = userMessageColor,
-                        userMessageLiquidGlassEnabled = cursorUserBubbleLiquidGlass,
-                        userMessageWaterGlassEnabled = cursorUserBubbleWaterGlass,
-                        aiMessageColor = aiMessageColor,
-                        userTextColor = userTextColor,
-                        aiTextColor = aiTextColor,
-                        systemMessageColor = systemMessageColor,
-                        systemTextColor = systemTextColor,
-                        thinkingBackgroundColor = thinkingBackgroundColor,
-                        thinkingTextColor = thinkingTextColor,
-                        supportToolMarkup = true,
-                        initialThinkingExpanded = false,
-                        onDeleteMessage = onDeleteMessage,
-                        index = index,
-                        enableDialogs = enableDialogs,
-                        onEditSummary = { summaryMessage ->
-                            onSelectMessageToEdit?.invoke(index, summaryMessage, "summary")
-                        }
-                    )
-                }
+            SelectableChatContent(enabled = canSelectText) {
+                when (chatStyle) {
+                    ChatStyle.CURSOR -> {
+                        CursorStyleChatMessage(
+                            message = message,
+                            userMessageColor = userMessageColor,
+                            userMessageLiquidGlassEnabled = cursorUserBubbleLiquidGlass,
+                            userMessageWaterGlassEnabled = cursorUserBubbleWaterGlass,
+                            aiMessageColor = aiMessageColor,
+                            userTextColor = userTextColor,
+                            aiTextColor = aiTextColor,
+                            systemMessageColor = systemMessageColor,
+                            systemTextColor = systemTextColor,
+                            thinkingBackgroundColor = thinkingBackgroundColor,
+                            thinkingTextColor = thinkingTextColor,
+                            supportToolMarkup = true,
+                            initialThinkingExpanded = false,
+                            onDeleteMessage = onDeleteMessage,
+                            index = index,
+                            enableDialogs = enableDialogs,
+                            onEditSummary = { summaryMessage ->
+                                onSelectMessageToEdit?.invoke(index, summaryMessage, "summary")
+                            }
+                        )
+                    }
 
-                ChatStyle.BUBBLE -> {
-                    BubbleStyleChatMessage(
-                        message = message,
-                        userMessageColor = userMessageColor,
-                        aiMessageColor = aiMessageColor,
-                        userTextColor = userTextColor,
-                        aiTextColor = aiTextColor,
-                        systemMessageColor = systemMessageColor,
-                        systemTextColor = systemTextColor,
-                        userMessageLiquidGlassEnabled = bubbleUserBubbleLiquidGlass,
-                        userMessageWaterGlassEnabled = bubbleUserBubbleWaterGlass,
-                        aiMessageLiquidGlassEnabled = bubbleAiBubbleLiquidGlass,
-                        aiMessageWaterGlassEnabled = bubbleAiBubbleWaterGlass,
-                        userBubbleImageStyle = bubbleUserImageStyle,
-                        aiBubbleImageStyle = bubbleAiImageStyle,
-                        bubbleUserRoundedCornersEnabled = bubbleUserRoundedCornersEnabled,
-                        bubbleAiRoundedCornersEnabled = bubbleAiRoundedCornersEnabled,
-                        bubbleUserContentPaddingLeft = bubbleUserContentPaddingLeft,
-                        bubbleUserContentPaddingRight = bubbleUserContentPaddingRight,
-                        bubbleAiContentPaddingLeft = bubbleAiContentPaddingLeft,
-                        bubbleAiContentPaddingRight = bubbleAiContentPaddingRight,
-                        isHidden = isHidden,
-                        onDeleteMessage = onDeleteMessage,
-                        index = index,
-                        enableDialogs = enableDialogs,
-                        onRoleAvatarLongPress = onMentionRoleFromAvatar,
-                        onEditSummary = { summaryMessage ->
-                            onSelectMessageToEdit?.invoke(index, summaryMessage, "summary")
-                        }
+                    ChatStyle.BUBBLE -> {
+                        BubbleStyleChatMessage(
+                            message = message,
+                            userMessageColor = userMessageColor,
+                            aiMessageColor = aiMessageColor,
+                            userTextColor = userTextColor,
+                            aiTextColor = aiTextColor,
+                            systemMessageColor = systemMessageColor,
+                            systemTextColor = systemTextColor,
+                            userMessageLiquidGlassEnabled = bubbleUserBubbleLiquidGlass,
+                            userMessageWaterGlassEnabled = bubbleUserBubbleWaterGlass,
+                            aiMessageLiquidGlassEnabled = bubbleAiBubbleLiquidGlass,
+                            aiMessageWaterGlassEnabled = bubbleAiBubbleWaterGlass,
+                            userBubbleImageStyle = bubbleUserImageStyle,
+                            aiBubbleImageStyle = bubbleAiImageStyle,
+                            bubbleUserRoundedCornersEnabled = bubbleUserRoundedCornersEnabled,
+                            bubbleAiRoundedCornersEnabled = bubbleAiRoundedCornersEnabled,
+                            bubbleUserContentPaddingLeft = bubbleUserContentPaddingLeft,
+                            bubbleUserContentPaddingRight = bubbleUserContentPaddingRight,
+                            bubbleAiContentPaddingLeft = bubbleAiContentPaddingLeft,
+                            bubbleAiContentPaddingRight = bubbleAiContentPaddingRight,
+                            isHidden = isHidden,
+                            onDeleteMessage = onDeleteMessage,
+                            index = index,
+                            enableDialogs = enableDialogs,
+                            onRoleAvatarLongPress = onMentionRoleFromAvatar,
+                            onEditSummary = { summaryMessage ->
+                                onSelectMessageToEdit?.invoke(index, summaryMessage, "summary")
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (canSelectText) {
+                IconButton(
+                    onClick = ::openMessageMenu,
+                    modifier = Modifier.align(Alignment.End).size(40.dp)
+                ) {
+                    Icon(
+                        Icons.Default.MoreHoriz,
+                        contentDescription = stringResource(R.string.more),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -851,31 +870,6 @@ private fun MessageItem(
                     },
                     modifier = Modifier.height(36.dp)
                 )
-
-                if (enableDialogs && isActionable && message.content.isNotBlank()) {
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                stringResource(R.string.chat_select_text),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontSize = 13.sp
-                            )
-                        },
-                        onClick = {
-                            selectionContent = cleanMessageContentForCopy(message.content)
-                            showContextMenu = false
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.TextFields,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        modifier = Modifier.height(36.dp)
-                    )
-                }
 
                 // 朗读消息选项
                 DropdownMenuItem(
@@ -1281,23 +1275,23 @@ private fun MessageItem(
             )
         }
 
-        if (enableDialogs && !isHiddenUserMessage) {
-            selectionContent?.let { text ->
-                MessageCopyPreviewBottomSheet(
-                    content = MessageCopyContent(markdownSource = text, xmlSource = ""),
-                    onDismiss = { selectionContent = null },
-                    selectionOnly = true,
-                    plainInput = message.sender == "user"
-                )
-            }
-        }
-
         toolPkgDialogRequest?.let { dialogRequest ->
             ToolPkgComposeDslDialogHost(
                 request = dialogRequest,
                 onDismiss = { toolPkgDialogRequest = null }
             )
         }
+    }
+}
+
+@Composable
+private fun SelectableChatContent(enabled: Boolean, content: @Composable () -> Unit) {
+    if (enabled) {
+        SelectionContainer {
+            CompositionLocalProvider(LocalChatTextSelection provides true, content = content)
+        }
+    } else {
+        content()
     }
 }
 
@@ -1314,21 +1308,18 @@ private const val COPY_PREVIEW_SHEET_HEIGHT_FRACTION = 0.7f
 private fun MessageCopyPreviewBottomSheet(
     content: MessageCopyContent,
     onDismiss: () -> Unit,
-    selectionOnly: Boolean = false,
-    plainInput: Boolean = false,
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
-    val heightFraction = if (selectionOnly) 0.85f else COPY_PREVIEW_SHEET_HEIGHT_FRACTION
-    val sheetMaxHeight = (screenHeightDp * heightFraction).coerceIn(200.dp, 720.dp)
+    val sheetMaxHeight =
+        remember(screenHeightDp) {
+            (screenHeightDp * COPY_PREVIEW_SHEET_HEIGHT_FRACTION).coerceIn(200.dp, 720.dp)
+        }
     var copyMode by remember(content) { mutableStateOf(MessageCopyMode.PLAIN_TEXT) }
-    var plainText by remember(content.markdownSource, plainInput) {
-        mutableStateOf(content.markdownSource.takeIf { plainInput })
-    }
-    LaunchedEffect(content.markdownSource, context, plainInput) {
-        if (plainInput) return@LaunchedEffect
+    var plainText by remember(content.markdownSource) { mutableStateOf<String?>(null) }
+    LaunchedEffect(content.markdownSource, context) {
         plainText =
             withContext(Dispatchers.Default) {
                 markdownToPlainTextForCopy(content.markdownSource) { formulas ->
@@ -1341,9 +1332,7 @@ private fun MessageCopyPreviewBottomSheet(
         MessageCopyMode.MARKDOWN_SOURCE -> content.markdownSource
         MessageCopyMode.XML_SOURCE -> content.xmlSource
     }
-    val copyButtonText = if (selectionOnly) {
-        stringResource(R.string.chat_copy_all_text)
-    } else when (copyMode) {
+    val copyButtonText = when (copyMode) {
         MessageCopyMode.PLAIN_TEXT -> stringResource(R.string.copy_plain_text)
         MessageCopyMode.MARKDOWN_SOURCE -> stringResource(R.string.copy_markdown_source)
         MessageCopyMode.XML_SOURCE -> stringResource(R.string.copy_xml_source)
@@ -1360,33 +1349,31 @@ private fun MessageCopyPreviewBottomSheet(
                 .padding(start = 20.dp, end = 20.dp, bottom = 24.dp)
         ) {
             Text(
-                text = stringResource(if (selectionOnly) R.string.chat_select_text else R.string.copy_message),
+                text = stringResource(id = R.string.copy_message),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
-            if (!selectionOnly) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) {
-                    FilterChip(
-                        selected = copyMode == MessageCopyMode.PLAIN_TEXT,
-                        onClick = { copyMode = MessageCopyMode.PLAIN_TEXT },
-                        label = { Text(stringResource(R.string.plain_text)) }
-                    )
-                    FilterChip(
-                        selected = copyMode == MessageCopyMode.MARKDOWN_SOURCE,
-                        onClick = { copyMode = MessageCopyMode.MARKDOWN_SOURCE },
-                        label = { Text(stringResource(R.string.markdown_source)) }
-                    )
-                    FilterChip(
-                        selected = copyMode == MessageCopyMode.XML_SOURCE,
-                        onClick = { copyMode = MessageCopyMode.XML_SOURCE },
-                        label = { Text(stringResource(R.string.xml_source)) }
-                    )
-                }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
+                FilterChip(
+                    selected = copyMode == MessageCopyMode.PLAIN_TEXT,
+                    onClick = { copyMode = MessageCopyMode.PLAIN_TEXT },
+                    label = { Text(stringResource(R.string.plain_text)) }
+                )
+                FilterChip(
+                    selected = copyMode == MessageCopyMode.MARKDOWN_SOURCE,
+                    onClick = { copyMode = MessageCopyMode.MARKDOWN_SOURCE },
+                    label = { Text(stringResource(R.string.markdown_source)) }
+                )
+                FilterChip(
+                    selected = copyMode == MessageCopyMode.XML_SOURCE,
+                    onClick = { copyMode = MessageCopyMode.XML_SOURCE },
+                    label = { Text(stringResource(R.string.xml_source)) }
+                )
             }
             if (copyMode == MessageCopyMode.PLAIN_TEXT && plainText == null) {
                 Box(
@@ -1418,8 +1405,7 @@ private fun MessageCopyPreviewBottomSheet(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(
-                    enabled = if (selectionOnly) displayedText.isNotEmpty()
-                    else copyMode != MessageCopyMode.PLAIN_TEXT || plainText != null,
+                    enabled = copyMode != MessageCopyMode.PLAIN_TEXT || plainText != null,
                     onClick = {
                         clipboardManager.setText(AnnotatedString(displayedText))
                         Toast.makeText(
