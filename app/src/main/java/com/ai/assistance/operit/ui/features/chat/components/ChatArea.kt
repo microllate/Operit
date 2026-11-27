@@ -729,8 +729,10 @@ private fun MessageItem(
                         showHiddenUserMessageDialog = true
                     }
                 },
-                onLongClick = {
-                    if (!isMultiSelectMode && isActionable) openMessageMenu()
+                onLongClick = if (!canSelectText && !isMultiSelectMode && isActionable) {
+                    ::openMessageMenu
+                } else {
+                    null
                 },
             ),
     ) {
