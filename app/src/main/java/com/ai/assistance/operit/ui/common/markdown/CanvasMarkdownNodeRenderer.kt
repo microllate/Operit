@@ -425,7 +425,8 @@ internal fun CanvasMarkdownNodeRenderer(
     xmlStream: Stream<String>? = null,
     enableDialogs: Boolean = true,
     fillMaxWidth: Boolean = true,
-    isLastNode: Boolean = false
+    isLastNode: Boolean = false,
+    onImageClick: (() -> Unit)? = null
 ) {
     
     val density = LocalDensity.current
@@ -483,6 +484,7 @@ internal fun CanvasMarkdownNodeRenderer(
         onLinkClick = currentOnLinkClick.value,
         xmlRenderer = currentXmlRenderer.value,
         xmlStream = xmlStream,
+        onImageClick = onImageClick,
         index = index,
         enableDialogs = enableDialogs,
         fillMaxWidth = fillMaxWidth,
@@ -526,7 +528,8 @@ private fun renderNodeContent(
     index: Int,
     enableDialogs: Boolean,
     fillMaxWidth: Boolean,
-    isLastNode: Boolean = false
+    isLastNode: Boolean = false,
+    onImageClick: (() -> Unit)? = null
 ) {
     when (node.type) {
         // ========== 简单文本类型：使用单个大 Canvas 绘制 ==========
@@ -681,6 +684,7 @@ private fun renderNodeContent(
                         imageMarkdown = imageContent,
                         modifier = Modifier.fillMaxWidth(),
                         maxImageHeight = 140,
+                        onImageClick = onImageClick,
                         enableDialogs = enableDialogs
                     )
                 }

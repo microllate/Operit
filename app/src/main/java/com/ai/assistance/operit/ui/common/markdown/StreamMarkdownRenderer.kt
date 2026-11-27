@@ -26,8 +26,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
@@ -1009,6 +1011,7 @@ private fun AnimatedNode(
     xmlStream: Stream<String>?,
     enableDialogs: Boolean,
     fillMaxWidth: Boolean,
+    onImageClick: (() -> Unit)? = null,
     isLastNode: Boolean = false
 ) {
     // alpha 动画状态在这里，变化只影响这个 Composable 的作用域
@@ -1033,6 +1036,7 @@ private fun AnimatedNode(
             index = index,
             xmlRenderer = xmlRenderer,
             xmlStream = xmlStream,
+            onImageClick = onImageClick,
             enableDialogs = enableDialogs,
             fillMaxWidth = fillMaxWidth,
             isLastNode = isLastNode
@@ -1055,6 +1059,19 @@ private fun UnifiedMarkdownCanvas(
     modifier: Modifier = Modifier,
     fillMaxWidth: Boolean = true,
 ) {
+    var imagePreview by remember(rendererId) { mutableStateOf<Pair<List<MarkdownPreviewImage>, Int>?>(null) }
+
+    fun openImagePreview(nodeIndex: Int) {
+        val images = nodes.mapIndexedNotNull { index, node ->
+            if (node.type != MarkdownProcessorType.IMAGE) return@mapIndexedNotNull null
+            parseMarkdownPreviewImage(node.content)?.let { index to it }
+        }
+        val initialPage = images.indexOfFirst { it.first == nodeIndex }
+        if (initialPage >= 0) {
+            imagePreview = images.map { it.second } to initialPage
+        }
+    }
+
     val lastRenderableIndex = run {
         val idx = nodes.indexOfLast { it.content.isNotEmpty() || it.children.isNotEmpty() }
         if (idx >= 0) idx else nodes.lastIndex
@@ -1095,6 +1112,11 @@ private fun UnifiedMarkdownCanvas(
                             onLinkClick = onLinkClick,
                             xmlRenderer = xmlRenderer,
                             xmlStream = xmlStreamsByIndex[index],
+                            onImageClick = if (enableDialogs && node.type == MarkdownProcessorType.IMAGE) {
+                                { openImagePreview(index) }
+                            } else {
+                                null
+                            },
                             enableDialogs = enableDialogs,
                             fillMaxWidth = fillMaxWidth,
                             isLastNode = index == lastRenderableIndex,
@@ -1123,6 +1145,11 @@ private fun UnifiedMarkdownCanvas(
                     }
                 }
             }
+        }
+    }
+    if (enableDialogs) {
+        imagePreview?.let { (images, initialPage) ->
+            FullScreenImageDialog(images, initialPage) { imagePreview = null }
         }
     }
 }

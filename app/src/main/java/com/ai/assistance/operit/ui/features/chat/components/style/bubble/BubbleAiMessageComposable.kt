@@ -7,6 +7,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -30,7 +31,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ai.assistance.operit.data.model.ChatMessage
+import com.ai.assistance.operit.ui.common.markdown.FullScreenImageDialog
+import com.ai.assistance.operit.ui.common.markdown.MarkdownPreviewImage
 import com.ai.assistance.operit.ui.common.markdown.StreamMarkdownRenderer
+import com.ai.assistance.operit.ui.common.markdown.extractMarkdownImageAlt
 import com.ai.assistance.operit.ui.common.markdown.StreamMarkdownRendererState
 import com.ai.assistance.operit.ui.features.chat.components.ChatMessageHeightMemory
 import com.ai.assistance.operit.ui.features.chat.components.rememberRevisableTextStream
@@ -221,6 +225,7 @@ fun BubbleAiMessageComposable(
             null
         }
     }
+    var showImagePreview by remember(imageUrl) { mutableStateOf(false) }
     val shouldUseExpandedBubbleLayout =
         rendererState.renderNodes.any { node -> node.type in ExpandedBubbleLayoutNodeTypes }
     val sizeTrackingModifier =
@@ -354,7 +359,8 @@ fun BubbleAiMessageComposable(
                         modifier = Modifier
                             .widthIn(max = maxBubbleWidth)
                             .heightIn(max = 80.dp)
-                            .clip(RoundedCornerShape(16.dp)),
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(enabled = enableDialogs) { showImagePreview = true },
                         contentScale = ContentScale.Fit,
                     )
                 } else {
@@ -558,7 +564,8 @@ fun BubbleAiMessageComposable(
                         modifier = Modifier
                             .widthIn(max = maxBubbleWidth)
                             .heightIn(max = 80.dp)
-                            .clip(RoundedCornerShape(16.dp)),
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(enabled = enableDialogs) { showImagePreview = true },
                         contentScale = ContentScale.Fit
                     )
                 } else {
@@ -680,6 +687,14 @@ fun BubbleAiMessageComposable(
     }
 
     // 链接预览弹窗
+    if (enableDialogs && showImagePreview && imageUrl != null) {
+        FullScreenImageDialog(
+            images = listOf(MarkdownPreviewImage(imageUrl, extractMarkdownImageAlt(message.content))),
+            initialPage = 0,
+            onDismiss = { showImagePreview = false }
+        )
+    }
+
     if (showLinkDialog && linkToPreview.isNotEmpty() && enableDialogs) {
         LinkPreviewDialog(
             url = linkToPreview,
