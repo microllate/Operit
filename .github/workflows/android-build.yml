@@ -16,7 +16,7 @@ on:
       bundle_toolpkgs:
         description: Build and bundle example ToolPkg packages
         type: boolean
-        default: true
+        default: false
   push:
     branches: [main, fix/task-completion-summary-context-auto]
     paths:

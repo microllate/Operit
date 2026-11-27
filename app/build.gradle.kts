@@ -313,11 +313,12 @@ fun downloadSttModelAsset(asset: SttModelAsset, destination: File) {
 }
 
 val sttModelAssetsManifestFile = layout.projectDirectory.file("config/stt-model-assets.properties")
+val onDemandSttModelPrefix = "models/sherpa-ncnn-streaming-zipformer-bilingual-zh-en-2023-02-13/"
 val generatedSttModelAssetsDir = layout.buildDirectory.dir("generated/stt-model-assets")
 val generatedMainAssetsDir = layout.buildDirectory.dir("generated/main-assets")
 
 val syncSttModelAssets by tasks.registering {
-    description = "Downloads and verifies generated assets for local STT recognition."
+    description = "Downloads and verifies bundled assets for local STT recognition."
     group = "build setup"
 
     inputs.file(sttModelAssetsManifestFile)
@@ -327,6 +328,7 @@ val syncSttModelAssets by tasks.registering {
     doLast {
         val manifestFile = sttModelAssetsManifestFile.asFile
         val assets = parseSttModelAssetManifest(manifestFile)
+            .filterNot { it.targetPath.startsWith(onDemandSttModelPrefix) }
         val outputRoot = generatedSttModelAssetsDir.get().asFile
         outputRoot.mkdirs()
 
@@ -379,6 +381,7 @@ val syncMainAssets by tasks.registering(Sync::class) {
         exclude("models/**")
     }
     from(generatedSttModelAssetsDir)
+    from(sttModelAssetsManifestFile)
     into(generatedMainAssetsDir)
 }
 

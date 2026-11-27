@@ -6,12 +6,10 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import com.ai.assistance.operit.util.AppLogger
-import com.ai.assistance.operit.util.OperitPaths
 import com.k2fsa.sherpa.ncnn.*
 import com.ai.assistance.operit.api.speech.SpeechPrerollStore
 import java.io.File
-import com.ai.assistance.operit.util.AssetCopyUtils
-import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -100,6 +98,8 @@ class SherpaSpeechProvider(private val context: Context) : SpeechService {
         return initializeMutex.withLock {
             if (isInitialized.value) return@withLock true
             AppLogger.d(TAG, "Initializing sherpa-ncnn...")
+            _recognitionError.value = SpeechService.RecognitionError(0, "")
+            _recognitionState.value = SpeechService.RecognitionState.PREPARING
             try {
                 withContext(Dispatchers.IO) {
                     createRecognizer()
@@ -116,6 +116,11 @@ class SherpaSpeechProvider(private val context: Context) : SpeechService {
                         false
                     }
                 }
+            } catch (e: CancellationException) {
+                if (!_isInitialized.value) {
+                    _recognitionState.value = SpeechService.RecognitionState.UNINITIALIZED
+                }
+                throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed to initialize sherpa-ncnn", e)
                 _recognitionState.value = SpeechService.RecognitionState.ERROR
@@ -126,24 +131,8 @@ class SherpaSpeechProvider(private val context: Context) : SpeechService {
         }
     }
 
-    private fun createRecognizer() {
-        val localModelDir: File
-        try {
-            val modelDirName = "sherpa-ncnn-streaming-zipformer-bilingual-zh-en-2023-02-13"
-            val assetModelDir = "models/$modelDirName"
-            val targetDir = File(OperitPaths.sherpaNcnnModelsDir(context), modelDirName)
-            localModelDir = AssetCopyUtils.copyAssetDirRecursive(
-                context,
-                assetModelDir,
-                targetDir
-            )
-        } catch (e: IOException) {
-            AppLogger.e(TAG, "Failed to copy model assets.", e)
-            _recognitionState.value = SpeechService.RecognitionState.ERROR
-            _recognitionError.value =
-                    SpeechService.RecognitionError(-1, "Failed to prepare model files.")
-            return
-        }
+    private suspend fun createRecognizer() {
+        val localModelDir = SherpaNcnnModelFiles.prepare(context)
 
         val featConfig = getFeatureExtractorConfig(sampleRate = 16000.0f, featureDim = 80)
 
