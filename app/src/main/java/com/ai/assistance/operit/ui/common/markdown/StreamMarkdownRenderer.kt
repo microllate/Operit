@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.LocalContentColor
@@ -1045,6 +1047,15 @@ private fun AnimatedNode(
 }
 
 @Composable
+internal fun ChatBodySelection(content: @Composable () -> Unit) {
+    if (LocalChatTextSelection.current) {
+        SelectionContainer { content() }
+    } else {
+        content()
+    }
+}
+
+@Composable
 private fun UnifiedMarkdownCanvas(
     nodes: List<MarkdownNodeStable>,
     rendererId: String,
@@ -1094,54 +1105,69 @@ private fun UnifiedMarkdownCanvas(
         remember(groupingKey, rendererId, nodeGrouper) {
             nodeGrouper.group(nodes, rendererId)
         }
-    Column(modifier = modifier) {
-        groupedItems.forEach { item ->
-            when (item) {
-                is MarkdownGroupedItem.Single -> {
-                    val index = item.index
-                    val node = nodes.getOrNull(index) ?: return@forEach
-                    val nodeKey = nodeKeyForIndex(index)
-                    key(nodeKey) {
-                        AnimatedNode(
-                            nodeKey = nodeKey,
-                            node = node,
-                            index = index,
-                            isVisible = nodeAnimationStates[nodeKey] ?: true,
-                            textColor = textColor,
-                            fontSize = fontSize,
-                            onLinkClick = onLinkClick,
-                            xmlRenderer = xmlRenderer,
-                            xmlStream = xmlStreamsByIndex[index],
-                            onImageClick = if (enableDialogs && node.type == MarkdownProcessorType.IMAGE) {
-                                { openImagePreview(index) }
-                            } else {
-                                null
-                            },
-                            enableDialogs = enableDialogs,
-                            fillMaxWidth = fillMaxWidth,
-                            isLastNode = index == lastRenderableIndex,
-                        )
+    ChatBodySelection {
+        Column(modifier = modifier) {
+            groupedItems.forEach { item ->
+                when (item) {
+                    is MarkdownGroupedItem.Single -> {
+                        val index = item.index
+                        val node = nodes.getOrNull(index) ?: return@forEach
+                        val nodeKey = nodeKeyForIndex(index)
+                        key(nodeKey) {
+                            val renderNode: @Composable () -> Unit = {
+                                AnimatedNode(
+                                    nodeKey = nodeKey,
+                                    node = node,
+                                    index = index,
+                                    isVisible = nodeAnimationStates[nodeKey] ?: true,
+                                    textColor = textColor,
+                                    fontSize = fontSize,
+                                    onLinkClick = onLinkClick,
+                                    xmlRenderer = xmlRenderer,
+                                    xmlStream = xmlStreamsByIndex[index],
+                                    onImageClick = if (enableDialogs && node.type == MarkdownProcessorType.IMAGE) {
+                                        { openImagePreview(index) }
+                                    } else {
+                                        null
+                                    },
+                                    enableDialogs = enableDialogs,
+                                    fillMaxWidth = fillMaxWidth,
+                                    isLastNode = index == lastRenderableIndex,
+                                )
+                            }
+                            when (node.type) {
+                                MarkdownProcessorType.PLAIN_TEXT,
+                                MarkdownProcessorType.HEADER,
+                                MarkdownProcessorType.ORDERED_LIST,
+                                MarkdownProcessorType.UNORDERED_LIST,
+                                MarkdownProcessorType.BLOCK_QUOTE,
+                                MarkdownProcessorType.HTML_BREAK -> renderNode()
+                                else -> DisableSelection { renderNode() }
+                            }
+                        }
                     }
-                }
 
-                is MarkdownGroupedItem.Group -> {
-                    val groupKey = "group-$rendererId-${item.stableKey}"
-                    val firstNodeKey = nodeKeyForIndex(item.startIndex)
-                    key(groupKey) {
-                        nodeGrouper.RenderGroup(
-                            group = item,
-                            nodes = nodes,
-                            rendererId = rendererId,
-                            isVisible = nodeAnimationStates[firstNodeKey] ?: true,
-                            isLastNode = item.endIndexInclusive == lastRenderableIndex,
-                            modifier = if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier,
-                            textColor = textColor,
-                            onLinkClick = onLinkClick,
-                            xmlRenderer = xmlRenderer,
-                            xmlStreamResolver = { idx -> xmlStreamsByIndex[idx] },
-                            fillMaxWidth = fillMaxWidth,
-                            fontSize = fontSize,
-                        )
+                    is MarkdownGroupedItem.Group -> {
+                        val groupKey = "group-$rendererId-${item.stableKey}"
+                        val firstNodeKey = nodeKeyForIndex(item.startIndex)
+                        key(groupKey) {
+                            DisableSelection {
+                                nodeGrouper.RenderGroup(
+                                    group = item,
+                                    nodes = nodes,
+                                    rendererId = rendererId,
+                                    isVisible = nodeAnimationStates[firstNodeKey] ?: true,
+                                    isLastNode = item.endIndexInclusive == lastRenderableIndex,
+                                    modifier = if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier,
+                                    textColor = textColor,
+                                    onLinkClick = onLinkClick,
+                                    xmlRenderer = xmlRenderer,
+                                    xmlStreamResolver = { idx -> xmlStreamsByIndex[idx] },
+                                    fillMaxWidth = fillMaxWidth,
+                                    fontSize = fontSize,
+                                )
+                            }
+                        }
                     }
                 }
             }

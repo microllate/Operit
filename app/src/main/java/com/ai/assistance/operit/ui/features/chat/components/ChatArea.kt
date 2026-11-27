@@ -738,7 +738,7 @@ private fun MessageItem(
             ),
     ) {
         Column {
-            SelectableChatContent(enabled = canSelectText) {
+            CompositionLocalProvider(LocalChatTextSelection provides canSelectText) {
                 when (chatStyle) {
                     ChatStyle.CURSOR -> {
                         CursorStyleChatMessage(
@@ -1284,17 +1284,6 @@ private fun MessageItem(
                 onDismiss = { toolPkgDialogRequest = null }
             )
         }
-    }
-}
-
-@Composable
-private fun SelectableChatContent(enabled: Boolean, content: @Composable () -> Unit) {
-    if (enabled) {
-        SelectionContainer {
-            CompositionLocalProvider(LocalChatTextSelection provides true, content = content)
-        }
-    } else {
-        content()
     }
 }
 
