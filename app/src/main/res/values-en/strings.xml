@@ -725,6 +725,8 @@
     <string name="permission_guide_intro_page_indicator">Feature Tour %1$d/%2$d</string>
 
     <!-- Context Menu -->
+    <string name="chat_select_text">Select text</string>
+    <string name="chat_copy_all_text">Copy all</string>
     <string name="copy_message">Copy Message</string>
     <string name="markdown_source">Markdown source</string>
     <string name="xml_source">XML source</string>

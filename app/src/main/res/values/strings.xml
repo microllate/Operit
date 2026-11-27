@@ -1776,6 +1776,8 @@
     <string name="accessibility_wizard_success_message">恭喜！无障碍服务已成功配置，现在AI可以分析和操作屏幕内容。</string>
 
     <!-- Context Menu -->
+    <string name="chat_select_text">选择文字</string>
+    <string name="chat_copy_all_text">复制全部</string>
     <string name="copy_message">复制消息</string>
     <string name="markdown_source">Markdown 源码</string>
     <string name="xml_source">XML 源码</string>

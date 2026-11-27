@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
@@ -670,6 +671,7 @@ private fun MessageItem(
     var showHiddenUserMessageDialog by remember { mutableStateOf(false) }
     var showDeleteMessageConfirmDialog by remember { mutableStateOf(false) }
     var copyPreviewContent by remember { mutableStateOf<MessageCopyContent?>(null) }
+    var selectionContent by remember(currentChatId, message.timestamp) { mutableStateOf<String?>(null) }
     var toolPkgDialogRequest by remember(currentChatId, message.timestamp) {
         mutableStateOf<ChatMessageMenuDialogRequest?>(null)
     }
@@ -849,6 +851,31 @@ private fun MessageItem(
                     },
                     modifier = Modifier.height(36.dp)
                 )
+
+                if (enableDialogs && isActionable && message.content.isNotBlank()) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                stringResource(R.string.chat_select_text),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontSize = 13.sp
+                            )
+                        },
+                        onClick = {
+                            selectionContent = cleanMessageContentForCopy(message.content)
+                            showContextMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.TextFields,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier.height(36.dp)
+                    )
+                }
 
                 // 朗读消息选项
                 DropdownMenuItem(
@@ -1254,6 +1281,17 @@ private fun MessageItem(
             )
         }
 
+        if (enableDialogs && !isHiddenUserMessage) {
+            selectionContent?.let { text ->
+                MessageCopyPreviewBottomSheet(
+                    content = MessageCopyContent(markdownSource = text, xmlSource = ""),
+                    onDismiss = { selectionContent = null },
+                    selectionOnly = true,
+                    plainInput = message.sender == "user"
+                )
+            }
+        }
+
         toolPkgDialogRequest?.let { dialogRequest ->
             ToolPkgComposeDslDialogHost(
                 request = dialogRequest,
@@ -1276,18 +1314,21 @@ private const val COPY_PREVIEW_SHEET_HEIGHT_FRACTION = 0.7f
 private fun MessageCopyPreviewBottomSheet(
     content: MessageCopyContent,
     onDismiss: () -> Unit,
+    selectionOnly: Boolean = false,
+    plainInput: Boolean = false,
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
-    val sheetMaxHeight =
-        remember(screenHeightDp) {
-            (screenHeightDp * COPY_PREVIEW_SHEET_HEIGHT_FRACTION).coerceIn(200.dp, 720.dp)
-        }
+    val heightFraction = if (selectionOnly) 0.85f else COPY_PREVIEW_SHEET_HEIGHT_FRACTION
+    val sheetMaxHeight = (screenHeightDp * heightFraction).coerceIn(200.dp, 720.dp)
     var copyMode by remember(content) { mutableStateOf(MessageCopyMode.PLAIN_TEXT) }
-    var plainText by remember(content.markdownSource) { mutableStateOf<String?>(null) }
-    LaunchedEffect(content.markdownSource, context) {
+    var plainText by remember(content.markdownSource, plainInput) {
+        mutableStateOf(content.markdownSource.takeIf { plainInput })
+    }
+    LaunchedEffect(content.markdownSource, context, plainInput) {
+        if (plainInput) return@LaunchedEffect
         plainText =
             withContext(Dispatchers.Default) {
                 markdownToPlainTextForCopy(content.markdownSource) { formulas ->
@@ -1300,7 +1341,9 @@ private fun MessageCopyPreviewBottomSheet(
         MessageCopyMode.MARKDOWN_SOURCE -> content.markdownSource
         MessageCopyMode.XML_SOURCE -> content.xmlSource
     }
-    val copyButtonText = when (copyMode) {
+    val copyButtonText = if (selectionOnly) {
+        stringResource(R.string.chat_copy_all_text)
+    } else when (copyMode) {
         MessageCopyMode.PLAIN_TEXT -> stringResource(R.string.copy_plain_text)
         MessageCopyMode.MARKDOWN_SOURCE -> stringResource(R.string.copy_markdown_source)
         MessageCopyMode.XML_SOURCE -> stringResource(R.string.copy_xml_source)
@@ -1317,31 +1360,33 @@ private fun MessageCopyPreviewBottomSheet(
                 .padding(start = 20.dp, end = 20.dp, bottom = 24.dp)
         ) {
             Text(
-                text = stringResource(id = R.string.copy_message),
+                text = stringResource(if (selectionOnly) R.string.chat_select_text else R.string.copy_message),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp)
-            ) {
-                FilterChip(
-                    selected = copyMode == MessageCopyMode.PLAIN_TEXT,
-                    onClick = { copyMode = MessageCopyMode.PLAIN_TEXT },
-                    label = { Text(stringResource(R.string.plain_text)) }
-                )
-                FilterChip(
-                    selected = copyMode == MessageCopyMode.MARKDOWN_SOURCE,
-                    onClick = { copyMode = MessageCopyMode.MARKDOWN_SOURCE },
-                    label = { Text(stringResource(R.string.markdown_source)) }
-                )
-                FilterChip(
-                    selected = copyMode == MessageCopyMode.XML_SOURCE,
-                    onClick = { copyMode = MessageCopyMode.XML_SOURCE },
-                    label = { Text(stringResource(R.string.xml_source)) }
-                )
+            if (!selectionOnly) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    FilterChip(
+                        selected = copyMode == MessageCopyMode.PLAIN_TEXT,
+                        onClick = { copyMode = MessageCopyMode.PLAIN_TEXT },
+                        label = { Text(stringResource(R.string.plain_text)) }
+                    )
+                    FilterChip(
+                        selected = copyMode == MessageCopyMode.MARKDOWN_SOURCE,
+                        onClick = { copyMode = MessageCopyMode.MARKDOWN_SOURCE },
+                        label = { Text(stringResource(R.string.markdown_source)) }
+                    )
+                    FilterChip(
+                        selected = copyMode == MessageCopyMode.XML_SOURCE,
+                        onClick = { copyMode = MessageCopyMode.XML_SOURCE },
+                        label = { Text(stringResource(R.string.xml_source)) }
+                    )
+                }
             }
             if (copyMode == MessageCopyMode.PLAIN_TEXT && plainText == null) {
                 Box(
@@ -1373,7 +1418,8 @@ private fun MessageCopyPreviewBottomSheet(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(
-                    enabled = copyMode != MessageCopyMode.PLAIN_TEXT || plainText != null,
+                    enabled = if (selectionOnly) displayedText.isNotEmpty()
+                    else copyMode != MessageCopyMode.PLAIN_TEXT || plainText != null,
                     onClick = {
                         clipboardManager.setText(AnnotatedString(displayedText))
                         Toast.makeText(
