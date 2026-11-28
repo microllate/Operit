@@ -8,6 +8,8 @@ import com.ai.assistance.operit.data.model.TokenStatsModelEntity
 import com.ai.assistance.operit.data.model.TokenUsageRecordEntity
 import com.ai.assistance.operit.data.preferences.ApiPreferences
 import com.ai.assistance.operit.util.AppLogger
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -98,6 +100,12 @@ class TokenUsageRepository private constructor(context: Context) {
     internal suspend fun <T> withDao(block: suspend (TokenUsageDao) -> T): T {
         ensureInitialized()
         return withDatabaseAccess { block(AppDatabase.getDatabase(appContext).tokenUsageDao()) }
+    }
+
+    internal fun statisticsChanges() = flow {
+        ensureInitialized()
+        val database = withDatabaseAccess { AppDatabase.getDatabase(appContext) }
+        emitAll(database.invalidationTracker.createFlow("token_usage_records", "token_stats_models"))
     }
 
     suspend fun record(record: TokenUsageRecordEntity) {

@@ -1,5 +1,7 @@
 package com.ai.assistance.operit.core.tools.defaultTool.standard
 
+import com.ai.assistance.operit.core.chat.SummaryMemorySyncManager
+import com.ai.assistance.operit.api.chat.library.MemoryLibrary
 import android.content.Context
 import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.api.chat.enhance.ToolExecutionManager
@@ -150,6 +152,13 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
             }
     }
 
+    private fun currentWorkspacePath(): String? =
+        ToolExecutionManager.currentToolRuntimeContext()
+            ?.workspacePath?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
+
+    private fun workspaceMemoryFolder(workspacePath: String): String =
+        SummaryMemorySyncManager.workspaceFolder(workspacePath)
+
     private fun parseTimeBoundary(value: String?, isEnd: Boolean): Long? {
         val trimmed = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val timezone = TimeZone.getDefault()
@@ -214,7 +223,36 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         val profileId = resolveActiveProfileId(tool)
         val memoryRepository = getMemoryRepository(profileId)
         val query = tool.parameters.find { it.name == "query" }?.value ?: ""
-        val folderPath = tool.parameters.find { it.name == "folder_path" }?.value
+        val requestedFolder = MemoryRepository.normalizeFolderPath(
+            tool.parameters.find { it.name == "folder_path" }?.value
+        )
+        val scope = tool.parameters.find { it.name == "scope" }?.value?.trim().orEmpty()
+        val summaryOnly = scope == "summary"
+        val workspaceFolder = currentWorkspacePath()?.let(::workspaceMemoryFolder)
+        val searchRoots = when (scope) {
+            "common" -> listOf(MemoryLibrary.COMMON_FACT_FOLDER)
+            "workspace" -> listOfNotNull(workspaceFolder)
+            "summary" -> listOfNotNull(workspaceFolder?.let { "$it/历史摘要" })
+            "", "all" -> listOfNotNull(workspaceFolder, MemoryLibrary.COMMON_FACT_FOLDER)
+            else -> return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Invalid scope. Use all, common, workspace, or summary."
+            )
+        }
+        if (searchRoots.isEmpty()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "The requested scope requires a current workspace."
+            )
+        }
+        val restrictedFolder = requestedFolder?.takeIf { folder ->
+            searchRoots.any { root -> folder == root || folder.startsWith("$root/") }
+        }
+        val folders = restrictedFolder?.let { listOf(it) } ?: searchRoots
         val settings = getMemorySearchSettingsPreferences(profileId).load()
         val limitParam = tool.parameters.find { it.name == "limit" }?.value
         val limit = limitParam?.toIntOrNull()
@@ -286,32 +324,49 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         }
 
         // limit 无上限，但至少为 1
-        val validLimit = if (finalLimit < 1) 1 else finalLimit
-        val (snapshotState, snapshotCreated) = getOrCreateQuerySnapshot(profileId, normalizedSnapshotId)
+        val validLimit = if (summaryOnly) (limit ?: 3).coerceIn(1, 3) else finalLimit.coerceAtLeast(1)
+        val (snapshotState, snapshotCreated) = getOrCreateQuerySnapshot("$profileId:${workspaceFolder ?: "global"}", normalizedSnapshotId)
 
         AppLogger.d(
             TAG,
-            "Executing memory query: '$query' in folder: '${folderPath ?: "All"}', snapshot_id=${snapshotState.id}, snapshot_created=$snapshotCreated, start_time: ${startTimeMs ?: "null"}, end_time: ${endTimeMs ?: "null"}, limit: $validLimit, threshold=${threshold ?: DEFAULT_RELEVANCE_THRESHOLD}, mode=${settings.scoreMode}, keywordWeight=${settings.keywordWeight}, tagWeight=${settings.tagWeight}, vectorWeight=${settings.vectorWeight}, edgeWeight=${settings.edgeWeight}"
+            "Executing memory query: '$query' in folder: '$folders', snapshot_id=${snapshotState.id}, snapshot_created=$snapshotCreated, start_time: ${startTimeMs ?: "null"}, end_time: ${endTimeMs ?: "null"}, limit: $validLimit, threshold=${threshold ?: DEFAULT_RELEVANCE_THRESHOLD}, mode=${settings.scoreMode}, keywordWeight=${settings.keywordWeight}, tagWeight=${settings.tagWeight}, vectorWeight=${settings.vectorWeight}, edgeWeight=${settings.edgeWeight}"
         )
 
         return try {
-            val results = memoryRepository.searchMemories(
-                query = query,
-                folderPath = folderPath,
-                scoreMode = settings.scoreMode,
-                keywordWeight = settings.keywordWeight,
-                tagWeight = settings.tagWeight,
-                semanticWeight = settings.vectorWeight,
-                edgeWeight = settings.edgeWeight,
-                relevanceThreshold = threshold ?: DEFAULT_RELEVANCE_THRESHOLD,
-                createdAtStartMs = startTimeMs,
-                createdAtEndMs = endTimeMs
-            )
+            val scopedResults = folders.flatMap { folder ->
+                val isCommon = folder == MemoryLibrary.COMMON_FACT_FOLDER ||
+                    folder.startsWith("${MemoryLibrary.COMMON_FACT_FOLDER}/")
+                memoryRepository.searchMemories(
+                    query = query,
+                    folderPath = folder,
+                    scoreMode = settings.scoreMode,
+                    keywordWeight = settings.keywordWeight,
+                    tagWeight = settings.tagWeight,
+                    semanticWeight = settings.vectorWeight,
+                    edgeWeight = settings.edgeWeight,
+                    relevanceThreshold = threshold ?: DEFAULT_RELEVANCE_THRESHOLD,
+                    createdAtStartMs = startTimeMs,
+                    createdAtEndMs = endTimeMs
+                ).filter { memory ->
+                    val memoryFolder = MemoryRepository.normalizeFolderPath(memory.folderPath).orEmpty()
+                    (memoryFolder == folder || memoryFolder.startsWith("$folder/")) &&
+                        (!summaryOnly || memory.source == "chat_summary") &&
+                        (!isCommon || memory.source == MemoryLibrary.COMMON_FACT_SOURCE)
+                }
+            }
+            val workspaceTitles = scopedResults.asSequence()
+                .filterNot { it.source == MemoryLibrary.COMMON_FACT_SOURCE }
+                .map { it.title.trim().lowercase(Locale.ROOT) }
+                .toSet()
+            val combinedResults = scopedResults.filterNot { memory ->
+                memory.source == MemoryLibrary.COMMON_FACT_SOURCE &&
+                    memory.title.trim().lowercase(Locale.ROOT) in workspaceTitles
+            }
 
             // Keep de-duplication stable even when multiple calls share the same snapshot in parallel.
             val (excludedBySnapshotCount, returnedMemories) = synchronized(snapshotState.lock) {
-                val excludedCount = results.count { it.id in snapshotState.seenMemoryIds }
-                val unseenResults = results.filterNot { it.id in snapshotState.seenMemoryIds }
+                val excludedCount = combinedResults.count { it.id in snapshotState.seenMemoryIds }
+                val unseenResults = combinedResults.filterNot { it.id in snapshotState.seenMemoryIds }
                 val selectedResults = unseenResults.take(validLimit)
                 if (selectedResults.isNotEmpty()) {
                     snapshotState.seenMemoryIds.addAll(selectedResults.map { it.id })
@@ -359,7 +414,45 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         AppLogger.d(TAG, "Getting memory by title: $title, chunk_index: $chunkIndexParam, chunk_range: $chunkRangeParam, query: $queryParam, limit: $chunkLimitParam")
 
         return try {
-            val memory = memoryRepository.findMemoryByTitle(title)
+            val workspacePath = currentWorkspacePath()
+            val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
+            val isSummaryAlias = title.trim() == "摘要" || title.trim() == "历史摘要"
+            if (isSummaryAlias) {
+                val summaries = workspaceFolder?.let { folder ->
+                    memoryRepository.getMemoriesByFolderPath("$folder/历史摘要")
+                        .filter { it.source == "chat_summary" }
+                        .distinctBy { it.id }
+                        .sortedByDescending { it.createdAt }
+                        .take(5)
+                }.orEmpty()
+                if (summaries.isNotEmpty()) {
+                    return ToolResult(
+                        toolName = tool.name,
+                        success = true,
+                        result = buildResultData(memoryRepository, summaries, title, summaries.size)
+                    )
+                }
+                return ToolResult(
+                    toolName = tool.name,
+                    success = false,
+                    result = StringResultData(""),
+                    error = "No history summaries found in the current workspace"
+                )
+            }
+            val candidates = memoryRepository.findMemoriesByTitle(title)
+            val workspaceMatch = candidates.firstOrNull { candidate ->
+                val folder = MemoryRepository.normalizeFolderPath(candidate.folderPath).orEmpty()
+                workspaceFolder != null &&
+                    (folder == workspaceFolder || folder.startsWith("$workspaceFolder/"))
+            }
+            val commonMatch = candidates.firstOrNull { candidate ->
+                candidate.source == MemoryLibrary.COMMON_FACT_SOURCE &&
+                    candidate.folderPath == MemoryLibrary.COMMON_FACT_FOLDER
+            }
+            val memory = workspaceMatch ?: commonMatch ?: candidates.firstOrNull { candidate ->
+                val folder = MemoryRepository.normalizeFolderPath(candidate.folderPath).orEmpty()
+                !folder.startsWith("工作区/")
+            }
             if (memory == null) {
                 return ToolResult(
                     toolName = tool.name,
@@ -532,14 +625,31 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         return try {
             val contentType = tool.parameters.find { it.name == "content_type" }?.value ?: "text/plain"
             val source = tool.parameters.find { it.name == "source" }?.value ?: "ai_created"
-            val folderPath = tool.parameters.find { it.name == "folder_path" }?.value ?: ""
-            val tagsParam = tool.parameters.find { it.name == "tags" }?.value
-            val tags = tagsParam
-                ?.split(",")
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() }
-                ?.distinct()
-             
+            val requestedFolder = MemoryRepository.normalizeFolderPath(
+                tool.parameters.find { it.name == "folder_path" }?.value
+            )
+            val workspaceFolder = currentWorkspacePath()?.let(::workspaceMemoryFolder)
+            val tags = tool.parameters.find { it.name == "tags" }?.value
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct().orEmpty()
+            val issueTags = tags.filter { it.startsWith("问题:") }
+            val issueTag = issueTags.singleOrNull()
+            if (issueTags.isNotEmpty() && (issueTag == null ||
+                    SummaryMemorySyncManager.issueTag(issueTag.removePrefix("问题:")) != issueTag ||
+                    workspaceFolder == null || source == "chat_summary")
+            ) {
+                return ToolResult(
+                    toolName = tool.name, success = false, result = StringResultData(""),
+                    error = "Use a single 问题:<key> tag in a workspace. Keys must be lowercase ASCII, at most 64 characters."
+                )
+            }
+            val folderPath = when {
+                issueTag != null && workspaceFolder != null ->
+                    requestedFolder?.takeIf { it == workspaceFolder || it.startsWith("$workspaceFolder/") }
+                        ?: "$workspaceFolder/过程记忆"
+                requestedFolder != null -> requestedFolder
+                workspaceFolder != null -> "$workspaceFolder/过程记忆"
+                else -> ""
+            }
             val memory = memoryRepository.createMemory(
                 title = title,
                 content = content,
@@ -548,8 +658,17 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
                 folderPath = folderPath,
                 tags = tags
             )
-            
+
             if (memory != null) {
+                if (issueTag != null && workspaceFolder != null) {
+                    try {
+                        SummaryMemorySyncManager.linkIssueMemory(memoryRepository, workspaceFolder, issueTag, memory)
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        AppLogger.e(TAG, "Memory saved but issue link failed", error)
+                    }
+                }
                 val message = "Successfully created memory: '$title' (UUID: ${memory.uuid})"
                 AppLogger.d(TAG, message)
                 ToolResult(

@@ -15,6 +15,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
@@ -48,12 +50,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -107,6 +111,7 @@ import com.ai.assistance.operit.plugins.chatmessage.ChatMessageMenuItemParams
 import com.ai.assistance.operit.plugins.chatmessage.ChatMessageMenuItemRegistry
 import com.ai.assistance.operit.ui.common.composedsl.ToolPkgComposeDslDialogHost
 import com.ai.assistance.operit.ui.common.icons.MaterialIconNameResolver
+import com.ai.assistance.operit.ui.common.markdown.LocalChatTextSelection
 import com.ai.assistance.operit.ui.common.markdown.markdownToPlainTextForCopy
 import com.ai.assistance.operit.ui.features.chat.components.style.cursor.CursorStyleChatMessage
 import com.ai.assistance.operit.ui.features.chat.components.style.bubble.BubbleImageStyleConfig
@@ -691,6 +696,17 @@ private fun MessageItem(
             message = message
         )
 
+    fun openMessageMenu() {
+        pluginMenuItems = if (isHiddenUserMessage) {
+            emptyList()
+        } else {
+            ChatMessageMenuItemRegistry.createMenuItems(buildPluginMenuItemParams())
+        }
+        showContextMenu = true
+    }
+
+    val canSelectText = enableDialogs && isActionable && !isHidden && !isHiddenUserMessage && !isMultiSelectMode
+
     Box(
         modifier =
         Modifier
@@ -713,76 +729,85 @@ private fun MessageItem(
                         showHiddenUserMessageDialog = true
                     }
                 },
-                onLongClick = { 
-                    if (!isMultiSelectMode && isActionable) {
-                        pluginMenuItems =
-                            if (!isHiddenUserMessage) {
-                                ChatMessageMenuItemRegistry.createMenuItems(
-                                    buildPluginMenuItemParams()
-                                )
-                            } else {
-                                emptyList()
-                            }
-                        showContextMenu = true
-                    }
+                onDoubleClick = if (canSelectText) ::openMessageMenu else null,
+                onLongClick = if (!canSelectText && !isMultiSelectMode && isActionable) {
+                    ::openMessageMenu
+                } else {
+                    null
                 },
             ),
     ) {
         Column {
-            when (chatStyle) {
-                ChatStyle.CURSOR -> {
-                    CursorStyleChatMessage(
-                        message = message,
-                        userMessageColor = userMessageColor,
-                        userMessageLiquidGlassEnabled = cursorUserBubbleLiquidGlass,
-                        userMessageWaterGlassEnabled = cursorUserBubbleWaterGlass,
-                        aiMessageColor = aiMessageColor,
-                        userTextColor = userTextColor,
-                        aiTextColor = aiTextColor,
-                        systemMessageColor = systemMessageColor,
-                        systemTextColor = systemTextColor,
-                        thinkingBackgroundColor = thinkingBackgroundColor,
-                        thinkingTextColor = thinkingTextColor,
-                        supportToolMarkup = true,
-                        initialThinkingExpanded = false,
-                        onDeleteMessage = onDeleteMessage,
-                        index = index,
-                        enableDialogs = enableDialogs,
-                        onEditSummary = { summaryMessage ->
-                            onSelectMessageToEdit?.invoke(index, summaryMessage, "summary")
-                        }
-                    )
-                }
+            CompositionLocalProvider(LocalChatTextSelection provides canSelectText) {
+                when (chatStyle) {
+                    ChatStyle.CURSOR -> {
+                        CursorStyleChatMessage(
+                            message = message,
+                            userMessageColor = userMessageColor,
+                            userMessageLiquidGlassEnabled = cursorUserBubbleLiquidGlass,
+                            userMessageWaterGlassEnabled = cursorUserBubbleWaterGlass,
+                            aiMessageColor = aiMessageColor,
+                            userTextColor = userTextColor,
+                            aiTextColor = aiTextColor,
+                            systemMessageColor = systemMessageColor,
+                            systemTextColor = systemTextColor,
+                            thinkingBackgroundColor = thinkingBackgroundColor,
+                            thinkingTextColor = thinkingTextColor,
+                            supportToolMarkup = true,
+                            initialThinkingExpanded = false,
+                            onDeleteMessage = onDeleteMessage,
+                            index = index,
+                            enableDialogs = enableDialogs,
+                            onEditSummary = { summaryMessage ->
+                                onSelectMessageToEdit?.invoke(index, summaryMessage, "summary")
+                            }
+                        )
+                    }
 
-                ChatStyle.BUBBLE -> {
-                    BubbleStyleChatMessage(
-                        message = message,
-                        userMessageColor = userMessageColor,
-                        aiMessageColor = aiMessageColor,
-                        userTextColor = userTextColor,
-                        aiTextColor = aiTextColor,
-                        systemMessageColor = systemMessageColor,
-                        systemTextColor = systemTextColor,
-                        userMessageLiquidGlassEnabled = bubbleUserBubbleLiquidGlass,
-                        userMessageWaterGlassEnabled = bubbleUserBubbleWaterGlass,
-                        aiMessageLiquidGlassEnabled = bubbleAiBubbleLiquidGlass,
-                        aiMessageWaterGlassEnabled = bubbleAiBubbleWaterGlass,
-                        userBubbleImageStyle = bubbleUserImageStyle,
-                        aiBubbleImageStyle = bubbleAiImageStyle,
-                        bubbleUserRoundedCornersEnabled = bubbleUserRoundedCornersEnabled,
-                        bubbleAiRoundedCornersEnabled = bubbleAiRoundedCornersEnabled,
-                        bubbleUserContentPaddingLeft = bubbleUserContentPaddingLeft,
-                        bubbleUserContentPaddingRight = bubbleUserContentPaddingRight,
-                        bubbleAiContentPaddingLeft = bubbleAiContentPaddingLeft,
-                        bubbleAiContentPaddingRight = bubbleAiContentPaddingRight,
-                        isHidden = isHidden,
-                        onDeleteMessage = onDeleteMessage,
-                        index = index,
-                        enableDialogs = enableDialogs,
-                        onRoleAvatarLongPress = onMentionRoleFromAvatar,
-                        onEditSummary = { summaryMessage ->
-                            onSelectMessageToEdit?.invoke(index, summaryMessage, "summary")
-                        }
+                    ChatStyle.BUBBLE -> {
+                        BubbleStyleChatMessage(
+                            message = message,
+                            userMessageColor = userMessageColor,
+                            aiMessageColor = aiMessageColor,
+                            userTextColor = userTextColor,
+                            aiTextColor = aiTextColor,
+                            systemMessageColor = systemMessageColor,
+                            systemTextColor = systemTextColor,
+                            userMessageLiquidGlassEnabled = bubbleUserBubbleLiquidGlass,
+                            userMessageWaterGlassEnabled = bubbleUserBubbleWaterGlass,
+                            aiMessageLiquidGlassEnabled = bubbleAiBubbleLiquidGlass,
+                            aiMessageWaterGlassEnabled = bubbleAiBubbleWaterGlass,
+                            userBubbleImageStyle = bubbleUserImageStyle,
+                            aiBubbleImageStyle = bubbleAiImageStyle,
+                            bubbleUserRoundedCornersEnabled = bubbleUserRoundedCornersEnabled,
+                            bubbleAiRoundedCornersEnabled = bubbleAiRoundedCornersEnabled,
+                            bubbleUserContentPaddingLeft = bubbleUserContentPaddingLeft,
+                            bubbleUserContentPaddingRight = bubbleUserContentPaddingRight,
+                            bubbleAiContentPaddingLeft = bubbleAiContentPaddingLeft,
+                            bubbleAiContentPaddingRight = bubbleAiContentPaddingRight,
+                            isHidden = isHidden,
+                            onDeleteMessage = onDeleteMessage,
+                            index = index,
+                            enableDialogs = enableDialogs,
+                            onRoleAvatarLongPress = onMentionRoleFromAvatar,
+                            onEditSummary = { summaryMessage ->
+                                onSelectMessageToEdit?.invoke(index, summaryMessage, "summary")
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (canSelectText) {
+                IconButton(
+                    onClick = ::openMessageMenu,
+                    modifier = Modifier.align(Alignment.End).size(40.dp)
+                ) {
+                    Icon(
+                        Icons.Default.MoreHoriz,
+                        contentDescription = stringResource(R.string.more),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -1353,21 +1378,19 @@ private fun MessageCopyPreviewBottomSheet(
                     CircularProgressIndicator()
                 }
             } else {
-                BasicTextField(
-                    value = displayedText,
-                    onValueChange = {},
-                    readOnly = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    // BasicTextField owns selection dragging, so it scrolls itself while a
-                    // handle is dragged past an edge and keeps the selection in sync.
+                SelectionContainer(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
                         .padding(bottom = 12.dp)
-                )
+                ) {
+                    Text(
+                        text = displayedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

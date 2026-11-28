@@ -22,7 +22,7 @@
                 { "name": "content_type", "description": { "zh": "可选：内容类型，默认 text/plain", "en": "Optional: content type (default: text/plain)" }, "type": "string", "required": false },
                 { "name": "source", "description": { "zh": "可选：来源，默认 ai_created", "en": "Optional: source (default: ai_created)" }, "type": "string", "required": false },
                 { "name": "folder_path", "description": { "zh": "可选：文件夹路径，默认空", "en": "Optional: folder path (default: empty)" }, "type": "string", "required": false },
-                { "name": "tags", "description": { "zh": "可选：标签（逗号分隔字符串）", "en": "Optional: tags (comma-separated string)" }, "type": "string", "required": false }
+                { "name": "tags", "description": { "zh": "可选：逗号分隔标签。保存项目过程时，加一个问题:<编号>标签；确认是同一个问题才复用编号。", "en": "Optional comma-separated tags. Include one 问题:<key> tag for project notes; reuse a key only for the same issue." }, "type": "string", "required": false }
             ]
         },
         {

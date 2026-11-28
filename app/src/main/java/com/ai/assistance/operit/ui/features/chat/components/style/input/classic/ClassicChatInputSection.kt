@@ -2,6 +2,15 @@ package com.ai.assistance.operit.ui.features.chat.components.style.input.classic
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.foundation.content.ReceiveContentListener
+import androidx.compose.foundation.content.TransferableContent
+import androidx.compose.foundation.content.contentReceiver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,6 +87,7 @@ import androidx.compose.ui.res.stringResource
 import android.net.Uri
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun ClassicChatInputSection(
     actualViewModel: ChatViewModel,
     userMessage: TextFieldValue,
@@ -122,6 +132,47 @@ fun ClassicChatInputSection(
     val showTokenLimitDialog = remember { mutableStateOf(false) }
     val showFullscreenInput = remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val richInputState = remember {
+        TextFieldState(initialText = userMessage.text, initialSelection = userMessage.selection)
+    }
+    // Keep the legacy message state (used by @ mentions) and the state-based
+    // text field in sync, including the cursor/selection.
+    LaunchedEffect(userMessage.text, userMessage.selection) {
+        if (richInputState.text.toString() != userMessage.text) {
+            richInputState.edit {
+                replace(0, length, userMessage.text)
+                selection = userMessage.selection
+            }
+        } else if (richInputState.selection != userMessage.selection) {
+            richInputState.edit { selection = userMessage.selection }
+        }
+    }
+    LaunchedEffect(richInputState, onUserMessageChange) {
+        snapshotFlow {
+            TextFieldValue(richInputState.text.toString(), richInputState.selection)
+        }.collectLatest { value ->
+            onUserMessageChange(value)
+        }
+    }
+
+    val imagePasteReceiver = remember(onAttachmentRequest) {
+        object : ReceiveContentListener {
+            override fun onReceive(transferableContent: TransferableContent): TransferableContent? {
+                val clip = transferableContent.clipEntry.clipData
+                val imageUris = (0 until clip.itemCount).mapNotNull { index ->
+                    clip.getItemAt(index).uri?.takeIf { uri ->
+                        uri.scheme == "content" &&
+                            (clip.description.hasMimeType("image/*") ||
+                                context.contentResolver.getType(uri)?.startsWith("image/") == true)
+                    }
+                }
+                if (imageUris.isEmpty()) return transferableContent
+                imageUris.forEach { onAttachmentRequest(it.toString()) }
+                return null
+            }
+        }
+    }
+
     val isProcessing =
         isLoading ||
             inputState is InputProcessingState.Connecting ||
@@ -499,11 +550,11 @@ fun ClassicChatInputSection(
                     }
 
                 BasicTextField(
-                    value = userMessage,
-                    onValueChange = onUserMessageChange,
+                    state = richInputState,
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 30.dp)
+                        .contentReceiver(imagePasteReceiver)
                         .onPreviewKeyEvent { keyEvent ->
                             if (!enableEnterToSend) {
                                 false
@@ -520,19 +571,12 @@ fun ClassicChatInputSection(
                         },
                     textStyle = modernTextStyle.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    visualTransformation = mentionVisualTransformation,
-                    maxLines = 5,
-                    minLines = 1,
+                    lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 5),
                     keyboardOptions =
                     KeyboardOptions(imeAction = if (enableEnterToSend) ImeAction.Send else ImeAction.Default),
-                    keyboardActions =
-                    if (enableEnterToSend) {
-                        KeyboardActions(onSend = { handleEnterSendAction() })
-                    } else {
-                        KeyboardActions()
-                    },
+                    onKeyboardAction = { if (enableEnterToSend) handleEnterSendAction() },
                     enabled = classicInputEnabled,
-                    decorationBox = { innerTextField ->
+                    decorator = { innerTextField ->
                         Row(
                             modifier =
                                 Modifier

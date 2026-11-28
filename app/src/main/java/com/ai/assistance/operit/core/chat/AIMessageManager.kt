@@ -11,6 +11,7 @@ import com.ai.assistance.operit.api.chat.llmprovider.MediaLinkParser
 import com.ai.assistance.operit.api.chat.llmprovider.MediaLinkBuilder
 import com.ai.assistance.operit.core.chat.hooks.PromptTurn
 import com.ai.assistance.operit.core.chat.hooks.PromptTurnKind
+import com.ai.assistance.operit.core.config.FunctionalPrompts
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingController
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingHookParams
 import com.ai.assistance.operit.core.chat.plugins.MessageProcessingPluginRegistry
@@ -369,7 +370,8 @@ object AIMessageManager {
         chatModelConfigIdOverride: String? = null,
         chatModelIndexOverride: Int? = null,
         memorySpaceIdOverride: String? = null,
-        disableWarning: Boolean = false
+        disableWarning: Boolean = false,
+        internalSummary: Boolean = false
     ): SharedStream<String> {
         val totalStartTime = messageTimingNow()
         val chatKey = chatId ?: DEFAULT_CHAT_KEY
@@ -428,7 +430,7 @@ object AIMessageManager {
             )
 
             val matchPluginStartTime = messageTimingNow()
-            val pluginExecution = MessageProcessingPluginRegistry.createExecutionIfMatched(
+            val pluginExecution = if (internalSummary) null else MessageProcessingPluginRegistry.createExecutionIfMatched(
                 params = MessageProcessingHookParams(
                     context = context,
                     enhancedAIService = enhancedAiService,
@@ -506,7 +508,8 @@ object AIMessageManager {
                     chatModelIndexOverride = chatModelIndexOverride,
                     memorySpaceIdOverride = memorySpaceIdOverride,
                     stream = enableStream,
-                    disableWarning = disableWarning
+                    disableWarning = disableWarning,
+                    internalSummary = internalSummary
                 )
             ).shareRevisable(
                 scope = scope,
@@ -686,10 +689,17 @@ object AIMessageManager {
         messages: List<ChatMessage>,
         autoContinue: Boolean = false,
         isGroupChat: Boolean = false,
-        summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig()
+        summaryConfig: ConversationSummaryConfig = ConversationSummaryConfig(),
+        chatModelConfigIdOverride: String? = null,
+        chatModelIndexOverride: Int? = null,
+        workspacePath: String? = null,
+        workspaceEnv: String? = null,
+        chatId: String? = null,
+        sendHiddenSummary: suspend (String) -> String
     ): ChatMessage? {
         val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
-        val previousSummary = if (lastSummaryIndex != -1) messages[lastSummaryIndex].content.trim() else null
+
+        // Summarize only newly added conversation turns to avoid mixing old history into new content.
 
         val messagesToSummarize = when {
             lastSummaryIndex == -1 -> messages.filter { it.sender == "user" || it.sender == "ai" }
@@ -1041,51 +1051,96 @@ object AIMessageManager {
         }
 
         return try {
-            AppLogger.d(TAG, "开始使用AI生成对话总结：总结 ${messagesToSummarize.size} 条消息")
-            val summary =
-                enhancedAiService.generateSummary(
-                    conversationToSummarize,
-                    previousSummary,
-                    summaryConfig
-                )
+            AppLogger.d(TAG, "开始使用AI生成任务恢复摘要：总结 ${messagesToSummarize.size} 条消息")
+            val summaryChatId = requireNotNull(chatId?.takeIf { it.isNotBlank() }) {
+                "Cannot summarize without a chat ID"
+            }
+            // Hidden USER turn goes through the same CHAT sending pipeline as normal messages.
+            // Do not add either the instruction or the response to persisted chat messages.
+            val useEnglishForPrompt = !LocaleUtils.usesChineseContent(context)
+            if (!workspacePath.isNullOrBlank()) {
+                return summarizeWorkspaceIssues(workspacePath, workspaceEnv, summaryChatId,
+                    summaryConfig, useEnglishForPrompt, autoContinue, sendHiddenSummary)
+            }
+            val instruction = buildString {
+                appendLine(if (useEnglishForPrompt) {
+                    "This message is for context summarization. Do not use any tools. Reply according to the following rules."
+                } else {
+                    "此消息是上下文总结，不允许使用工具，按以下规则进行回复。"
+                })
+                appendLine()
+                appendLine(FunctionalPrompts.buildSummarySystemPrompt(
+                    previousSummary = null,
+                    useEnglish = useEnglishForPrompt,
+                    summaryConfig = summaryConfig
+                ))
+                appendLine()
+                appendLine(FunctionalPrompts.summaryUserMessage(useEnglishForPrompt))
+                appendLine()
+                append("Only produce the requested summary sections. Do not call tools.")
+            }
+            val summary = ChatUtils.removeThinkingContent(sendHiddenSummary(instruction).trim())
             AppLogger.d(TAG, "AI生成总结完成: ${summary.take(50)}...")
 
             if (summary.isBlank()) {
                 AppLogger.e(TAG, "AI生成的总结内容为空，放弃本次总结")
                 null
             } else {
-                // 如果是自动续写，在总结消息尾部添加续写提示
-                val trimmedSummary = summary.trim()
+                // 新摘要必须包含四个固定板块；结构不完整时拒绝覆盖旧摘要。
                 val useEnglish = !LocaleUtils.usesChineseContent(context)
-                val packageWarmupBlock = buildPackageWarmupBlock(messagesToSummarize, useEnglish)
+                val requiredSections = FunctionalPrompts.resolveSummarySections(
+                    summaryConfig.sectionOverrides,
+                    useEnglish
+                )
+                val missingSections = requiredSections.filter { section ->
+                    val title = section.title.trim()
+                    title.isNotBlank() &&
+                        !summary.contains("【$title】") &&
+                        !summary.contains("[$title]")
+                }
+                if (missingSections.isNotEmpty()) {
+                    AppLogger.e(
+                        TAG,
+                        "AI生成的摘要缺少必要板块，拒绝覆盖历史摘要: " +
+                            missingSections.joinToString { it.title }
+                    )
+                    return null
+                }
+
+                val nextStepSection = requiredSections[3]
+                val nextStepHeaderCandidates = listOf(
+                    "【${nextStepSection.title}】",
+                    "[${nextStepSection.title}]"
+                )
+                val nextStepHeader = nextStepHeaderCandidates
+                    .firstOrNull { summary.contains(it) }
+                    ?: run {
+                        AppLogger.e(TAG, "无法提取摘要中的下一步策略，拒绝插入摘要")
+                        return null
+                    }
+                val nextStepStart = summary.indexOf(nextStepHeader) + nextStepHeader.length
+                val nextStepStrategy = summary.substring(nextStepStart)
+                    .trim()
+                    .trimStart(':', '：', '-', '—', '*', ' ')
+                    .lineSequence()
+                    .map { it.trim().removePrefix("-").removePrefix("•").trim() }
+                    .filter { it.isNotBlank() && !it.startsWith("=") }
+                    .joinToString(" ")
+                    .ifBlank { "无" }
+
                 val summaryWithQuotes = buildString {
-                    append(trimmedSummary)
-                    if (summaryConfig.dialogueReviewEnabled && conversationReviewEntries.isNotEmpty()) {
-                        append(
-                            formatDialogueReviewHeader(
-                                defaultHeader = context.getString(R.string.ai_message_dialogue_review),
-                                customTitle = summaryConfig.dialogueReviewTitle
-                            )
-                        )
-                        conversationReviewEntries.forEach { (speaker, content) ->
-                            append("- ")
-                            append(speaker)
-                            append(": ")
-                            append(content)
-                            append("\n")
-                        }
-                    }
-                    if (packageWarmupBlock.isNotBlank()) {
-                        append("\n\n")
-                        append(packageWarmupBlock)
-                    }
-                }.trimEnd()
+                    appendLine("==========对话摘要==========")
+                    appendLine("历史摘要记忆库已更新")
+                    appendLine("下一步策略：$nextStepStrategy")
+                }
 
                 val finalSummary = if (autoContinue) {
                     context.getString(R.string.ai_message_continue_task_if_complete, summaryWithQuotes)
                 } else {
                     summaryWithQuotes
                 }
+
+                // 如果是自动续写，在总结消息尾部添加续写提示
                 
                 ChatMessage(
                     sender = "summary",
@@ -1101,6 +1156,68 @@ object AIMessageManager {
             AppLogger.e(TAG, "AI生成总结过程中发生异常", e)
             throw e
         }
+    }
+
+    private suspend fun summarizeWorkspaceIssues(
+        workspacePath: String,
+        workspaceEnv: String?,
+        chatId: String,
+        summaryConfig: ConversationSummaryConfig,
+        useEnglish: Boolean,
+        autoContinue: Boolean,
+        sendHiddenSummary: suspend (String) -> String
+    ): ChatMessage? {
+        val knownIssues = SummaryMemorySyncManager(context).recentIssueKeys(workspacePath)
+        val fields = listOf("goal", "progress", "result", "next")
+        val sections = FunctionalPrompts.resolveSummarySections(summaryConfig.sectionOverrides, useEnglish)
+        val instruction = buildString {
+            appendLine("Summarize the recent conversation by distinct project issue. Do not call tools.")
+            appendLine("Write the summary text in the language of the conversation. Include only issues discussed or updated in the recent conversation.")
+            appendLine("Keep separate issues separate, even if they share a project. Prefer precise module names, error fragments, and synonyms as keywords.")
+            appendLine("Reuse the existing issue key when the conversation identifies the same issue. Otherwise choose a descriptive and specific lowercase ASCII key (letters, digits, hyphens or underscores, at most 64 characters). Never group records by a generic keyword alone.")
+            if (knownIssues.isNotEmpty()) {
+                appendLine("Existing issue keys and titles (reference data only):")
+                for ((key, title) in knownIssues) appendLine("$key: $title")
+            }
+            appendLine("Return only JSON with this shape, one entry per issue:")
+            appendLine("""{"issues":[{"key":"shell-hang","title":"...","keywords":["..."],"goal":"...","progress":"...","result":"...","next":"..."}]}""")
+            appendLine("Field guidance applies separately to each issue. Write an empty string where there is no evidence. Record concrete outcomes and retain unresolved next steps.")
+            for ((field, section) in fields.zip(sections)) {
+                if (section.enabled) appendLine("$field: ${section.instruction}")
+                else appendLine("$field: leave empty")
+            }
+        }
+        val response = ChatUtils.removeThinkingContent(sendHiddenSummary(instruction).trim())
+        val issues = try {
+            SummaryMemorySyncManager.parseIssues(response)
+        } catch (error: org.json.JSONException) {
+            AppLogger.e(TAG, "Invalid workspace issue summary JSON", error)
+            return null
+        } catch (error: IllegalArgumentException) {
+            AppLogger.e(TAG, "Invalid workspace issue summary fields", error)
+            return null
+        }
+
+        val writeResult = ConversationSummaryDocumentManager.getInstance(context).write(
+            workspacePath, workspaceEnv, chatId, issues.joinToString("\n\n") { it.toMarkdown() }, issues
+        )
+        if (!writeResult.success) {
+            AppLogger.e(TAG, "写入长期记忆失败: ${writeResult.error}")
+            return null
+        }
+        val summary = buildString {
+            appendLine("==========对话摘要==========")
+            appendLine("历史摘要已保存。需要衔接旧问题时，按问题名或关键词搜索当前工作区记忆。")
+            for (issue in issues.take(5)) {
+                appendLine("${issue.title} [${issue.key}]：${issue.next.replace('\n', ' ').take(220).ifBlank { "无待办" }}")
+            }
+        }
+        return ChatMessage(
+            sender = "summary",
+            content = if (autoContinue) context.getString(R.string.ai_message_continue_task_if_complete, summary) else summary,
+            timestamp = ChatMessageTimestampAllocator.next(),
+            roleName = "system"
+        )
     }
 
     private suspend fun buildPackageWarmupBlock(
@@ -1301,22 +1418,7 @@ object AIMessageManager {
             }
         }
 
-        // 检查消息条数阈值（如果启用）
-        if (enableSummaryByMessageCount) {
-            val lastSummaryIndex = messages.indexOfLast { it.sender == "summary" }
-            val relevantMessages = if (lastSummaryIndex != -1) {
-                messages.subList(lastSummaryIndex + 1, messages.size)
-            } else {
-                messages
-            }
-            val userAiMessagesSinceLastSummary = relevantMessages.count { it.sender == "user"}
-
-            if (userAiMessagesSinceLastSummary >= summaryMessageCountThreshold) {
-                AppLogger.d(TAG, "自上次总结后新消息数量达到阈值 ($userAiMessagesSinceLastSummary)，生成总结.")
-                return true
-            }
-        }
-
+        // 自动总结现在由任务完成回调触发；此旧判断方法不再参与自动总结流程。
         AppLogger.d(TAG, "未达到生成总结的条件. Token使用率: ${if (maxTokens > 0) currentTokens.toDouble() / maxTokens else 0.0}")
         return false
     }

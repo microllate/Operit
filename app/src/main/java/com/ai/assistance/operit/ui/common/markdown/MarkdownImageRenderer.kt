@@ -7,9 +7,10 @@ import android.os.Environment
 import android.provider.MediaStore
 import com.ai.assistance.operit.util.AppLogger
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,7 +20,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -32,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,10 +51,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -99,11 +105,13 @@ internal fun extractMarkdownImageUrl(imageContent: String): String {
     return imageContent.substring(startParenthesis + 1, endParenthesis).trim()
 }
 
-/** 判断是否为大图片 简单根据图片URL后缀来判断 */
-private fun isLargeImage(url: String): Boolean {
-    // 通常视为"大图片"的文件格式
-    val largeImageExtensions = listOf(".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp")
-    return largeImageExtensions.any { url.lowercase().endsWith(it) }
+internal data class MarkdownPreviewImage(val url: String, val alt: String)
+
+internal fun parseMarkdownPreviewImage(markdown: String): MarkdownPreviewImage? {
+    if (!isCompleteImageMarkdown(markdown)) return null
+    val url = extractMarkdownImageUrl(markdown)
+    if (url.isBlank() || isLikelyVideoUrl(url) || isLikelyAudioUrl(url)) return null
+    return MarkdownPreviewImage(url, extractMarkdownImageAlt(markdown))
 }
 
 /** Markdown图片渲染器组件 支持流式渲染和图片预览功能 */
@@ -112,7 +120,8 @@ fun MarkdownImageRenderer(
         imageMarkdown: String,
         modifier: Modifier = Modifier,
         maxImageHeight: Int = 160, // 更小的默认最大高度
-        enableDialogs: Boolean = true
+        enableDialogs: Boolean = true,
+        onImageClick: (() -> Unit)? = null
 ) {
     // 只有完整的Markdown图片语法才会被渲染
     if (!isCompleteImageMarkdown(imageMarkdown)) {
@@ -165,7 +174,9 @@ fun MarkdownImageRenderer(
                         Modifier.wrapContentHeight()
                             .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp)) // 增加圆角大小为12dp
-                                .clickable(enabled = enableDialogs) { showFullScreen = true }
+                                .clickable(enabled = enableDialogs) {
+                                    if (onImageClick != null) onImageClick() else showFullScreen = true
+                                }
         ) {
             SubcomposeAsyncImage(
                     model =
@@ -228,8 +239,8 @@ fun MarkdownImageRenderer(
     // 全屏预览对话框
     if (enableDialogs && showFullScreen) {
         FullScreenImageDialog(
-                imageUrl = imageUrl,
-                imageAlt = imageAlt,
+                images = listOf(MarkdownPreviewImage(imageUrl, imageAlt)),
+                initialPage = 0,
                 onDismiss = { showFullScreen = false }
         )
     }
@@ -237,15 +248,18 @@ fun MarkdownImageRenderer(
 
 /** 全屏图片预览对话框 */
 @Composable
-private fun FullScreenImageDialog(imageUrl: String, imageAlt: String, onDismiss: () -> Unit) {
+internal fun FullScreenImageDialog(
+        images: List<MarkdownPreviewImage>,
+        initialPage: Int,
+        onDismiss: () -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isSaving by remember { mutableStateOf(false) }
-    var savedSuccess by remember { mutableStateOf<Boolean?>(null) }
-
-    // 缩放和平移状态
-    var scale by remember { mutableStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
+    val pagerState = rememberPagerState(initialPage = initialPage) { images.size }
+    val page = pagerState.currentPage
+    val image = images[page]
+    var saveResult by remember { mutableStateOf<Pair<Int, Boolean>?>(null) }
 
     Dialog(
             onDismissRequest = onDismiss,
@@ -258,83 +272,16 @@ private fun FullScreenImageDialog(imageUrl: String, imageAlt: String, onDismiss:
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = Color.Black.copy(alpha = 0.9f)) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // 图片内容
-                SubcomposeAsyncImage(
-                        model =
-                                ImageRequest.Builder(context)
-                                        .data(imageUrl)
-                                        .crossfade(true)
-                                        .build(),
-                        contentDescription = imageAlt,
-                        modifier =
-                                Modifier.fillMaxSize()
-                                        .graphicsLayer(
-                                                scaleX = scale,
-                                                scaleY = scale,
-                                                translationX = offset.x,
-                                                translationY = offset.y
-                                        )
-                                        .pointerInput(Unit) {
-                                            detectTransformGestures { _, pan, zoom, _ ->
-                                                // 限制缩放范围
-                                                scale = (scale * zoom).coerceIn(0.5f, 3f)
-
-                                                // 修复缩放限制计算错误
-                                                // 根据缩放计算最大偏移值，使用绝对值确保正数
-                                                val maxX =
-                                                        (size.width * (scale - 1) / 2)
-                                                                .coerceAtLeast(0f)
-                                                val maxY =
-                                                        (size.height * (scale - 1) / 2)
-                                                                .coerceAtLeast(0f)
-
-                                                // 使用安全的范围限制
-                                                offset =
-                                                        Offset(
-                                                                x =
-                                                                        if (maxX > 0)
-                                                                                (offset.x + pan.x)
-                                                                                        .coerceIn(
-                                                                                                -maxX,
-                                                                                                maxX
-                                                                                        )
-                                                                        else 0f,
-                                                                y =
-                                                                        if (maxY > 0)
-                                                                                (offset.y + pan.y)
-                                                                                        .coerceIn(
-                                                                                                -maxY,
-                                                                                                maxY
-                                                                                        )
-                                                                        else 0f
-                                                        )
-                                            }
-                                        },
-                        contentScale = ContentScale.Fit,
-                        loading = {
-                            Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                        color = Color.White,
-                                        modifier = Modifier.size(48.dp)
-                                )
-                            }
-                        },
-                        error = {
-                            Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                        stringResource(R.string.common_load_failed),
-                                        color = Color.Red,
-                                        style = MaterialTheme.typography.titleMedium
-                                )
-                            }
-                        }
-                )
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    userScrollEnabled = images.size > 1
+                ) { index ->
+                    ZoomablePreviewImage(
+                        image = images[index],
+                        isSettledPage = pagerState.settledPage == index
+                    )
+                }
 
                 // 顶部工具栏
                 Box(
@@ -353,10 +300,14 @@ private fun FullScreenImageDialog(imageUrl: String, imageAlt: String, onDismiss:
                     }
 
                     Text(
-                            text = imageAlt,
+                            text = if (images.size > 1) {
+                                "${page + 1} / ${images.size}  ${image.alt}".trimEnd()
+                            } else {
+                                image.alt
+                            },
                             color = Color.White,
                             style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.align(Alignment.TopCenter),
+                            modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                     )
@@ -364,10 +315,11 @@ private fun FullScreenImageDialog(imageUrl: String, imageAlt: String, onDismiss:
                     IconButton(
                             onClick = {
                                 if (!isSaving) {
+                                    saveResult = null
                                     isSaving = true
                                     scope.launch {
                                         try {
-                                            savedSuccess = saveImageFromUrl(context, imageUrl)
+                                            saveResult = page to saveImageFromUrl(context, image.url)
                                         } finally {
                                             isSaving = false
                                         }
@@ -392,7 +344,7 @@ private fun FullScreenImageDialog(imageUrl: String, imageAlt: String, onDismiss:
                 }
 
                 // 显示保存结果
-                savedSuccess?.let { success ->
+                saveResult?.takeIf { it.first == page }?.let { (_, success) ->
                     Box(
                             modifier =
                                     Modifier.align(Alignment.BottomCenter)
@@ -409,22 +361,86 @@ private fun FullScreenImageDialog(imageUrl: String, imageAlt: String, onDismiss:
                     }
                 }
 
-                // 重置缩放按钮
-                if (scale != 1f || offset != Offset.Zero) {
-                    IconButton(
-                            onClick = {
-                                scale = 1f
-                                offset = Offset.Zero
-                            },
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
-                    ) {
-                        Icon(
-                                imageVector = Icons.Default.ArrowBack,
-                                contentDescription = stringResource(R.string.common_reset_zoom),
-                                tint = Color.White
-                        )
-                    }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomablePreviewImage(image: MarkdownPreviewImage, isSettledPage: Boolean) {
+    val context = LocalContext.current
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+
+    fun resetZoom() {
+        scale = 1f
+        offset = Offset.Zero
+    }
+
+    LaunchedEffect(isSettledPage, viewport) {
+        resetZoom()
+    }
+
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+        scale = (scale * zoomChange).coerceIn(1f, 3f)
+        val maxX = viewport.width * (scale - 1f) / 2f
+        val maxY = viewport.height * (scale - 1f) / 2f
+        offset = Offset(
+            (offset.x + panChange.x).coerceIn(-maxX, maxX),
+            (offset.y + panChange.y).coerceIn(-maxY, maxY)
+        )
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged { viewport = it }
+            .transformable(transformState, canPan = { scale > 1f })
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = {
+                    if (scale > 1f) resetZoom() else scale = 2f
+                })
+            }
+    ) {
+        SubcomposeAsyncImage(
+            model = remember(context, image.url) {
+                ImageRequest.Builder(context).data(image.url).crossfade(true).build()
+            },
+            contentDescription = image.alt,
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = offset.x
+                translationY = offset.y
+            },
+            contentScale = ContentScale.Fit,
+            loading = {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(48.dp))
                 }
+            },
+            error = {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        stringResource(R.string.common_load_failed),
+                        color = Color.Red,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        )
+
+        if (scale > 1f) {
+            IconButton(
+                onClick = ::resetZoom,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = stringResource(R.string.common_reset_zoom),
+                    tint = Color.White
+                )
             }
         }
     }

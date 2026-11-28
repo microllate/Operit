@@ -366,13 +366,21 @@ class StandardTerminalCommandExecutor(private val context: Context) {
                         ?.toLongOrNull()
                         ?: 120000L
 
-                val terminal = Terminal.getInstance(context)
-                val hiddenResult =
-                    terminal.executeHiddenCommand(
+                // Include environment initialization and shell acquisition in the tool's deadline.
+                val hiddenResult = withTimeoutOrNull(timeoutMs) {
+                    Terminal.getInstance(context).executeHiddenCommand(
                         command = command,
                         executorKey = executorKey,
                         timeoutMs = timeoutMs
                     )
+                } ?: HiddenExecResult(
+                    output = "",
+                    exitCode = -1,
+                    state = HiddenExecResult.State.TIMEOUT,
+                    error = "Hidden terminal call exceeded ${timeoutMs}ms"
+                ).also {
+                    AppLogger.w(TAG, "Hidden terminal deadline exceeded: key=$executorKey timeoutMs=$timeoutMs")
+                }
                 val output = extractHiddenExecOutput(hiddenResult)
                 val didTimeout = hiddenResult.state == HiddenExecResult.State.TIMEOUT
                 val errorMessage =

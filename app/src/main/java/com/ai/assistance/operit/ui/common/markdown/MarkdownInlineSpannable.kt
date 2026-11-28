@@ -18,6 +18,15 @@ import androidx.collection.LruCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import com.ai.assistance.operit.ui.common.displays.LatexCache
@@ -578,3 +587,38 @@ internal fun buildMarkdownInlineSpannableFromText(
         fontSize = fontSize
     )
 }
+
+internal fun Spanned.toSelectableMarkdownText(onLinkClick: ((String) -> Unit)?): AnnotatedString =
+    buildAnnotatedString {
+        append(this@toSelectableMarkdownText.toString())
+        val text = this@toSelectableMarkdownText
+        for (span in text.getSpans(0, text.length, Any::class.java)) {
+            val start = text.getSpanStart(span)
+            val end = text.getSpanEnd(span)
+            if (start < 0 || start >= end) continue
+            if (span is URLSpan && onLinkClick != null && span.url.isNotBlank()) {
+                addLink(
+                    LinkAnnotation.Clickable(span.url, linkInteractionListener = { onLinkClick(span.url) }),
+                    start,
+                    end
+                )
+                continue
+            }
+            val style = when (span) {
+                is StyleSpan -> SpanStyle(
+                    fontWeight = FontWeight.Bold.takeIf { span.style and Typeface.BOLD != 0 },
+                    fontStyle = FontStyle.Italic.takeIf { span.style and Typeface.ITALIC != 0 }
+                )
+                is StrikethroughSpan -> SpanStyle(textDecoration = TextDecoration.LineThrough)
+                is UnderlineSpan -> SpanStyle(textDecoration = TextDecoration.Underline)
+                is ForegroundColorSpan -> SpanStyle(color = Color(span.foregroundColor))
+                is InlineCodeMarkerSpan -> SpanStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = span.textScale.em,
+                    background = Color(span.backgroundColor)
+                )
+                else -> continue
+            }
+            addStyle(style, start, end)
+        }
+    }

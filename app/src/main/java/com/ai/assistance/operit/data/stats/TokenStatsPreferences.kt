@@ -3,13 +3,16 @@ package com.ai.assistance.operit.data.stats
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ai.assistance.operit.data.collects.PricingCurrency
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 private val Context.tokenStatsDataStore: DataStore<Preferences> by
     preferencesDataStore(name = "token_stats_preferences")
@@ -23,10 +26,13 @@ internal class TokenStatsPreferences(context: Context) {
         private val TIME_RANGE_START = longPreferencesKey("time_range_start")
         private val TIME_RANGE_END = longPreferencesKey("time_range_end")
         private val ACTIVITY_VIEW_MODE = stringPreferencesKey("activity_view_mode")
+        private val FOLLOW_CURRENT_DAY = booleanPreferencesKey("follow_current_day")
         private val IMPORTED_AT = longPreferencesKey("imported_at_ms")
+        private val SELECTED_MODELS = stringSetPreferencesKey("selected_models")
     }
 
     private val dataStore = context.applicationContext.tokenStatsDataStore
+    val changes = dataStore.data.map { Unit }
 
     suspend fun importedAtMs(): Long? = dataStore.data.first()[IMPORTED_AT]
 
@@ -80,6 +86,12 @@ internal class TokenStatsPreferences(context: Context) {
         dataStore.edit { preferences -> preferences[ACTIVITY_VIEW_MODE] = mode.name }
     }
 
+    suspend fun loadFollowCurrentDay(): Boolean? = dataStore.data.first()[FOLLOW_CURRENT_DAY]
+
+    suspend fun saveFollowCurrentDay(enabled: Boolean) {
+        dataStore.edit { it[FOLLOW_CURRENT_DAY] = enabled }
+    }
+
     suspend fun loadTimeRange(): TokenStatsTimeRange? {
         val preferences = dataStore.data.first()
         val startMs = preferences[TIME_RANGE_START] ?: return null
@@ -97,5 +109,12 @@ internal class TokenStatsPreferences(context: Context) {
             preferences[TIME_RANGE_START] = range.startMs
             preferences[TIME_RANGE_END] = range.endMs
         }
+    }
+
+    suspend fun loadSelectedModels(): Set<String> =
+        dataStore.data.first()[SELECTED_MODELS].orEmpty()
+
+    suspend fun saveSelectedModels(models: Set<String>) {
+        dataStore.edit { preferences -> preferences[SELECTED_MODELS] = models }
     }
 }

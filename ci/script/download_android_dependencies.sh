@@ -2,14 +2,14 @@
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then
-  echo "usage: $0 <jvm|full> <destination-directory>" >&2
+  echo "usage: $0 <jvm|lean|full> <destination-directory>" >&2
   exit 2
 fi
 
 profile="$1"
 destination="$2"
 case "$profile" in
-  jvm|full) ;;
+  jvm|lean|full) ;;
   *)
     echo "unsupported Android dependency profile: $profile" >&2
     exit 2
@@ -36,5 +36,8 @@ download "1Va1os7PRpCF3xtTwfx5kO11D7eIAvARG" "libs.zip"
 
 if [[ "$profile" == "full" ]]; then
   download "1SQs_dVPD6ldvwteqoUVjvBLjTWvr5Fpv" "subpack.zip"
+fi
+
+if [[ "$profile" != "jvm" ]]; then
   download "1-W4fjjUwoShnB8Rh9RT5Gl8sHiGyQUaM" "jniLibs.zip"
 fi

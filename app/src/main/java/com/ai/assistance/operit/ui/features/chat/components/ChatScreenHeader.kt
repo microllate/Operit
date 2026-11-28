@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ai.assistance.operit.R
+import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.preferences.CharacterGroupCardManager
 import com.ai.assistance.operit.data.preferences.ActivePromptManager
@@ -33,6 +34,26 @@ import com.ai.assistance.operit.ui.features.chat.viewmodel.ChatViewModel
 import com.ai.assistance.operit.ui.floating.FloatingMode
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
+import com.ai.assistance.operit.data.stats.TokenStatsPreferences
+import com.ai.assistance.operit.data.stats.TokenUsageRepository
+import com.ai.assistance.operit.data.stats.TokenStatsQueryParams
+import com.ai.assistance.operit.data.stats.TokenStatsQueryService
+import com.ai.assistance.operit.ui.features.tokenstats.resolveTokenStatsRange
+import com.ai.assistance.operit.ui.features.tokenstats.formatLifetimeMoney
+import java.time.ZonedDateTime
+import java.time.ZoneId
+import com.ai.assistance.operit.data.stats.formatTokenCount
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import androidx.compose.runtime.setValue
 
 @Composable
 fun useFloatingWindowLauncher(
@@ -121,6 +142,52 @@ fun ChatScreenHeader(
     val inputTokenCount by actualViewModel.inputTokenCount.collectAsState()
     val outputTokenCount by actualViewModel.outputTokenCount.collectAsState()
 
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var periodUsageText by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(context, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val settings = TokenStatsPreferences(context)
+            val usage = TokenUsageRepository.getInstance(context)
+            val localDayChanges = flow {
+                while (isActive) {
+                    val now = ZonedDateTime.now()
+                    emit(now.toLocalDate())
+                    val midnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+                    delay((midnight.toInstant().toEpochMilli() - System.currentTimeMillis()).coerceAtLeast(1L))
+                }
+            }
+            combine(settings.changes, usage.statisticsChanges(), localDayChanges) { _, _, today -> today }
+                .catch { e -> AppLogger.w("ChatScreenHeader", "Failed to observe token statistics", e) }
+                .conflate()
+                .collect { today ->
+                    try {
+                        val currency = settings.loadTargetCurrency()
+                        val mode = settings.loadActivityViewMode()
+                        val range = resolveTokenStatsRange(
+                            settings.loadTimeRange(), mode, settings.loadFollowCurrentDay(),
+                            today, ZoneId.systemDefault(),
+                        )
+                        val totals = TokenStatsQueryService.rangeSummary(
+                            context,
+                            range,
+                            TokenStatsQueryParams(
+                                targetCurrency = currency,
+                                manualRate = settings.loadRateWithEstimate().first,
+                            ),
+                            settings.loadSelectedModels(),
+                        )
+                        val tokens = formatTokenCount(totals.totalTokens.knownSum, settings.loadTokenDisplayUnit())
+                        val cost = formatLifetimeMoney(totals.cost.knownAmount, currency)
+                        periodUsageText = "$tokens Token · $cost"
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        AppLogger.w("ChatScreenHeader", "Failed to refresh token totals", e)
+                    }
+                }
+        }
+    }
+
     val permissionLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestPermission()
@@ -169,6 +236,14 @@ fun ChatScreenHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            periodUsageText?.let { usage ->
+                Text(
+                    text = usage,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
             // 统计信息
             val maxWindowSize = (maxWindowSizeInK * 1024).toLong().coerceAtLeast(0L)
             val totalTokenCount = inputTokenCount + outputTokenCount

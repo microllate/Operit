@@ -67,6 +67,8 @@ import android.widget.TextView
 import ru.noties.jlatexmath.JLatexMathDrawable
 import kotlin.math.floor
 
+internal val LocalChatTextSelection = compositionLocalOf { false }
+
 private const val TAG = "CanvasMarkdownRenderer"
 private const val MAX_CANVAS_HEIGHT_PX = 250_000f
 private const val MAX_COMPOSE_CONSTRAINT_HEIGHT_PX = 262_000f
@@ -425,7 +427,8 @@ internal fun CanvasMarkdownNodeRenderer(
     xmlStream: Stream<String>? = null,
     enableDialogs: Boolean = true,
     fillMaxWidth: Boolean = true,
-    isLastNode: Boolean = false
+    isLastNode: Boolean = false,
+    onImageClick: (() -> Unit)? = null
 ) {
     
     val density = LocalDensity.current
@@ -483,6 +486,7 @@ internal fun CanvasMarkdownNodeRenderer(
         onLinkClick = currentOnLinkClick.value,
         xmlRenderer = currentXmlRenderer.value,
         xmlStream = xmlStream,
+        onImageClick = onImageClick,
         index = index,
         enableDialogs = enableDialogs,
         fillMaxWidth = fillMaxWidth,
@@ -526,8 +530,21 @@ private fun renderNodeContent(
     index: Int,
     enableDialogs: Boolean,
     fillMaxWidth: Boolean,
-    isLastNode: Boolean = false
+    isLastNode: Boolean = false,
+    onImageClick: (() -> Unit)? = null
 ) {
+    if (LocalChatTextSelection.current) {
+        when (node.type) {
+            MarkdownProcessorType.PLAIN_TEXT,
+            MarkdownProcessorType.HEADER,
+            MarkdownProcessorType.ORDERED_LIST,
+            MarkdownProcessorType.UNORDERED_LIST -> {
+                SelectableMarkdownBlock(node, textColor, fontSizes, modifier, fillMaxWidth, onLinkClick)
+                return
+            }
+            else -> Unit
+        }
+    }
     when (node.type) {
         // ========== 简单文本类型：使用单个大 Canvas 绘制 ==========
         MarkdownProcessorType.HEADER,
@@ -681,6 +698,7 @@ private fun renderNodeContent(
                         imageMarkdown = imageContent,
                         modifier = Modifier.fillMaxWidth(),
                         maxImageHeight = 140,
+                        onImageClick = onImageClick,
                         enableDialogs = enableDialogs
                     )
                 }
@@ -788,6 +806,76 @@ private fun renderNodeContent(
         }
     }
 }
+
+@Composable
+private fun SelectableMarkdownBlock(
+    node: MarkdownNodeStable,
+    textColor: Color,
+    fontSizes: FontSizes,
+    modifier: Modifier,
+    fillMaxWidth: Boolean,
+    onLinkClick: ((String) -> Unit)?
+) {
+    val settings = LocalAiMarkdownTextLayoutSettings.current
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val currentOnLinkClick by rememberUpdatedState(onLinkClick)
+    val isHeader = node.type == MarkdownProcessorType.HEADER
+    val level = if (isHeader) determineHeaderLevel(node.content) else 0
+    val fontSize = when (level) {
+        1 -> fontSizes.headlineMedium
+        2 -> fontSizes.headlineSmall
+        3 -> fontSizes.titleLarge
+        4 -> fontSizes.titleMedium
+        5 -> fontSizes.titleSmall
+        else -> fontSizes.bodyMedium
+    }
+    val text = remember(node.content, node.children, node.type, textColor, primaryColor, onLinkClick != null) {
+        val formatted = if (node.children.isEmpty()) {
+            SpannableStringBuilder(node.content)
+        } else {
+            buildMarkdownInlineSpannableFromChildren(node.children, textColor, primaryColor)
+        }
+        val visible = formatted.toString()
+        when (node.type) {
+            MarkdownProcessorType.HEADER ->
+                formatted.delete(0, visible.indexOfFirst { it != '#' && it != ' ' }.let {
+                    if (it < 0) visible.length else it
+                })
+            MarkdownProcessorType.UNORDERED_LIST -> {
+                val marker = unorderedSelectionMarker.find(visible)
+                if (marker != null) formatted.replace(0, marker.value.length, "• ")
+            }
+            else -> Unit
+        }
+        val trimmed = SpannableStringBuilder(formatted.trimAllPreservingSpans())
+        val linkHandler: ((String) -> Unit)? =
+            if (onLinkClick == null) null else { url -> currentOnLinkClick?.invoke(url) }
+        trimmed.toSelectableMarkdownText(linkHandler)
+    }
+    if (text.isEmpty()) return
+
+    val spacing = if (isHeader) {
+        Modifier.padding(top = when (level) {
+            1 -> 12.dp
+            2 -> 10.dp
+            3 -> 8.dp
+            else -> 6.dp
+        }, bottom = if (level <= 2) 4.dp else 2.dp)
+    } else {
+        Modifier
+    }
+    Text(
+        text = text,
+        modifier = modifier.then(if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier).then(spacing),
+        color = textColor,
+        fontSize = fontSize,
+        fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
+        letterSpacing = settings.letterSpacingSp.sp,
+        lineHeight = fontSize * calculateCanvasLineSpacingMultiplier(settings.lineHeightMultiplier)
+    )
+}
+
+private val unorderedSelectionMarker = Regex("""^\s*[-*+]\s+""")
 
 /**
  * 统一的 Canvas 渲染器
@@ -1622,6 +1710,19 @@ private fun SingleTextCanvas(
     if (text.isEmpty()) return
 
     val textLayoutSettings = LocalAiMarkdownTextLayoutSettings.current
+    if (LocalChatTextSelection.current) {
+        Text(
+            text = text,
+            modifier = modifier,
+            color = textColor,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            letterSpacing = textLayoutSettings.letterSpacingSp.sp,
+            lineHeight = fontSize * calculateCanvasLineSpacingMultiplier(textLayoutSettings.lineHeightMultiplier)
+        )
+        return
+    }
+
     val fontFamily = MaterialTheme.typography.bodyMedium.fontFamily
     val resolver = LocalFontFamilyResolver.current
     val typeface = remember(resolver, fontFamily, fontWeight) {

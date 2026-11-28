@@ -184,7 +184,27 @@ class DeepseekProvider(
             }
         }
 
-        val providerReadyHistory = prepareHistoryForProvider(chatHistory, effectiveEnableToolCall)
+        // DeepSeek requires reasoning from all retained turns when native tools are sent.
+        // XML tool continuations keep the existing active-turn behavior.
+        val requestHistory = if (toolsJson != null) {
+            chatHistory
+        } else {
+            val lastUserTurn = chatHistory.indexOfLast {
+                it.kind == PromptTurnKind.USER || it.kind == PromptTurnKind.SUMMARY
+            }
+            val currentTurnHasToolResult = chatHistory.asSequence().drop(lastUserTurn + 1).any {
+                it.kind == PromptTurnKind.TOOL_RESULT
+            }
+            chatHistory.mapIndexed { index, turn ->
+                if (currentTurnHasToolResult && index > lastUserTurn) {
+                    turn
+                } else {
+                    val content = comparableContentForTurn(turn, preserveThinkInHistory = false)
+                    if (content == turn.content) turn else turn.copy(content = content)
+                }
+            }
+        }
+        val providerReadyHistory = prepareHistoryForProvider(requestHistory, effectiveEnableToolCall)
         calculateAndStoreInputTokens(
             providerReadyHistory,
             toolsJson,
@@ -209,7 +229,7 @@ class DeepseekProvider(
         val sanitizedLogJson = sanitizeImageDataForLogging(logJson)
         logLargeString("DeepseekProvider", sanitizedLogJson.toString(4), "Final DeepSeek reasoning mode request body: ")
 
-        return createJsonRequestBody(jsonObject.toString())
+        return createJsonRequestBody(jsonObject.toString(), context)
     }
 
     /**
@@ -319,7 +339,7 @@ class DeepseekProvider(
 
         if (effectiveHistory.isNotEmpty()) {
             for (turn in effectiveHistory) {
-                val originalContent = comparableContentForTurn(turn, preserveThinkInHistory = true)
+                val originalContent = turn.content
                 if (useToolCall) {
                     when (turn.kind) {
                         PromptTurnKind.SYSTEM -> {

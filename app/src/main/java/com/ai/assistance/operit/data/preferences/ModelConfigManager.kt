@@ -64,6 +64,7 @@ class ModelConfigManager(
     companion object {
         // 配置相关key
         val CONFIG_LIST_KEY = stringPreferencesKey("config_list")
+        private val GLOBAL_SUMMARY_SECTIONS_KEY = stringPreferencesKey("global_summary_section_overrides")
 
         // 默认值
         const val DEFAULT_CONFIG_ID = "default"
@@ -491,6 +492,32 @@ class ModelConfigManager(
         }
     }
 
+    /** 全局总结结构；首次读取时从当前聊天模型迁移，之后所有模型共用。 */
+    suspend fun getGlobalSummarySectionOverrides(fallback: List<SummarySectionOverride> = emptyList()): List<SummarySectionOverride> {
+        var result: List<SummarySectionOverride> = emptyList()
+        configDataStore.edit { preferences ->
+            val stored = preferences[GLOBAL_SUMMARY_SECTIONS_KEY]
+            if (stored == null) {
+                preferences[GLOBAL_SUMMARY_SECTIONS_KEY] = json.encodeToString(fallback)
+                result = fallback
+            } else {
+                result = try {
+                    json.decodeFromString<List<SummarySectionOverride>>(stored)
+                } catch (e: Exception) {
+                    AppLogger.w("ModelConfigManager", "全局总结结构解析失败，使用当前模型旧配置", e)
+                    fallback
+                }
+            }
+        }
+        return result
+    }
+
+    suspend fun updateGlobalSummarySectionOverrides(overrides: List<SummarySectionOverride>) {
+        configDataStore.edit { preferences ->
+            preferences[GLOBAL_SUMMARY_SECTIONS_KEY] = json.encodeToString(overrides)
+        }
+    }
+
     // 从DataStore加载配置
     private suspend fun loadConfigFromDataStore(configId: String): ModelConfigData? {
         val configKey = stringPreferencesKey("config_${configId}")
@@ -730,6 +757,7 @@ class ModelConfigManager(
             enableDirectVideoProcessing: Boolean,
             enableGoogleSearch: Boolean,
             enableDeepSeekWebSearch: Boolean,
+            blockDeepSeekPeakHours: Boolean = false,
             enableCodexWebSearch: Boolean,
             enableClaude1hPromptCache: Boolean,
             enableToolCall: Boolean
@@ -753,6 +781,7 @@ class ModelConfigManager(
                     enableDirectVideoProcessing = enableDirectVideoProcessing,
                     enableGoogleSearch = enableGoogleSearch,
                     enableDeepSeekWebSearch = enableDeepSeekWebSearch,
+                    blockDeepSeekPeakHours = blockDeepSeekPeakHours,
                     enableCodexWebSearch = enableCodexWebSearch,
                     enableClaude1hPromptCache = enableClaude1hPromptCache,
                     enableToolCall = enableToolCall

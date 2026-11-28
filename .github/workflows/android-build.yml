@@ -6,15 +6,19 @@ on:
       gradle_task:
         description: Gradle task to run
         required: true
-        default: assembleDebug
+        default: ':app:assembleRelease'
         type: choice
         options:
+          - ':app:assembleRelease'
           - assembleDebug
           - ':app:assembleNightly'
           - ':app:assembleClone'
-          - ':app:bundleRelease'
+      bundle_toolpkgs:
+        description: Build and bundle example ToolPkg packages
+        type: boolean
+        default: false
   push:
-    branches: [main]
+    branches: [main, fix/task-completion-summary-context-auto]
     paths:
       - .github/workflows/android-build.yml
       - .gitmodules
@@ -53,6 +57,7 @@ permissions:
   contents: read
 
 env:
+  ANDROID_DEPS_PROFILE: ${{ github.ref_name == 'fix/task-completion-summary-context-auto' && 'lean' || 'full' }}
   JAVA_VERSION: '21'
   NODE_VERSION: '22'
   ANDROID_NDK_VERSION: '25.1.8937393'
@@ -131,7 +136,7 @@ jobs:
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.MANUAL_DEPS_DIR }}
-          key: android-full-deps-${{ runner.os }}-${{ hashFiles('ci/script/download_android_dependencies.sh', 'ci/script/prepare_android_dependencies.py') }}
+          key: android-${{ env.ANDROID_DEPS_PROFILE }}-deps-${{ runner.os }}-${{ hashFiles('ci/script/download_android_dependencies.sh', 'ci/script/prepare_android_dependencies.py') }}
 
       - name: Restore generated STT asset cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -141,12 +146,12 @@ jobs:
 
       - name: Download Android dependencies
         if: steps.cache-manual-deps.outputs.cache-hit != 'true'
-        run: bash ci/script/download_android_dependencies.sh full "$MANUAL_DEPS_DIR"
+        run: bash ci/script/download_android_dependencies.sh "$ANDROID_DEPS_PROFILE" "$MANUAL_DEPS_DIR"
 
       - name: Prepare Android dependencies
         run: |
           python3 ci/script/prepare_android_dependencies.py \
-            --profile full \
+            --profile "$ANDROID_DEPS_PROFILE" \
             --archives "$MANUAL_DEPS_DIR" \
             --repository "$GITHUB_WORKSPACE"
 
@@ -177,20 +182,20 @@ jobs:
             app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
           test -s app/src/main/jniLibs/arm64-v8a/liboperit_ripgrep.so
 
-      - name: Install JavaScript dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install -g pnpm@10.34.5
-          npm ci --no-audit --no-fund
-          npm --prefix web-chat ci --no-audit --no-fund
+      - name: Install WebChat dependencies
+        run: npm --prefix web-chat ci --no-audit --no-fund
 
       - name: Build WebChat assets
         run: |
           npm run build:webchat
 
       - name: Build bundled ToolPkg packages
+        if: ${{ inputs.bundle_toolpkgs }}
+        shell: bash
         run: |
+          set -euo pipefail
+          npm install -g pnpm@10.34.5
+          npm ci --no-audit --no-fund
           npm run build:examples:github
           python3 tools/example_packages/sync_example_packages.py --no-hot-reload
 
@@ -208,7 +213,13 @@ jobs:
         run: |
           set -euo pipefail
           case "$EVENT_NAME" in
-            push) gradle_task=assembleDebug ;;
+            push)
+              if [[ "$GITHUB_REF" == 'refs/heads/fix/task-completion-summary-context-auto' ]]; then
+                gradle_task=':app:compileReleaseKotlin'
+              else
+                gradle_task=':app:assembleRelease'
+              fi
+              ;;
             workflow_dispatch) gradle_task="$DISPATCH_GRADLE_TASK" ;;
             *) echo "Unsupported workflow event: $EVENT_NAME" >&2; exit 2 ;;
           esac
@@ -227,7 +238,7 @@ jobs:
           retention-days: 14
 
       - name: Upload successful Android outputs
-        if: success()
+        if: success() && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main')
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: operit-android-${{ github.run_number }}

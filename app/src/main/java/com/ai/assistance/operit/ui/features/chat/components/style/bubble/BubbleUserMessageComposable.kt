@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Base64
+import com.ai.assistance.operit.ui.common.markdown.ChatBodySelection
 import com.ai.assistance.operit.util.AppLogger
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -431,11 +432,13 @@ fun BubbleUserMessageComposable(
                                     subtitleColor = effectiveTextColor.copy(alpha = 0.72f),
                                 )
                             } else {
-                                Text(
-                                    text = textContent,
-                                    color = effectiveTextColor,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
+                                ChatBodySelection {
+                                    Text(
+                                        text = textContent,
+                                        color = effectiveTextColor,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -490,18 +493,20 @@ fun BubbleUserMessageComposable(
                                     )
                                 }
                             } else {
-                                Text(
-                                    text = textContent,
-                                    modifier =
-                                        Modifier.padding(
-                                            start = bubbleContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                        ),
-                                    color = effectiveTextColor,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
+                                ChatBodySelection {
+                                    Text(
+                                        text = textContent,
+                                        modifier =
+                                            Modifier.padding(
+                                                start = bubbleContentPaddingLeft.dp,
+                                                top = 12.dp,
+                                                end = bubbleContentPaddingRight.dp,
+                                                bottom = 12.dp,
+                                            ),
+                                        color = effectiveTextColor,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
                             }
                         }
                     }
@@ -572,11 +577,13 @@ fun BubbleUserMessageComposable(
                                     subtitleColor = effectiveTextColor.copy(alpha = 0.72f),
                                 )
                             } else {
-                                Text(
-                                    text = textContent,
-                                    color = effectiveTextColor,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
+                                ChatBodySelection {
+                                    Text(
+                                        text = textContent,
+                                        color = effectiveTextColor,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -631,18 +638,20 @@ fun BubbleUserMessageComposable(
                                     )
                                 }
                             } else {
-                                Text(
-                                    text = textContent,
-                                    modifier =
-                                        Modifier.padding(
-                                            start = bubbleContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                        ),
-                                    color = effectiveTextColor,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                ChatBodySelection {
+                                    Text(
+                                        text = textContent,
+                                        modifier =
+                                            Modifier.padding(
+                                                start = bubbleContentPaddingLeft.dp,
+                                                top = 12.dp,
+                                                end = bubbleContentPaddingRight.dp,
+                                                bottom = 12.dp,
+                                            ),
+                                        color = effectiveTextColor,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
                             }
                         }
                     }

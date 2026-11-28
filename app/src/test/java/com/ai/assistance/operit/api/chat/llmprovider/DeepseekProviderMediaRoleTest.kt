@@ -116,7 +116,7 @@ class DeepseekProviderMediaRoleTest {
         val history =
             listOf(
                 PromptTurn(
-                    PromptTurnKind.TOOL_CALL,
+                    PromptTurnKind.ASSISTANT,
                     """<tool name="read_file"><param name="path">/tmp/image.png</param></tool>"""
                 ),
                 PromptTurn(
@@ -240,16 +240,21 @@ class DeepseekProviderMediaRoleTest {
                 supportsVision = true,
                 enableToolCall = true
             )
+        val method = provider.javaClass.methods.first {
+            it.name == "createRequestBody" && it.parameterCount == 7
+        }
+        method.isAccessible = true
         val body =
-            provider.createRequestBody(
-                context = mock<Context>(),
-                chatHistory = history,
-                modelParameters = emptyList<ModelParameter<*>>(),
-                enableThinking = false,
-                stream = false,
-                availableTools = availableTools,
-                preserveThinkInHistory = false
-            )
+            method.invoke(
+                provider,
+                mock<Context>(),
+                history,
+                emptyList<ModelParameter<*>>(),
+                false,
+                false,
+                availableTools,
+                false
+            ) as RequestBody
         val buffer = Buffer()
         body.writeTo(buffer)
         return JSONObject(buffer.readUtf8())
