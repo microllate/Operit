@@ -184,11 +184,26 @@ class DeepseekProvider(
             }
         }
 
-        val providerReadyHistory = prepareHistoryForProvider(chatHistory, effectiveEnableToolCall)
+        // Keep reasoning for the active tool continuation, across both native and XML tool modes.
+        val lastUserTurn = chatHistory.indexOfLast {
+            it.kind == PromptTurnKind.USER || it.kind == PromptTurnKind.SUMMARY
+        }
+        val currentTurnHasToolResult = chatHistory.asSequence().drop(lastUserTurn + 1).any {
+            it.kind == PromptTurnKind.TOOL_RESULT
+        }
+        val requestHistory = chatHistory.mapIndexed { index, turn ->
+            if (currentTurnHasToolResult && index > lastUserTurn) {
+                turn
+            } else {
+                val content = comparableContentForTurn(turn, preserveThinkInHistory = false)
+                if (content == turn.content) turn else turn.copy(content = content)
+            }
+        }
+        val providerReadyHistory = prepareHistoryForProvider(requestHistory, effectiveEnableToolCall)
         calculateAndStoreInputTokens(
             providerReadyHistory,
             toolsJson,
-            preserveThinkInHistory = false
+            preserveThinkInHistory = true
         )
 
         // 使用特殊的消息构建方法（支持reasoning_content）
@@ -319,7 +334,7 @@ class DeepseekProvider(
 
         if (effectiveHistory.isNotEmpty()) {
             for (turn in effectiveHistory) {
-                val originalContent = comparableContentForTurn(turn, preserveThinkInHistory = false)
+                val originalContent = turn.content
                 if (useToolCall) {
                     when (turn.kind) {
                         PromptTurnKind.SYSTEM -> {
