@@ -208,11 +208,11 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "query_memory",
-                description = "When missing previous project context, search the current workspace using issue names, module names, or error fragments. Search for verified facts by subject and attribute, such as Operit database path or device OS version. Use scope=summary for issue summaries. Search only when the current conversation lacks needed context.",
+                description = "There are two memory libraries: Common Facts (常识库) stores verified device, OS, application and tool facts reusable across projects; the Workspace Library (工作区库) stores this project's facts and summaries. When a needed fact is missing from the conversation, search by subject and attribute. Use scope=common for reusable facts, scope=workspace for project details, or omit scope to search both. Use scope=summary for project continuity, prior progress, and pending tasks.",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "query", type = "string", description = "string, the search query. You can pass a natural-language question, a space-separated phrase, or use `|` to separate multiple keywords, for example `network error timeout` or `network|error|timeout`. Inside a keyword, `*` acts as a fuzzy wildcard placeholder, for example `error*timeout`; use only `*` to return all memories", required = true),
-                    ToolParameterSchema(name = "scope", type = "string", description = "Optional summary scope, limited to three relevant workspace summaries.", required = false),
-                    ToolParameterSchema(name = "folder_path", type = "string", description = "optional, string, further restrict results to a folder inside the current workspace; omit for automatic workspace scope", required = false),
+                    ToolParameterSchema(name = "scope", type = "string", description = "Optional: common (Common Facts), workspace (current Workspace Library), summary (up to three workspace summaries), or all (the default, both libraries).", required = false),
+                    ToolParameterSchema(name = "folder_path", type = "string", description = "optional, string, further restrict results to a folder within the chosen scope", required = false),
                     ToolParameterSchema(name = "start_time", type = "string", description = "optional, local-time string in `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format. Filters memories by createdAt >= start_time", required = false),
                     ToolParameterSchema(name = "end_time", type = "string", description = "optional, local-time string in `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format. Filters memories by createdAt <= end_time", required = false),
                     ToolParameterSchema(name = "snapshot_id", type = "string", description = "optional, string. Omit or pass empty to create a new snapshot automatically. If you pass a non-empty snapshot_id, that exact id will be used; if it does not exist yet, it will be created and can be reused across follow-up or parallel queries to exclude memories already returned by that snapshot", required = false),
@@ -240,11 +240,11 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "query_memory",
-                description = "缺少历史信息时才查当前工作区。用问题名、模块名、报错片段或同义词组成关键词，例如 隐藏终端|shell*卡死。查已核实事实时用对象和属性，例如 Operit 聊天数据库路径、手机 系统版本。只查历史摘要时传 scope=summary。",
+                description = "有两个库。常识库保存跨项目可用的手机、系统、应用和工具事实；工作区库保存当前项目的事实和摘要。当前对话缺少需要的事实时，用对象和属性检索，例如 Operit|数据库。查通用事实用 scope=common，查项目用 scope=workspace，不确定就省略范围同时查两库，承接之前的项目进度或待办时，用 scope=summary 查最后的工作区总结。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "query", type = "string", description = "搜索内容；支持自然语言、空格分词、| 分隔关键词、* 模糊匹配（如 error*timeout）；单独 * 返回全部记忆", required = true),
-                    ToolParameterSchema(name = "scope", type = "string", description = "可选，传 summary 仅查摘要，最多返回相关的3条。", required = false),
-                    ToolParameterSchema(name = "folder_path", type = "string", description = "可选，仅进一步限定当前工作区内的记忆文件夹；通常省略，自动确定工作区", required = false),
+                    ToolParameterSchema(name = "scope", type = "string", description = "可选。common 查常识库，workspace 查当前工作区库，summary 仅查当前工作区摘要（最多3条），all 或省略则查两库。", required = false),
+                    ToolParameterSchema(name = "folder_path", type = "string", description = "可选，用于进一步限定所选范围内的文件夹", required = false),
                     ToolParameterSchema(name = "start_time", type = "string", description = "创建时间下限，格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm", required = false),
                     ToolParameterSchema(name = "end_time", type = "string", description = "创建时间上限，格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm", required = false),
                     ToolParameterSchema(name = "snapshot_id", type = "string", description = "快照ID；留空新建，非空时使用或创建该ID；复用可排除已返回的记忆", required = false),

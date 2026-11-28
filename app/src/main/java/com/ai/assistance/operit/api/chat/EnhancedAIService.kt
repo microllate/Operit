@@ -431,7 +431,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         val conversationHistory: MutableList<PromptTurn>,
         val eventChannel: MutableSharedStream<TextStreamEvent>,
         var modelExecutionSnapshot: ModelExecutionSnapshot? = null,
-        val factWorkspacePath: String? = null,
+        val collectFacts: Boolean = false,
         val factQuestion: String = "",
         val factToolResults: ArrayDeque<String> = ArrayDeque()
     )
@@ -971,10 +971,8 @@ class EnhancedAIService private constructor(private val context: Context) {
                     executionId = nextExecutionContextId.incrementAndGet(),
                     conversationHistory = chatHistory.toMutableList(),
                     eventChannel = eventChannel,
-                    factWorkspacePath = workspacePath?.takeIf {
-                        it.isNotBlank() && enableMemoryAutoUpdate && !isSubTask &&
-                            !internalSummary && functionType == FunctionType.CHAT
-                    },
+                    collectFacts = enableMemoryAutoUpdate && !isSubTask &&
+                        !internalSummary && functionType == FunctionType.CHAT,
                     factQuestion = message.take(2_000)
                 )
             registerExecutionContext(execContext)
@@ -1979,8 +1977,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                 return
             }
 
-            val factWorkspacePath = context.factWorkspacePath
-            if (factWorkspacePath != null && context.isConversationActive.get()) {
+            if (context.collectFacts && context.isConversationActive.get()) {
                 val finalAnswer = ChatUtils.stripOpenAiResponsesProtocolMarkup(
                     ChatUtils.stripGeminiThoughtSignatureMeta(contentWithoutThinking)
                 ).take(4_000)
@@ -1990,10 +1987,9 @@ class EnhancedAIService private constructor(private val context: Context) {
                     val profileId = memorySpaceIdOverride?.takeIf { it.isNotBlank() }
                         ?: preferencesManager.activeMemorySpaceIdFlow.first()
                     initScope.launch(Dispatchers.IO) {
-                        MemoryLibrary.saveVerifiedFacts(
+                        MemoryLibrary.saveCommonFacts(
                             context = this@EnhancedAIService.context,
                             profileId = profileId,
-                            workspacePath = factWorkspacePath,
                             question = question,
                             evidence = evidence,
                             answer = finalAnswer
@@ -2116,7 +2112,7 @@ class EnhancedAIService private constructor(private val context: Context) {
             )
 
             if (toolBatch.results.isNotEmpty()) {
-                if (context.factWorkspacePath != null) {
+                if (context.collectFacts) {
                     for (result in toolBatch.results) {
                         if (!result.success || result.toolName in setOf("query_memory", "get_memory_by_title")) continue
                         if (context.factToolResults.size == 4) context.factToolResults.removeFirst()

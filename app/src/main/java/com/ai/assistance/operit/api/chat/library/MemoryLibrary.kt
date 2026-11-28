@@ -6,7 +6,6 @@ import com.ai.assistance.operit.util.ChatMarkupRegex
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.api.chat.EnhancedAIService
 import com.ai.assistance.operit.api.chat.llmprovider.AIService
-import com.ai.assistance.operit.core.chat.SummaryMemorySyncManager
 import com.ai.assistance.operit.data.model.FunctionType
 import com.ai.assistance.operit.core.tools.AIToolHandler
 import com.ai.assistance.operit.data.model.Memory
@@ -43,12 +42,12 @@ object MemoryLibrary {
     private var apiPreferences: ApiPreferences? = null
     private val mutex = Mutex()
     private val verifiedFactWrites = Mutex()
-    private const val VERIFIED_FACT_SOURCE = "verified_fact"
+    internal const val COMMON_FACT_FOLDER = "常识库"
+    internal const val COMMON_FACT_SOURCE = "common_fact"
 
-    internal suspend fun saveVerifiedFacts(
+    internal suspend fun saveCommonFacts(
         context: Context,
         profileId: String,
-        workspacePath: String,
         question: String,
         evidence: String,
         answer: String
@@ -62,8 +61,10 @@ object MemoryLibrary {
                     Use only facts explicitly supplied by the user as known, or directly supported
                     by successful tool output. The assistant answer alone is not evidence.
                     Keep stable facts such as device model, OS version, application data path, or a
-                    specific tool and command that worked. Skip guesses, plans, one-off activity,
-                    secrets, credentials and personal information. Use the language of the question.
+                    specific tool and command that worked. A fact must be safe and useful across
+                    projects. Leave project-specific paths, settings, troubleshooting, decisions,
+                    progress and conversation continuity to the workspace summary. Skip guesses,
+                    plans, secrets, credentials and personal information. Use the question's language.
                     Return only a JSON array of objects with "title" and "fact" strings.
                     Title is a short, stable subject and attribute. Fact is one standalone sentence.
                     Preserve exact paths, versions and verified commands. Return [] if nothing qualifies.
@@ -84,12 +85,11 @@ object MemoryLibrary {
             } ?: return
             if (facts.length() == 0) return
 
-            val workspaceFolder = SummaryMemorySyncManager.workspaceFolder(workspacePath)
-            val folder = "$workspaceFolder/过程记忆/已核实事实"
+            val folder = COMMON_FACT_FOLDER
             val repository = MemoryRepository(context, profileId)
             verifiedFactWrites.withLock {
                 val existing = repository.getMemoriesByFolderPath(folder)
-                    .filter { it.source == VERIFIED_FACT_SOURCE && it.folderPath == folder }
+                    .filter { it.source == COMMON_FACT_SOURCE && it.folderPath == folder }
                     .associateBy { it.title.lowercase() }
                 val handledTitles = mutableSetOf<String>()
                 val knownFacts = existing.values.mapTo(mutableSetOf()) { it.content }
@@ -105,7 +105,7 @@ object MemoryLibrary {
                     val previous = existing[title.lowercase()]
                     if (fact in knownFacts) continue
                     if (previous == null) {
-                        repository.createMemory(title, fact, source = VERIFIED_FACT_SOURCE, folderPath = folder)
+                        repository.createMemory(title, fact, source = COMMON_FACT_SOURCE, folderPath = folder)
                     } else {
                         repository.updateMemory(previous, previous.title, fact)
                     }
