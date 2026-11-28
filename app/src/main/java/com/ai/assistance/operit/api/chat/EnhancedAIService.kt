@@ -103,6 +103,9 @@ class EnhancedAIService private constructor(private val context: Context) {
 
     companion object {
         private val COMMON_FACT_TRIGGER = Regex("记忆|记住|记下|记录|牢记|存入常识库|加入常识库")
+        private val ASSISTANT_FACT_PROPOSAL = Regex(
+            "我(?:会|将|已)?(?:记住|记下|记录)|(?:下次|以后|今后)[^。！？\\n]{0,80}(?:记住|记下|记录|使用|用)"
+        )
         private const val TAG = "EnhancedAIService"
 
         @Volatile private var INSTANCE: EnhancedAIService? = null
@@ -434,6 +437,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         var modelExecutionSnapshot: ModelExecutionSnapshot? = null,
         val collectFacts: Boolean = false,
         val factQuestion: String = "",
+        val userFactKeywordMatched: Boolean = false,
         val factToolResults: ArrayDeque<String> = ArrayDeque()
     )
 
@@ -943,7 +947,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                 .replace(ChatMarkupRegex.replyToTag, "")
                 .replace(ChatMarkupRegex.memoryTag, "")
                 .trim()
-            userText.takeIf { COMMON_FACT_TRIGGER.containsMatchIn(it) }
+            userText.takeIf { it.isNotBlank() }
         } else {
             null
         }
@@ -986,7 +990,8 @@ class EnhancedAIService private constructor(private val context: Context) {
                     conversationHistory = chatHistory.toMutableList(),
                     eventChannel = eventChannel,
                     collectFacts = factQuestion != null,
-                    factQuestion = factQuestion?.take(2_000).orEmpty()
+                    factQuestion = factQuestion?.take(2_000).orEmpty(),
+                    userFactKeywordMatched = factQuestion?.let(COMMON_FACT_TRIGGER::containsMatchIn) == true
                 )
             registerExecutionContext(execContext)
             var hadFatalError = false
@@ -1994,7 +1999,9 @@ class EnhancedAIService private constructor(private val context: Context) {
                 val finalAnswer = ChatUtils.stripOpenAiResponsesProtocolMarkup(
                     ChatUtils.stripGeminiThoughtSignatureMeta(contentWithoutThinking)
                 ).take(4_000)
-                if (context.factQuestion.isNotBlank() && finalAnswer.isNotBlank()) {
+                val assistantProposedFact = context.factToolResults.isNotEmpty() &&
+                    ASSISTANT_FACT_PROPOSAL.containsMatchIn(finalAnswer)
+                if (finalAnswer.isNotBlank() && (context.userFactKeywordMatched || assistantProposedFact)) {
                     val question = context.factQuestion
                     val evidence = context.factToolResults.joinToString("\n\n")
                     val profileId = memorySpaceIdOverride?.takeIf { it.isNotBlank() }
@@ -2005,7 +2012,9 @@ class EnhancedAIService private constructor(private val context: Context) {
                             profileId = profileId,
                             question = question,
                             evidence = evidence,
-                            answer = finalAnswer
+                            answer = finalAnswer,
+                            userFactKeywordMatched = context.userFactKeywordMatched,
+                            assistantProposedFact = assistantProposedFact
                         )
                     }
                 }
