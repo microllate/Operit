@@ -208,7 +208,7 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "query_memory",
-                description = "When missing previous project context, search the current workspace using issue names, module names, or error fragments. Use scope=summary for issue summaries. Search only when the current conversation lacks needed context.",
+                description = "When missing previous project context, search the current workspace using issue names, module names, or error fragments. Search for verified facts by subject and attribute, such as Operit database path or device OS version. Use scope=summary for issue summaries. Search only when the current conversation lacks needed context.",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "query", type = "string", description = "string, the search query. You can pass a natural-language question, a space-separated phrase, or use `|` to separate multiple keywords, for example `network error timeout` or `network|error|timeout`. Inside a keyword, `*` acts as a fuzzy wildcard placeholder, for example `error*timeout`; use only `*` to return all memories", required = true),
                     ToolParameterSchema(name = "scope", type = "string", description = "Optional summary scope, limited to three relevant workspace summaries.", required = false),
@@ -240,7 +240,7 @@ object SystemToolPrompts {
         tools = listOf(
             ToolPrompt(
                 name = "query_memory",
-                description = "缺少历史信息时才查当前工作区。用问题名、模块名、报错片段或同义词组成关键词，例如 隐藏终端|shell*卡死。只查历史摘要时传 scope=summary。",
+                description = "缺少历史信息时才查当前工作区。用问题名、模块名、报错片段或同义词组成关键词，例如 隐藏终端|shell*卡死。查已核实事实时用对象和属性，例如 Operit 聊天数据库路径、手机 系统版本。只查历史摘要时传 scope=summary。",
                 parametersStructured = listOf(
                     ToolParameterSchema(name = "query", type = "string", description = "搜索内容；支持自然语言、空格分词、| 分隔关键词、* 模糊匹配（如 error*timeout）；单独 * 返回全部记忆", required = true),
                     ToolParameterSchema(name = "scope", type = "string", description = "可选，传 summary 仅查摘要，最多返回相关的3条。", required = false),

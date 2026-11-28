@@ -83,7 +83,7 @@ import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.preferences.CharacterCardToolAccessResolver
 import com.ai.assistance.operit.data.preferences.UserPreferencesManager
 import com.ai.assistance.operit.data.preferences.preferencesManager
-import com.ai.assistance.operit.data.repository.MemoryAutoSaveCandidateRepository
+import com.ai.assistance.operit.api.chat.library.MemoryLibrary
 import com.ai.assistance.operit.core.config.SystemToolPrompts
 import com.ai.assistance.operit.data.model.ToolPrompt
 import com.ai.assistance.operit.data.model.ToolParameterSchema
@@ -430,7 +430,10 @@ class EnhancedAIService private constructor(private val context: Context) {
         val isConversationActive: AtomicBoolean = AtomicBoolean(true),
         val conversationHistory: MutableList<PromptTurn>,
         val eventChannel: MutableSharedStream<TextStreamEvent>,
-        var modelExecutionSnapshot: ModelExecutionSnapshot? = null
+        var modelExecutionSnapshot: ModelExecutionSnapshot? = null,
+        val factWorkspacePath: String? = null,
+        val factQuestion: String = "",
+        val factToolResults: ArrayDeque<String> = ArrayDeque()
     )
 
     private val activeExecutionContexts = ConcurrentHashMap<Int, MessageExecutionContext>()
@@ -967,7 +970,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                 MessageExecutionContext(
                     executionId = nextExecutionContextId.incrementAndGet(),
                     conversationHistory = chatHistory.toMutableList(),
-                    eventChannel = eventChannel
+                    eventChannel = eventChannel,
+                    factWorkspacePath = workspacePath?.takeIf {
+                        it.isNotBlank() && enableMemoryAutoUpdate && !isSubTask &&
+                            !internalSummary && functionType == FunctionType.CHAT
+                    },
+                    factQuestion = message.take(2_000)
                 )
             registerExecutionContext(execContext)
             var hadFatalError = false
@@ -1751,13 +1759,9 @@ class EnhancedAIService private constructor(private val context: Context) {
                 AppLogger.d(TAG, "Stream content is empty. Finalizing conversation state.")
                 finalizeAssistantResponse(
                     context = context,
-                    content = content,
-                    enableMemoryAutoUpdate = enableMemoryAutoUpdate,
-                    onNonFatalError = onNonFatalError,
                     isSubTask = isSubTask,
                     chatId = chatId,
-                    notifyReplyOverride = notifyReplyOverride,
-                    memorySpaceIdOverride = memorySpaceIdOverride
+                    notifyReplyOverride = notifyReplyOverride
                 )
                 return
             }
@@ -1774,15 +1778,11 @@ class EnhancedAIService private constructor(private val context: Context) {
                     AppLogger.w(TAG, "检测到纯思考输出，disableWarning=true，直接结束本轮而不注入警告")
                     finalizeAssistantResponse(
                         context = context,
-                        content = context.roundManager.getDisplayContent(),
-                        enableMemoryAutoUpdate = enableMemoryAutoUpdate,
-                        onNonFatalError = onNonFatalError,
                         isSubTask = isSubTask,
                         chatId = chatId,
                         characterName = characterName,
                         avatarUri = avatarUri,
-                        notifyReplyOverride = notifyReplyOverride,
-                        memorySpaceIdOverride = memorySpaceIdOverride
+                        notifyReplyOverride = notifyReplyOverride
                     )
                     return
                 }
@@ -1892,15 +1892,11 @@ class EnhancedAIService private constructor(private val context: Context) {
                     )
                     finalizeAssistantResponse(
                         context = context,
-                        content = context.roundManager.getDisplayContent(),
-                        enableMemoryAutoUpdate = enableMemoryAutoUpdate,
-                        onNonFatalError = onNonFatalError,
                         isSubTask = isSubTask,
                         chatId = chatId,
                         characterName = characterName,
                         avatarUri = avatarUri,
-                        notifyReplyOverride = notifyReplyOverride,
-                        memorySpaceIdOverride = memorySpaceIdOverride
+                        notifyReplyOverride = notifyReplyOverride
                     )
                     return
                 }
@@ -1983,17 +1979,36 @@ class EnhancedAIService private constructor(private val context: Context) {
                 return
             }
 
+            val factWorkspacePath = context.factWorkspacePath
+            if (factWorkspacePath != null && context.isConversationActive.get()) {
+                val finalAnswer = ChatUtils.stripOpenAiResponsesProtocolMarkup(
+                    ChatUtils.stripGeminiThoughtSignatureMeta(contentWithoutThinking)
+                ).take(4_000)
+                if (context.factQuestion.isNotBlank() && finalAnswer.isNotBlank()) {
+                    val question = context.factQuestion
+                    val evidence = context.factToolResults.joinToString("\n\n")
+                    val profileId = memorySpaceIdOverride?.takeIf { it.isNotBlank() }
+                        ?: preferencesManager.activeMemorySpaceIdFlow.first()
+                    initScope.launch(Dispatchers.IO) {
+                        MemoryLibrary.saveVerifiedFacts(
+                            context = this@EnhancedAIService.context,
+                            profileId = profileId,
+                            workspacePath = factWorkspacePath,
+                            question = question,
+                            evidence = evidence,
+                            answer = finalAnswer
+                        )
+                    }
+                }
+            }
+
             finalizeAssistantResponse(
                 context = context,
-                content = context.roundManager.getDisplayContent(),
-                enableMemoryAutoUpdate = enableMemoryAutoUpdate,
-                onNonFatalError = onNonFatalError,
                 isSubTask = isSubTask,
                 chatId = chatId,
                 characterName = characterName,
                 avatarUri = avatarUri,
-                notifyReplyOverride = notifyReplyOverride,
-                memorySpaceIdOverride = memorySpaceIdOverride
+                notifyReplyOverride = notifyReplyOverride
             )
             logMessageTiming(
                 stage = "enhanced.processStreamCompletion.complete",
@@ -2011,15 +2026,11 @@ class EnhancedAIService private constructor(private val context: Context) {
     /** Finalize an assistant response without relying on status-tag control flow. */
     private suspend fun finalizeAssistantResponse(
         context: MessageExecutionContext,
-        content: String,
-        enableMemoryAutoUpdate: Boolean,
-        onNonFatalError: suspend (error: String) -> Unit,
         isSubTask: Boolean,
         chatId: String? = null,
         characterName: String? = null,
         avatarUri: String? = null,
-        notifyReplyOverride: Boolean? = null,
-        memorySpaceIdOverride: String? = null
+        notifyReplyOverride: Boolean? = null
     ) {
         // Mark conversation as complete
         context.isConversationActive.set(false)
@@ -2034,32 +2045,6 @@ class EnhancedAIService private constructor(private val context: Context) {
         if (!isSubTask) {
             withContext(Dispatchers.Main) {
                 _inputProcessingState.value = InputProcessingState.Completed
-            }
-        }
-
-        if (enableMemoryAutoUpdate && !isSubTask && content.isNotBlank()) {
-            runCatching {
-                val currentChatId = chatId?.takeIf { it.isNotBlank() }
-                val profileId =
-                    memorySpaceIdOverride?.takeIf { it.isNotBlank() }
-                        ?: preferencesManager.activeMemorySpaceIdFlow.first()
-                if (currentChatId.isNullOrBlank()) {
-                    AppLogger.w(TAG, "自动保存长期记忆入队跳过：chatId为空")
-                } else {
-                    MemoryAutoSaveCandidateRepository(this@EnhancedAIService.context, profileId)
-                        .enqueue(
-                            chatId = currentChatId,
-                            triggerMessageTimestamp = System.currentTimeMillis()
-                        )
-                }
-            }.onFailure { e ->
-                AppLogger.e(TAG, "自动保存长期记忆候选入队失败", e)
-                onNonFatalError(
-                    this@EnhancedAIService.context.getString(
-                        R.string.chat_auto_update_memory_failed,
-                        e.message ?: ""
-                    )
-                )
             }
         }
 
@@ -2131,6 +2116,15 @@ class EnhancedAIService private constructor(private val context: Context) {
             )
 
             if (toolBatch.results.isNotEmpty()) {
+                if (context.factWorkspacePath != null) {
+                    for (result in toolBatch.results) {
+                        if (!result.success || result.toolName in setOf("query_memory", "get_memory_by_title")) continue
+                        if (context.factToolResults.size == 4) context.factToolResults.removeFirst()
+                        context.factToolResults.addLast(
+                            ConversationMarkupManager.formatToolResultForMessage(result).take(2_000)
+                        )
+                    }
+                }
                 AppLogger.d(TAG, "所有工具结果收集完毕，准备最终处理。")
                 processToolResults(
                     toolBatch.results, context, functionType, promptFunctionType, collector, enableThinking,

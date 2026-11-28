@@ -26,7 +26,6 @@ import com.ai.assistance.operit.data.preferences.preferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
-import java.security.MessageDigest
 
 /**
  * Executes queries against the AI's memory graph and the explicit user.md update tool.
@@ -156,14 +155,8 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         ToolExecutionManager.currentToolRuntimeContext()
             ?.workspacePath?.trim()?.trimEnd('/', '\\')?.takeIf { it.isNotBlank() }
 
-    private fun workspaceMemoryFolder(workspacePath: String): String {
-        val name = workspacePath.substringAfterLast('/').substringAfterLast('\\')
-            .ifBlank { "workspace" }.replace("/", "_").replace("\\", "_")
-        val key = MessageDigest.getInstance("SHA-256")
-            .digest(workspacePath.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }.take(12)
-        return "工作区/$name-$key"
-    }
+    private fun workspaceMemoryFolder(workspacePath: String): String =
+        SummaryMemorySyncManager.workspaceFolder(workspacePath)
 
     private fun parseTimeBoundary(value: String?, isEnd: Boolean): Long? {
         val trimmed = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null

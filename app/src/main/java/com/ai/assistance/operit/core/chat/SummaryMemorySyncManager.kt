@@ -35,6 +35,17 @@ internal class SummaryMemorySyncManager(private val context: Context) {
     }
 
     companion object {
+        internal fun workspaceFolder(workspacePath: String): String {
+            val path = workspacePath.trim().trimEnd('/', '\\')
+            val name = path.substringAfterLast('/').substringAfterLast('\\')
+                .ifBlank { "workspace" }.replace("/", "_").replace("\\", "_")
+            return "工作区/$name-${digest(path).take(12)}"
+        }
+
+        private fun digest(value: String): String =
+            MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+
         private val issueKeyPattern = Regex("[a-z0-9][a-z0-9_-]{0,63}")
 
         fun issueTag(key: String): String? =
@@ -99,13 +110,6 @@ internal class SummaryMemorySyncManager(private val context: Context) {
             .toList()
     }
 
-    private fun workspaceFolder(workspacePath: String): String {
-        val path = workspacePath.trim().trimEnd('/', '\\')
-        val name = path.substringAfterLast('/').substringAfterLast('\\')
-            .ifBlank { "workspace" }.replace("/", "_").replace("\\", "_")
-        return "工作区/$name-${digest(path).take(12)}"
-    }
-
     suspend fun sync(workspacePath: String, chatId: String, timestamp: String, summary: String, issues: List<Issue>) {
         val sections = parseSections(summary)
         if (sections.isEmpty() && issues.isEmpty()) return
@@ -165,8 +169,4 @@ internal class SummaryMemorySyncManager(private val context: Context) {
             if (body.isBlank()) null else match.groupValues[1] to body
         }
     }
-
-    private fun digest(value: String): String =
-        MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
 }
