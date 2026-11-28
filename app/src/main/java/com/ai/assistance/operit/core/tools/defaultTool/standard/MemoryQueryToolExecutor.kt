@@ -1,5 +1,6 @@
 package com.ai.assistance.operit.core.tools.defaultTool.standard
 
+import com.ai.assistance.operit.core.chat.SummaryMemorySyncManager
 import android.content.Context
 import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.api.chat.enhance.ToolExecutionManager
@@ -228,7 +229,10 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         val profileId = resolveActiveProfileId(tool)
         val memoryRepository = getMemoryRepository(profileId)
         val query = tool.parameters.find { it.name == "query" }?.value ?: ""
-        val folderPath = tool.parameters.find { it.name == "folder_path" }?.value
+        val requestedFolder = MemoryRepository.normalizeFolderPath(
+            tool.parameters.find { it.name == "folder_path" }?.value
+        )
+        val summaryOnly = tool.parameters.find { it.name == "scope" }?.value == "summary"
         val workspacePath = currentWorkspacePath()
         val workspaceFolder = workspacePath?.let(::workspaceMemoryFolder)
             ?: return ToolResult(
@@ -237,6 +241,10 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
                 result = StringResultData(""),
                 error = "Current chat workspace is unavailable; query_memory only searches the current workspace."
             )
+        val searchRoot = if (summaryOnly) "$workspaceFolder/历史摘要" else workspaceFolder
+        val folderPath = if (requestedFolder != null &&
+            (requestedFolder == searchRoot || requestedFolder.startsWith("$searchRoot/"))
+        ) requestedFolder else searchRoot
         val settings = getMemorySearchSettingsPreferences(profileId).load()
         val limitParam = tool.parameters.find { it.name == "limit" }?.value
         val limit = limitParam?.toIntOrNull()
@@ -308,7 +316,7 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         }
 
         // limit 无上限，但至少为 1
-        val validLimit = if (finalLimit < 1) 1 else finalLimit
+        val validLimit = if (summaryOnly) (limit ?: 3).coerceIn(1, 3) else finalLimit.coerceAtLeast(1)
         val (snapshotState, snapshotCreated) = getOrCreateQuerySnapshot("$profileId:${workspaceFolder ?: "global"}", normalizedSnapshotId)
 
         AppLogger.d(
@@ -333,7 +341,8 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
             // Strictly return memories belonging to this chat workspace; exclude global and other workspaces.
             val scopedResults = results.filter { memory ->
                 val memoryFolder = MemoryRepository.normalizeFolderPath(memory.folderPath).orEmpty()
-                memoryFolder == workspaceFolder || memoryFolder.startsWith("$workspaceFolder/")
+                (memoryFolder == folderPath || memoryFolder.startsWith("$folderPath/")) &&
+                    (!summaryOnly || memory.source == "chat_summary")
             }
 
             // Keep de-duplication stable even when multiple calls share the same snapshot in parallel.
@@ -591,14 +600,31 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
         return try {
             val contentType = tool.parameters.find { it.name == "content_type" }?.value ?: "text/plain"
             val source = tool.parameters.find { it.name == "source" }?.value ?: "ai_created"
-            val folderPath = tool.parameters.find { it.name == "folder_path" }?.value ?: ""
-            val tagsParam = tool.parameters.find { it.name == "tags" }?.value
-            val tags = tagsParam
-                ?.split(",")
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() }
-                ?.distinct()
-             
+            val requestedFolder = MemoryRepository.normalizeFolderPath(
+                tool.parameters.find { it.name == "folder_path" }?.value
+            )
+            val workspaceFolder = currentWorkspacePath()?.let(::workspaceMemoryFolder)
+            val tags = tool.parameters.find { it.name == "tags" }?.value
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct().orEmpty()
+            val issueTags = tags.filter { it.startsWith("问题:") }
+            val issueTag = issueTags.singleOrNull()
+            if (issueTags.isNotEmpty() && (issueTag == null ||
+                    SummaryMemorySyncManager.issueTag(issueTag.removePrefix("问题:")) != issueTag ||
+                    workspaceFolder == null || source == "chat_summary")
+            ) {
+                return ToolResult(
+                    toolName = tool.name, success = false, result = StringResultData(""),
+                    error = "Use a single 问题:<key> tag in a workspace. Keys must be lowercase ASCII, at most 64 characters."
+                )
+            }
+            val folderPath = when {
+                issueTag != null && workspaceFolder != null ->
+                    requestedFolder?.takeIf { it == workspaceFolder || it.startsWith("$workspaceFolder/") }
+                        ?: "$workspaceFolder/过程记忆"
+                requestedFolder != null -> requestedFolder
+                workspaceFolder != null -> "$workspaceFolder/过程记忆"
+                else -> ""
+            }
             val memory = memoryRepository.createMemory(
                 title = title,
                 content = content,
@@ -607,8 +633,17 @@ class MemoryQueryToolExecutor(private val context: Context) : ToolExecutor {
                 folderPath = folderPath,
                 tags = tags
             )
-            
+
             if (memory != null) {
+                if (issueTag != null && workspaceFolder != null) {
+                    try {
+                        SummaryMemorySyncManager.linkIssueMemory(memoryRepository, workspaceFolder, issueTag, memory)
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        AppLogger.e(TAG, "Memory saved but issue link failed", error)
+                    }
+                }
                 val message = "Successfully created memory: '$title' (UUID: ${memory.uuid})"
                 AppLogger.d(TAG, message)
                 ToolResult(

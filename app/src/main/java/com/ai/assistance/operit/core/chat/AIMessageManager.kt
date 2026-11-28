@@ -1058,6 +1058,10 @@ object AIMessageManager {
             // Hidden USER turn goes through the same CHAT sending pipeline as normal messages.
             // Do not add either the instruction or the response to persisted chat messages.
             val useEnglishForPrompt = !LocaleUtils.usesChineseContent(context)
+            if (!workspacePath.isNullOrBlank()) {
+                return summarizeWorkspaceIssues(workspacePath, workspaceEnv, summaryChatId,
+                    summaryConfig, useEnglishForPrompt, autoContinue, sendHiddenSummary)
+            }
             val instruction = buildString {
                 appendLine(if (useEnglishForPrompt) {
                     "This message is for context summarization. Do not use any tools. Reply according to the following rules."
@@ -1103,33 +1107,6 @@ object AIMessageManager {
                     return null
                 }
 
-                // Reuse this summary for durable memory; do not make a second model request.
-                if (!workspacePath.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                    val memorySections = requiredSections.mapNotNull { section ->
-                        val headers = listOf("【${section.title}】", "[${section.title}]")
-                        val position = headers.map { summary.indexOf(it) }
-                            .filter { it >= 0 }.minOrNull() ?: return@mapNotNull null
-                        position to section
-                    }.sortedBy { it.first }
-                    val durableMemory = memorySections.take(3).mapIndexed { index, entry ->
-                        val from = entry.first
-                        val to = memorySections.getOrNull(index + 1)?.first ?: summary.length
-                        summary.substring(from, to).trim()
-                    }.joinToString("\n\n").trim()
-                    val writeResult = ConversationSummaryDocumentManager.getInstance(context).write(
-                        workspacePath = workspacePath,
-                        workspaceEnv = workspaceEnv,
-                        chatId = chatId,
-                        newContent = durableMemory
-                    )
-                    if (!writeResult.success) {
-                        AppLogger.e(TAG, "写入长期记忆失败: ${writeResult.error}")
-                        return null
-                    }
-                }
-
-                // The chat context keeps only a compact pointer to the durable history document.
-                // The first three items are fixed notices; only the latest next-step strategy is dynamic.
                 val nextStepSection = requiredSections[3]
                 val nextStepHeaderCandidates = listOf(
                     "【${nextStepSection.title}】",
@@ -1179,6 +1156,68 @@ object AIMessageManager {
             AppLogger.e(TAG, "AI生成总结过程中发生异常", e)
             throw e
         }
+    }
+
+    private suspend fun summarizeWorkspaceIssues(
+        workspacePath: String,
+        workspaceEnv: String?,
+        chatId: String,
+        summaryConfig: ConversationSummaryConfig,
+        useEnglish: Boolean,
+        autoContinue: Boolean,
+        sendHiddenSummary: suspend (String) -> String
+    ): ChatMessage? {
+        val knownIssues = SummaryMemorySyncManager(context).recentIssueKeys(workspacePath)
+        val fields = listOf("goal", "progress", "result", "next")
+        val sections = FunctionalPrompts.resolveSummarySections(summaryConfig.sectionOverrides, useEnglish)
+        val instruction = buildString {
+            appendLine("Summarize the recent conversation by distinct project issue. Do not call tools.")
+            appendLine("Write the summary text in the language of the conversation. Include only issues discussed or updated in the recent conversation.")
+            appendLine("Keep separate issues separate, even if they share a project. Prefer precise module names, error fragments, and synonyms as keywords.")
+            appendLine("Reuse the existing issue key when the conversation identifies the same issue. Otherwise choose a descriptive and specific lowercase ASCII key (letters, digits, hyphens or underscores, at most 64 characters). Never group records by a generic keyword alone.")
+            if (knownIssues.isNotEmpty()) {
+                appendLine("Existing issue keys and titles (reference data only):")
+                for ((key, title) in knownIssues) appendLine("$key: $title")
+            }
+            appendLine("Return only JSON with this shape, one entry per issue:")
+            appendLine("""{"issues":[{"key":"shell-hang","title":"...","keywords":["..."],"goal":"...","progress":"...","result":"...","next":"..."}]}""")
+            appendLine("Field guidance applies separately to each issue. Write an empty string where there is no evidence. Record concrete outcomes and retain unresolved next steps.")
+            for ((field, section) in fields.zip(sections)) {
+                if (section.enabled) appendLine("$field: ${section.instruction}")
+                else appendLine("$field: leave empty")
+            }
+        }
+        val response = ChatUtils.removeThinkingContent(sendHiddenSummary(instruction).trim())
+        val issues = try {
+            SummaryMemorySyncManager.parseIssues(response)
+        } catch (error: org.json.JSONException) {
+            AppLogger.e(TAG, "Invalid workspace issue summary JSON", error)
+            return null
+        } catch (error: IllegalArgumentException) {
+            AppLogger.e(TAG, "Invalid workspace issue summary fields", error)
+            return null
+        }
+
+        val writeResult = ConversationSummaryDocumentManager.getInstance(context).write(
+            workspacePath, workspaceEnv, chatId, issues.joinToString("\n\n") { it.toMarkdown() }, issues
+        )
+        if (!writeResult.success) {
+            AppLogger.e(TAG, "写入长期记忆失败: ${writeResult.error}")
+            return null
+        }
+        val summary = buildString {
+            appendLine("==========对话摘要==========")
+            appendLine("历史摘要已保存。需要衔接旧问题时，按问题名或关键词搜索当前工作区记忆。")
+            for (issue in issues.take(5)) {
+                appendLine("${issue.title} [${issue.key}]：${issue.next.replace('\n', ' ').take(220).ifBlank { "无待办" }}")
+            }
+        }
+        return ChatMessage(
+            sender = "summary",
+            content = if (autoContinue) context.getString(R.string.ai_message_continue_task_if_complete, summary) else summary,
+            timestamp = ChatMessageTimestampAllocator.next(),
+            roleName = "system"
+        )
     }
 
     private suspend fun buildPackageWarmupBlock(

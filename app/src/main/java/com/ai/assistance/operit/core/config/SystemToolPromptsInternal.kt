@@ -644,7 +644,7 @@ object SystemToolPromptsInternal {
                                 ToolParameterSchema(name = "content_type", type = "string", description = "optional", required = false, default = "\"text/plain\""),
                                 ToolParameterSchema(name = "source", type = "string", description = "optional", required = false, default = "\"ai_created\""),
                                 ToolParameterSchema(name = "folder_path", type = "string", description = "optional", required = false, default = "\"\""),
-                                ToolParameterSchema(name = "tags", type = "string", description = "optional, comma-separated string", required = false)
+                                ToolParameterSchema(name = "tags", type = "string", description = "optional, comma-separated string。For project notes, include one `问题:<key>` tag. Reuse a key only after confirming it refers to the same issue.", required = false)
                             )
                         ),
                         ToolPrompt(
@@ -3636,7 +3636,7 @@ object SystemToolPromptsInternal {
                                 ToolParameterSchema(name = "content_type", type = "string", description = "可选", required = false, default = "\"text/plain\""),
                                 ToolParameterSchema(name = "source", type = "string", description = "可选", required = false, default = "\"ai_created\""),
                                 ToolParameterSchema(name = "folder_path", type = "string", description = "可选", required = false, default = "\"\""),
-                                ToolParameterSchema(name = "tags", type = "string", description = "可选, 逗号分隔的字符串", required = false)
+                                ToolParameterSchema(name = "tags", type = "string", description = "可选, 逗号分隔的字符串。项目记忆请加一个「问题:<编号>」标签。确认是同一个问题后才沿用原编号。", required = false)
                             )
                         ),
                         ToolPrompt(

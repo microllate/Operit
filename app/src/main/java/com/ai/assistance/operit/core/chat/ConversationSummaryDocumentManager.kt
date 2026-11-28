@@ -94,11 +94,12 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
      * Writes newly extracted memory into the cumulative workspace document.
      * Read once to preserve previous content, then write the merged document once.
      */
-    suspend fun write(
+    internal suspend fun write(
         workspacePath: String?,
         workspaceEnv: String?,
         chatId: String,
-        newContent: String
+        newContent: String,
+        issues: List<SummaryMemorySyncManager.Issue> = emptyList()
     ): DocumentResult = appendMutex.withLock {
         val path = resolveDocumentPath(workspacePath, chatId)
             ?: return@withLock DocumentResult(false, error = "Workspace path is empty")
@@ -142,11 +143,15 @@ class ConversationSummaryDocumentManager private constructor(context: Context) {
             // The document is durable before attempting the optional ObjectBox mirror.
             // A memory indexing failure must not discard a successful summary write.
             try {
-                summaryMemorySync.sync(workspacePath!!, chatId, timestamp, newContent)
+                summaryMemorySync.sync(workspacePath!!, chatId, timestamp, newContent, issues)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Summary saved, but memory mirror failed", e)
             }
             DocumentResult(true, content = merged)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "Failed to write summary document", e)
             DocumentResult(false, error = e.message ?: "Unknown write error")
