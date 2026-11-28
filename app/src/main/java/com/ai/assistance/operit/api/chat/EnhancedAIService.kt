@@ -102,6 +102,7 @@ class EnhancedAIService private constructor(private val context: Context) {
     )
 
     companion object {
+        private val COMMON_FACT_TRIGGER = Regex("记忆|记住|记下|记录|牢记|存入常识库|加入常识库")
         private const val TAG = "EnhancedAIService"
 
         @Volatile private var INSTANCE: EnhancedAIService? = null
@@ -933,6 +934,19 @@ class EnhancedAIService private constructor(private val context: Context) {
         val stream = options.stream
         val disableWarning = options.disableWarning
         val internalSummary = options.internalSummary
+        val factQuestion = if (enableMemoryAutoUpdate && !isSubTask &&
+            !internalSummary && functionType == FunctionType.CHAT
+        ) {
+            val userText = ChatMarkupRegex.attachmentTag.replace(message, "")
+                .replace(ChatMarkupRegex.attachmentSelfClosingTag, "")
+                .replace(ChatMarkupRegex.workspaceAttachmentTag, "")
+                .replace(ChatMarkupRegex.replyToTag, "")
+                .replace(ChatMarkupRegex.memoryTag, "")
+                .trim()
+            userText.takeIf { COMMON_FACT_TRIGGER.containsMatchIn(it) }
+        } else {
+            null
+        }
         val onNonFatalError: suspend (error: String) -> Unit = { error ->
             options.onNonFatalError(error)
             callbacks?.onNonFatalError(error)
@@ -971,9 +985,8 @@ class EnhancedAIService private constructor(private val context: Context) {
                     executionId = nextExecutionContextId.incrementAndGet(),
                     conversationHistory = chatHistory.toMutableList(),
                     eventChannel = eventChannel,
-                    collectFacts = enableMemoryAutoUpdate && !isSubTask &&
-                        !internalSummary && functionType == FunctionType.CHAT,
-                    factQuestion = message.take(2_000)
+                    collectFacts = factQuestion != null,
+                    factQuestion = factQuestion?.take(2_000).orEmpty()
                 )
             registerExecutionContext(execContext)
             var hadFatalError = false
