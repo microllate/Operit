@@ -89,3 +89,20 @@ internal fun advanceFollowedActivityRange(
         today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
     )
 }
+
+internal fun resolveTokenStatsRange(
+    storedRange: TokenStatsTimeRange?,
+    mode: TokenActivityViewMode,
+    followCurrentDay: Boolean?,
+    today: LocalDate,
+    zone: ZoneId,
+): TokenStatsTimeRange {
+    if (storedRange == null) {
+        return TokenStatsTimeRanges.customRange(
+            today.minusDays(29L).atStartOfDay(zone).toInstant().toEpochMilli(),
+            today.plusDays(1L).atStartOfDay(zone).toInstant().toEpochMilli(),
+        )
+    }
+    val followsToday = followCurrentDay ?: inferLegacyFollowCurrentDay(storedRange, mode, today, zone)
+    return if (followsToday) advanceFollowedActivityRange(storedRange, mode, today, zone) else storedRange
+}

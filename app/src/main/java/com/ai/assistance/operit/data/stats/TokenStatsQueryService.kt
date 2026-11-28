@@ -3,6 +3,7 @@ package com.ai.assistance.operit.data.stats
 import android.content.Context
 import com.ai.assistance.operit.data.collects.PricingCurrency
 import com.ai.assistance.operit.data.dao.TokenUsageActivityDayRow
+import com.ai.assistance.operit.data.dao.TokenUsageDao
 import com.ai.assistance.operit.data.dao.TokenUsageModelAggregateRow
 import com.ai.assistance.operit.data.model.TokenStatsModelEntity
 import com.ai.assistance.operit.data.model.normalizeProviderModel
@@ -31,6 +32,44 @@ object TokenStatsQueryService {
         }
     }
 
+    internal suspend fun rangeSummary(
+        context: Context,
+        range: TokenStatsTimeRange,
+        params: TokenStatsQueryParams,
+        selectedDisplayModels: Set<String>,
+    ): TokenStatsTotals {
+        val holidayDates = queryHolidayDates(context)
+        return TokenUsageRepository.getInstance(context).withDao { dao ->
+            val rows = dao.aggregateRange(range.startMs, range.endMs, params, holidayDates)
+            val selected = if (selectedDisplayModels.isEmpty()) rows else rows.filter {
+                displayModelIdFor(it.model) in selectedDisplayModels
+            }
+            val models = buildDisplayModels(selected, dao.getAllStatsModels().toPriceSnapshot(), params)
+            summarizeDisplayModels(models, params)
+        }
+    }
+
+    private fun summarizeDisplayModels(
+        models: List<TokenStatsDisplayModelBreakdown>,
+        params: TokenStatsQueryParams,
+    ): TokenStatsTotals = combineTotals(models.map(TokenStatsDisplayModelBreakdown::totals), params)
+
+    private fun queryHolidayDates(context: Context): List<String> =
+        OfficialModelPricingCache.getChineseHolidayDates(context).ifEmpty { listOf("0000-00-00") }
+
+    private suspend fun TokenUsageDao.aggregateRange(
+        startMs: Long,
+        endMs: Long,
+        params: TokenStatsQueryParams,
+        holidayDates: List<String>,
+    ): List<TokenUsageModelAggregateRow> = aggregateModelsInRange(
+        startMs = startMs,
+        endMs = endMs,
+        providerModels = params.providerModels.queryValues(),
+        allModels = params.providerModels == null,
+        holidayDates = holidayDates,
+    )
+
     suspend fun rangeData(
         context: Context,
         range: TokenStatsTimeRange,
@@ -39,16 +78,11 @@ object TokenStatsQueryService {
     ): TokenStatsRangeData {
         val repository = TokenUsageRepository.getInstance(context)
         return repository.withDao { dao ->
+            val holidayDates = queryHolidayDates(context)
             val prices = dao.getAllStatsModels().toPriceSnapshot()
-            val modelRows = dao.aggregateModelsInRange(
-                startMs = range.startMs,
-                endMs = range.endMs,
-                providerModels = params.providerModels.queryValues(),
-                allModels = params.providerModels == null,
-                    holidayDates = OfficialModelPricingCache.getChineseHolidayDates(context).ifEmpty { listOf("0000-00-00") },
-                )
+            val modelRows = dao.aggregateRange(range.startMs, range.endMs, params, holidayDates)
             val displayModels = buildDisplayModels(modelRows, prices, params)
-            val summary = combineTotals(displayModels.map(TokenStatsDisplayModelBreakdown::totals), params)
+            val summary = summarizeDisplayModels(displayModels, params)
             val granularity = TokenStatsTimeRanges.granularityFor(range)
             val starts = TokenStatsTimeRanges.bucketStarts(range, granularity, zone)
             val buckets = starts.mapIndexed { index, bucketStart ->
@@ -56,13 +90,7 @@ object TokenStatsQueryService {
                     range.endMs,
                     TokenStatsTimeRanges.bucketEndMs(starts, index, granularity, zone),
                 )
-                val bucketRows = dao.aggregateModelsInRange(
-                    startMs = maxOf(range.startMs, bucketStart),
-                    endMs = bucketEnd,
-                    providerModels = params.providerModels.queryValues(),
-                    allModels = params.providerModels == null,
-                    holidayDates = OfficialModelPricingCache.getChineseHolidayDates(context).ifEmpty { listOf("0000-00-00") },
-                )
+                val bucketRows = dao.aggregateRange(maxOf(range.startMs, bucketStart), bucketEnd, params, holidayDates)
                 val models = buildDisplayModels(bucketRows, prices, params)
                 TokenStatsTrendBucket(
                     bucketStartMs = bucketStart,

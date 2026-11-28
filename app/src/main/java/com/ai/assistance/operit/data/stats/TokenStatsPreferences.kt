@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ai.assistance.operit.data.collects.PricingCurrency
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 private val Context.tokenStatsDataStore: DataStore<Preferences> by
     preferencesDataStore(name = "token_stats_preferences")
@@ -31,6 +32,7 @@ internal class TokenStatsPreferences(context: Context) {
     }
 
     private val dataStore = context.applicationContext.tokenStatsDataStore
+    val changes = dataStore.data.map { Unit }
 
     suspend fun importedAtMs(): Long? = dataStore.data.first()[IMPORTED_AT]
 

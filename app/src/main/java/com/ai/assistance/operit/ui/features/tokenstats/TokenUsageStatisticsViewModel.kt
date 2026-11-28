@@ -177,11 +177,7 @@ class TokenUsageStatisticsViewModel(
                 if (followPreference == null) {
                     settings.saveFollowCurrentDay(followCurrentDay)
                 }
-                val range = when {
-                    storedRange == null -> defaultDateRange(nowMs(), zone)
-                    followCurrentDay -> advanceFollowedActivityRange(storedRange, mode, today, zone)
-                    else -> storedRange
-                }
+                val range = resolveTokenStatsRange(storedRange, mode, followCurrentDay, today, zone)
                 if (storedRange != null && range != storedRange) {
                     settings.saveTimeRange(range)
                 }
@@ -455,10 +451,3 @@ private data class QueryLoadResult(
     val configurationNames: Map<String, String>,
     val activity: TokenActivityRangeData,
 )
-
-private fun defaultDateRange(nowMs: Long, zone: ZoneId): TokenStatsTimeRange {
-    val today = java.time.Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()
-    val start = today.minusDays(29L).atStartOfDay(zone).toInstant().toEpochMilli()
-    val end = today.plusDays(1L).atStartOfDay(zone).toInstant().toEpochMilli()
-    return TokenStatsTimeRanges.customRange(start, end)
-}

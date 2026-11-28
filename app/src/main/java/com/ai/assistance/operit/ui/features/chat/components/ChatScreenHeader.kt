@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ai.assistance.operit.R
+import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.preferences.CharacterGroupCardManager
 import com.ai.assistance.operit.data.preferences.ActivePromptManager
@@ -33,14 +34,23 @@ import com.ai.assistance.operit.ui.features.chat.viewmodel.ChatViewModel
 import com.ai.assistance.operit.ui.floating.FloatingMode
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
-import com.ai.assistance.operit.data.stats.TokenStatsPreferencesStore
+import com.ai.assistance.operit.data.stats.TokenStatsPreferences
+import com.ai.assistance.operit.data.stats.TokenUsageRepository
 import com.ai.assistance.operit.data.stats.TokenStatsQueryParams
 import com.ai.assistance.operit.data.stats.TokenStatsQueryService
-import com.ai.assistance.operit.data.stats.TokenStatsTimeRange
-import java.time.Instant
+import com.ai.assistance.operit.ui.features.tokenstats.resolveTokenStatsRange
+import com.ai.assistance.operit.ui.features.tokenstats.formatLifetimeMoney
+import java.time.ZonedDateTime
 import java.time.ZoneId
 import com.ai.assistance.operit.data.stats.formatTokenCount
-import java.util.Locale
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import androidx.compose.runtime.setValue
@@ -132,54 +142,49 @@ fun ChatScreenHeader(
     val inputTokenCount by actualViewModel.inputTokenCount.collectAsState()
     val outputTokenCount by actualViewModel.outputTokenCount.collectAsState()
 
-    // Reuse the lifetime statistics query and display preferences from Token Usage Statistics.
-    var lifetimeUsageText by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(context) {
-        val settings = TokenStatsPreferencesStore(context)
-        while (isActive) {
-            try {
-                val currency = settings.loadTargetCurrency()
-                val rate = settings.loadRateWithEstimate().first
-                val unit = settings.loadTokenDisplayUnit()
-                val zone = ZoneId.systemDefault()
-                val range = settings.loadTimeRange() ?: run {
-                    val today = Instant.ofEpochMilli(System.currentTimeMillis())
-                        .atZone(zone).toLocalDate()
-                    TokenStatsTimeRange(
-                        today.minusDays(29).atStartOfDay(zone).toInstant().toEpochMilli(),
-                        today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
-                    )
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var periodUsageText by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(context, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val settings = TokenStatsPreferences(context)
+            val usage = TokenUsageRepository.getInstance(context)
+            val localDayChanges = flow {
+                while (isActive) {
+                    val now = ZonedDateTime.now()
+                    emit(now.toLocalDate())
+                    val midnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+                    delay((midnight.toInstant().toEpochMilli() - System.currentTimeMillis()).coerceAtLeast(1L))
                 }
-                val selectedModels = settings.loadSelectedModels()
-                val providerModels = if (selectedModels.isEmpty()) {
-                    null
-                } else {
-                    TokenStatsQueryService.lifetimeOverview(
-                        context,
-                        TokenStatsQueryParams(targetCurrency = currency, manualRate = rate),
-                    ).displayModels
-                        .filter { it.displayModelId in selectedModels }
-                        .flatMap { it.providerModels }
-                        .toSet()
-                }
-                val summary = TokenStatsQueryService.rangeData(
-                    context,
-                    range,
-                    TokenStatsQueryParams(
-                        targetCurrency = currency,
-                        manualRate = rate,
-                        providerModels = providerModels,
-                    ),
-                    zone,
-                ).summary
-                val tokens = formatTokenCount(summary.totalTokens.knownSum, unit)
-                val symbol = if (currency.name == "CNY") "¥" else "$"
-                val cost = String.format(Locale.US, "%.2f", summary.cost.knownAmount)
-                lifetimeUsageText = "${tokens} Token · ${symbol}${cost}"
-            } catch (_: Exception) {
-                // Keep the last successful value if a statistics refresh fails.
             }
-            delay(10_000L)
+            combine(settings.changes, usage.statisticsChanges(), localDayChanges) { _, _, today -> today }
+                .catch { e -> AppLogger.w("ChatScreenHeader", "Failed to observe token statistics", e) }
+                .conflate()
+                .collect { today ->
+                    try {
+                        val currency = settings.loadTargetCurrency()
+                        val mode = settings.loadActivityViewMode()
+                        val range = resolveTokenStatsRange(
+                            settings.loadTimeRange(), mode, settings.loadFollowCurrentDay(),
+                            today, ZoneId.systemDefault(),
+                        )
+                        val totals = TokenStatsQueryService.rangeSummary(
+                            context,
+                            range,
+                            TokenStatsQueryParams(
+                                targetCurrency = currency,
+                                manualRate = settings.loadRateWithEstimate().first,
+                            ),
+                            settings.loadSelectedModels(),
+                        )
+                        val tokens = formatTokenCount(totals.totalTokens.knownSum, settings.loadTokenDisplayUnit())
+                        val cost = formatLifetimeMoney(totals.cost.knownAmount, currency)
+                        periodUsageText = "$tokens Token · $cost"
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        AppLogger.w("ChatScreenHeader", "Failed to refresh token totals", e)
+                    }
+                }
         }
     }
 
@@ -231,7 +236,7 @@ fun ChatScreenHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            lifetimeUsageText?.let { usage ->
+            periodUsageText?.let { usage ->
                 Text(
                     text = usage,
                     style = MaterialTheme.typography.labelSmall,
